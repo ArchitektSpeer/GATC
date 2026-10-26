@@ -26,13 +26,19 @@ describe('sample library', () => {
     expect(pUC19.topology).toBe('circular');
     const names = pUC19.features.map((f) => f.name.toLowerCase()).join(' ');
     expect(names).toMatch(/amp|bla/);
+    expect(names).toMatch(/lacz/);
+    expect(names).toMatch(/lac promoter/);
+    expect(names).not.toMatch(/lacuv5/);
     expect(pEGFP.features.some((f) => /egfp/i.test(f.name))).toBe(true);
   });
 
   it('round-trips through GenBank export', async () => {
     const [again] = await parseBioFile('pUC19.gbk', exportPlasmidToGenBank(pUC19));
     expect(again.sequence).toBe(pUC19.sequence);
-    expect(again.features.length).toBe(pUC19.features.length);
+    // Like SnapGene, primer_bind annotations come back as primers on GenBank import.
+    const binds = pUC19.features.filter((f) => f.type === 'primer_bind');
+    expect(again.features.length).toBe(pUC19.features.length - binds.length);
+    expect(again.primers.map((p) => p.name).sort()).toEqual(binds.map((f) => f.name).sort());
   });
 });
 
@@ -94,6 +100,35 @@ describe('Sanger alignment', () => {
     expect(aligned.alignment).toBeDefined();
     expect(aligned.alignment!.identityPercent).toBeGreaterThan(95);
     expect(aligned.alignment!.mismatches.some((m) => m.type === 'substitution')).toBe(true);
+  });
+});
+
+describe('real SnapGene .dna files (test-data/)', () => {
+  const load = async (name: string) => {
+    const { readFileSync } = await import('node:fs');
+    const b = readFileSync(`test-data/${name}`);
+    const [d] = await parseBioFile(name, b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
+    return d;
+  };
+
+  it('reads features and primers from an Addgene pUC18 export', async () => {
+    const d = await load('addgene-plasmid-50004-sequence-74675.dna');
+    expect(d.name).toBe('pUC18');
+    expect(d.length).toBe(2686);
+    expect(d.topology).toBe('circular');
+    expect(d.features.some((f) => f.name === 'AmpR' && f.strand === -1)).toBe(true);
+    expect(d.primers.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('restores the SnapGene cloning history tree', async () => {
+    const d = await load('pIB2-SEC13-mEGFP.dna');
+    expect(d.length).toBe(7235);
+    expect(d.history.length).toBeGreaterThan(1);
+  });
+
+  it('keeps reverse-strand features on a circular construct', async () => {
+    const d = await load('GFPuv_025_fwdfeature_revfeature_circular.dna');
+    expect(d.features.map((f) => f.strand).sort()).toEqual([-1, 1]);
   });
 });
 

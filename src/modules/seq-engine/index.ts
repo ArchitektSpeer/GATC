@@ -1455,6 +1455,88 @@ function annotatedFeatureEnd(
   return mod(start + patternLength, sequenceLength);
 }
 
+interface AnnotationCandidate {
+  libraryIndex: number;
+  strand: Strand;
+  start: number;
+  end: number;
+  exact: boolean;
+  identity: number;
+  patternLength: number;
+}
+
+const MIN_ANNOTATION_IDENTITY = 0.95;
+const SIMILAR_ELEMENT_OVERLAP = 0.6;
+const SIMILAR_ELEMENT_LENGTH_RATIO = 0.9;
+const SIMILAR_ELEMENT_IDENTITY = 0.9;
+
+function patternIdentity(
+  left: string,
+  right: string,
+  sameOrientation: boolean,
+): number {
+  const oriented = sameOrientation ? right : reverseComplement(right);
+  const length = Math.min(left.length, oriented.length);
+  if (length === 0) return 0;
+  let matches = 0;
+  for (let index = 0; index < length; index += 1) {
+    if (left[index] === oriented[index]) matches += 1;
+  }
+  return matches / length;
+}
+
+function annotationsOverlapEnough(
+  left: AnnotationCandidate,
+  right: AnnotationCandidate,
+  sequenceLength: number,
+): boolean {
+  const leftLength = rangeLength(left.start, left.end, sequenceLength);
+  const rightLength = rangeLength(right.start, right.end, sequenceLength);
+  const shorter = Math.min(leftLength, rightLength);
+  if (shorter <= 0) return false;
+  const overlap = overlapLength(
+    left.start,
+    left.end,
+    right.start,
+    right.end,
+    sequenceLength,
+  );
+  return overlap >= SIMILAR_ELEMENT_OVERLAP * shorter;
+}
+
+function representsSameElement(
+  left: AnnotationCandidate,
+  right: AnnotationCandidate,
+  library: FeatureLibraryEntry[],
+): boolean {
+  const leftEntry = library[left.libraryIndex];
+  const rightEntry = library[right.libraryIndex];
+  if (left.libraryIndex === right.libraryIndex) return true;
+  if (
+    leftEntry.name.trim().toLowerCase() ===
+    rightEntry.name.trim().toLowerCase()
+  ) {
+    return true;
+  }
+  if (leftEntry.group && leftEntry.group === rightEntry.group) return true;
+  if (leftEntry.type !== rightEntry.type) return false;
+
+  const leftLength = leftEntry.sequence.length;
+  const rightLength = rightEntry.sequence.length;
+  const lengthRatio =
+    Math.min(leftLength, rightLength) / Math.max(leftLength, rightLength);
+  if (!Number.isFinite(lengthRatio) || lengthRatio < SIMILAR_ELEMENT_LENGTH_RATIO) {
+    return false;
+  }
+  return (
+    patternIdentity(
+      leftEntry.sequence,
+      rightEntry.sequence,
+      left.strand === right.strand,
+    ) >= SIMILAR_ELEMENT_IDENTITY
+  );
+}
+
 export function autoAnnotateFeatures(
   doc: PlasmidDocument,
   library: typeof FEATURE_LIBRARY = FEATURE_LIBRARY,
@@ -1495,24 +1577,15 @@ export function autoAnnotateFeatures(
     }
   }
 
-  const ordered = [...candidates.values()].sort(
-    (left, right) =>
-      left.start - right.start ||
-      library[left.libraryIndex].name.localeCompare(library[right.libraryIndex].name),
-  );
-
-  const discovered: SequenceFeature[] = [];
-  for (const candidate of ordered) {
-    const item = library[candidate.libraryIndex];
+  const scored: AnnotationCandidate[] = [];
+  for (const candidate of candidates.values()) {
     const pattern = data.sequences[candidate.libraryIndex];
     if (!pattern) continue;
 
-    if (
-      !candidate.exact &&
-      sequenceIdentity(sequence, pattern, candidate.start, circular) < 0.95
-    ) {
-      continue;
-    }
+    const identity = candidate.exact
+      ? 1
+      : sequenceIdentity(sequence, pattern, candidate.start, circular);
+    if (identity < MIN_ANNOTATION_IDENTITY) continue;
 
     const end = annotatedFeatureEnd(
       candidate.start,
@@ -1522,46 +1595,82 @@ export function autoAnnotateFeatures(
     );
     if (!circular && end > length) continue;
 
+    scored.push({
+      libraryIndex: candidate.libraryIndex,
+      strand: candidate.strand,
+      start: candidate.start,
+      end,
+      exact: candidate.exact,
+      identity,
+      patternLength: pattern.length,
+    });
+  }
+
+  // Higher identity wins first, exact hits ahead of tolerated mismatches, so a
+  // wild-type element is never displaced by a close mutant allele.
+  scored.sort(
+    (left, right) =>
+      right.identity - left.identity ||
+      Number(right.exact) - Number(left.exact) ||
+      right.patternLength - left.patternLength ||
+      left.start - right.start ||
+      library[left.libraryIndex].name.localeCompare(
+        library[right.libraryIndex].name,
+      ),
+  );
+
+  const selected: AnnotationCandidate[] = [];
+  for (const candidate of scored) {
+    const item = library[candidate.libraryIndex];
     if (
       hasEquivalentAnnotation(
         doc.features,
         item.name,
         candidate.start,
-        end,
-        length,
-      )
-    ) {
-      continue;
-    }
-    if (
-      hasEquivalentAnnotation(
-        discovered,
-        item.name,
-        candidate.start,
-        end,
+        candidate.end,
         length,
       )
     ) {
       continue;
     }
 
+    let conflicts = false;
+    for (const other of selected) {
+      if (!annotationsOverlapEnough(candidate, other, length)) continue;
+      if (representsSameElement(candidate, other, library)) {
+        conflicts = true;
+        break;
+      }
+    }
+    if (conflicts) continue;
+    selected.push(candidate);
+  }
+
+  selected.sort(
+    (left, right) =>
+      left.start - right.start ||
+      library[left.libraryIndex].name.localeCompare(
+        library[right.libraryIndex].name,
+      ),
+  );
+
+  return selected.map((candidate, index) => {
+    const item = library[candidate.libraryIndex];
     const slug = item.name
       .toUpperCase()
       .replace(/[^A-Z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
       .slice(0, 24);
-    discovered.push({
-      id: `auto-${slug}-${candidate.start}-${candidate.strand}-${discovered.length}`,
+    return {
+      id: `auto-${slug}-${candidate.start}-${candidate.strand}-${index}`,
       name: item.name,
       type: item.type,
       start: candidate.start,
-      end,
+      end: candidate.end,
       strand: candidate.strand,
       color: item.color,
-    });
-  }
-
-  return discovered;
+    };
+  });
 }
 
 // Build the default multi-pattern index once at module load so the first

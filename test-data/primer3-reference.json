@@ -1,0 +1,288 @@
+{
+ "conditions": {
+  "naMm": 50,
+  "mgMm": 2,
+  "dntpMm": 0.8,
+  "oligoNm": 250,
+  "temperatureC": 37
+ },
+ "source": "Output values of primer3-py 2.4.0 calc_tm (santalucia/owczarzy), calc_hairpin, calc_homodimer",
+ "oligos": [
+  {
+   "sequence": "AGCGGATAACAATTTCACACAGGA",
+   "tm": 62.5,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -2.36
+  },
+  {
+   "sequence": "GTAAAACGACGGCCAGT",
+   "tm": 57.15,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -5.48
+  },
+  {
+   "sequence": "TAATACGACTCACTATAGGG",
+   "tm": 52.37,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -4.48
+  },
+  {
+   "sequence": "CAGGAAACAGCTATGAC",
+   "tm": 51.44,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -3.04
+  },
+  {
+   "sequence": "ATGGTGAGCAAGGGCGAGGAG",
+   "tm": 67.42,
+   "hairpinDeltaG": -0.64,
+   "homodimerDeltaG": -2.74
+  },
+  {
+   "sequence": "TTACTTGTACAGCTCGTCCATGCC",
+   "tm": 64.91,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -3.46
+  },
+  {
+   "sequence": "TTCCTCATGGATCCTTAGGATCCGCAATTCAAAACCATGTCCGTAA",
+   "tm": 74.57,
+   "hairpinDeltaG": -3.69,
+   "homodimerDeltaG": -12.25
+  },
+  {
+   "sequence": "TAGGCGAACCCGGGAAACCCGGGATAGTAAACCATTTTAC",
+   "tm": 74.98,
+   "hairpinDeltaG": -5.89,
+   "homodimerDeltaG": -16.26
+  },
+  {
+   "sequence": "GAGGATACGAATTCGAATTCCAAATTCCTCCTTATTC",
+   "tm": 66.53,
+   "hairpinDeltaG": -0.45,
+   "homodimerDeltaG": -10.28
+  },
+  {
+   "sequence": "GACCTAACCCCGGGAAACCCGGGCTGAGGTAAACCAGGTC",
+   "tm": 80.39,
+   "hairpinDeltaG": -5.17,
+   "homodimerDeltaG": -14.54
+  },
+  {
+   "sequence": "CTCCGCCCGAATTCGAATTCCCTTATAAAAGCTGTTGCACCTAG",
+   "tm": 74.73,
+   "hairpinDeltaG": -0.45,
+   "homodimerDeltaG": -10.34
+  },
+  {
+   "sequence": "AAGTTCAAGAATTCGAATTCCGGCAGCTGCAATGG",
+   "tm": 71.99,
+   "hairpinDeltaG": -0.77,
+   "homodimerDeltaG": -10.92
+  },
+  {
+   "sequence": "ATAGGCAATGACGGATA",
+   "tm": 51.21,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -2.85
+  },
+  {
+   "sequence": "ATATTAAAAAGTGTTTTAAGATACATTGAG",
+   "tm": 55,
+   "hairpinDeltaG": -1.33,
+   "homodimerDeltaG": -2.22
+  },
+  {
+   "sequence": "CCCGTTCGTGCTCCTCGCCCTGAAGC",
+   "tm": 75.62,
+   "hairpinDeltaG": -0.07,
+   "homodimerDeltaG": -2.25
+  },
+  {
+   "sequence": "TTGCTTTGTGAAGAGGGACT",
+   "tm": 59.24,
+   "hairpinDeltaG": -0.33,
+   "homodimerDeltaG": -2.41
+  },
+  {
+   "sequence": "CAGCCAATAGACCTGCATACCGGCTCATTCT",
+   "tm": 71.4,
+   "hairpinDeltaG": -0.6,
+   "homodimerDeltaG": -5.6
+  },
+  {
+   "sequence": "CATGTGCAACCTAGGGAGAATGTGTACATAC",
+   "tm": 66.76,
+   "hairpinDeltaG": 0.37,
+   "homodimerDeltaG": -6.73
+  },
+  {
+   "sequence": "CTCTTACTGCGGTCGCGTCTAATAATA",
+   "tm": 64.06,
+   "hairpinDeltaG": -0.56,
+   "homodimerDeltaG": -5.92
+  },
+  {
+   "sequence": "ACATTTGCTTCGTTGACTAGCAACCCAGGGCT",
+   "tm": 73.1,
+   "hairpinDeltaG": -1.42,
+   "homodimerDeltaG": -5.9
+  },
+  {
+   "sequence": "TAGCTATTCCCCCCGCGGCC",
+   "tm": 69.9,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -8.6
+  },
+  {
+   "sequence": "ACCCAGTATTCCTAACGGAGCAT",
+   "tm": 63.48,
+   "hairpinDeltaG": -0.31,
+   "homodimerDeltaG": -2.85
+  },
+  {
+   "sequence": "AATCCCACCCGAACTAAGTT",
+   "tm": 58.79,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -3.87
+  },
+  {
+   "sequence": "GTCGAACCTTGGTCCAAGATCGGGACTCGG",
+   "tm": 73.42,
+   "hairpinDeltaG": -1.53,
+   "homodimerDeltaG": -10.33
+  },
+  {
+   "sequence": "CTCCAGGTAAGACGGGCTCATTCATAAACG",
+   "tm": 68.53,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -2.44
+  },
+  {
+   "sequence": "TACTAAGGGGTATAATCTTCTATTTGTGGGT",
+   "tm": 62.87,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -1.85
+  },
+  {
+   "sequence": "GGAACACTTAGTAGACTTGCAATCC",
+   "tm": 61.34,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -4.81
+  },
+  {
+   "sequence": "ATTACAGCAGTCTTGTGCGC",
+   "tm": 61.23,
+   "hairpinDeltaG": -0.95,
+   "homodimerDeltaG": -5.32
+  },
+  {
+   "sequence": "TAGGGGCGCCCCAAAGGTAAACGA",
+   "tm": 70.74,
+   "hairpinDeltaG": -1.76,
+   "homodimerDeltaG": -16.64
+  },
+  {
+   "sequence": "CCGTTGCGGTCAATCTTGT",
+   "tm": 61.02,
+   "hairpinDeltaG": -0.44,
+   "homodimerDeltaG": -3.13
+  },
+  {
+   "sequence": "GCGGCTGATGAATTTGAAGCA",
+   "tm": 62.03,
+   "hairpinDeltaG": 0.09,
+   "homodimerDeltaG": -4.56
+  },
+  {
+   "sequence": "TGGCCGGGAGTGTGTGCTCAGGAGTT",
+   "tm": 74.16,
+   "hairpinDeltaG": -0.07,
+   "homodimerDeltaG": -5.64
+  },
+  {
+   "sequence": "GTCCCATGACACGATAGAGAGAG",
+   "tm": 61.96,
+   "hairpinDeltaG": -0.38,
+   "homodimerDeltaG": -4
+  },
+  {
+   "sequence": "ACATCCTGTTGGGCTTAAT",
+   "tm": 56.3,
+   "hairpinDeltaG": 0.15,
+   "homodimerDeltaG": -2.2
+  },
+  {
+   "sequence": "ATATAGAATTCCCTCGCTTGGATGAGCC",
+   "tm": 66.22,
+   "hairpinDeltaG": -0.21,
+   "homodimerDeltaG": -4.4
+  },
+  {
+   "sequence": "TATAGACCGCCTCTCGTC",
+   "tm": 57.58,
+   "hairpinDeltaG": 0.04,
+   "homodimerDeltaG": -1.91
+  },
+  {
+   "sequence": "TGTTGATCTACCTGACATGTCTCTCG",
+   "tm": 63.83,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -8.33
+  },
+  {
+   "sequence": "GCGACCACCCAGGATTAGACT",
+   "tm": 64.29,
+   "hairpinDeltaG": -0.21,
+   "homodimerDeltaG": -3.06
+  },
+  {
+   "sequence": "ATCATTCGGGTAGTAGACATTAT",
+   "tm": 56.15,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -2.09
+  },
+  {
+   "sequence": "TTCGATACCGTGGTAGC",
+   "tm": 55.66,
+   "hairpinDeltaG": -0.02,
+   "homodimerDeltaG": -3.62
+  },
+  {
+   "sequence": "TAGGGTGTTAACACCCCTATAAC",
+   "tm": 59.17,
+   "hairpinDeltaG": -4.14,
+   "homodimerDeltaG": -15.97
+  },
+  {
+   "sequence": "CATTAGTCCCTTGTATGC",
+   "tm": 51.94,
+   "hairpinDeltaG": 0,
+   "homodimerDeltaG": -1.31
+  },
+  {
+   "sequence": "GGCGGTATCGGACGGCG",
+   "tm": 66.49,
+   "hairpinDeltaG": -1.51,
+   "homodimerDeltaG": -5.97
+  },
+  {
+   "sequence": "CCACACCTTGGAGGTATCCAG",
+   "tm": 62.58,
+   "hairpinDeltaG": -1.63,
+   "homodimerDeltaG": -3.35
+  },
+  {
+   "sequence": "GCAAGGCGCCATATCCGTACCT",
+   "tm": 67.56,
+   "hairpinDeltaG": 0.19,
+   "homodimerDeltaG": -10.1
+  },
+  {
+   "sequence": "ACTATCGCGCGAACTTATGTTGTTTTAAGTT",
+   "tm": 65.11,
+   "hairpinDeltaG": -1.21,
+   "homodimerDeltaG": -11.54
+  }
+ ]
+}

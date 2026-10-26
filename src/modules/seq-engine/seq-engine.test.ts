@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type {
   PlasmidDocument,
@@ -79,6 +80,26 @@ function makePrimer(
     selfDimerDeltaG: 0,
     ...overrides,
   };
+}
+
+function readSampleSequence(fileName: string): string {
+  const text = readFileSync(
+    new URL(`../../app/samples/${fileName}`, import.meta.url),
+    'utf8',
+  );
+  const originIndex = text.search(/^ORIGIN\b/m);
+  if (originIndex === -1) throw new Error(`No ORIGIN block in ${fileName}`);
+  const originBody = text.slice(originIndex).split('\n').slice(1).join('\n');
+  const sequence = originBody
+    .split('//')[0]
+    .replace(/[^ACGTacgt]/g, '')
+    .toUpperCase();
+  if (sequence.length === 0) throw new Error(`No sequence in ${fileName}`);
+  return sequence;
+}
+
+function featureNames(features: SequenceFeature[]): string[] {
+  return features.map((feature) => feature.name);
 }
 
 describe('commercial restriction enzyme library', () => {
@@ -706,5 +727,60 @@ describe('local feature auto-annotation', () => {
     const elapsed = performance.now() - start;
     expect(Array.isArray(features)).toBe(true);
     expect(elapsed).toBeLessThan(250);
+  });
+
+  it('annotates a 100 kb circular sequence within thirty milliseconds', () => {
+    let seed = 987654321;
+    const alphabet = 'ACGT';
+    let largeSequence = '';
+    for (let index = 0; index < 100000; index += 1) {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      largeSequence += alphabet[seed & 3];
+    }
+    const doc = makeDoc(largeSequence, 'circular');
+    for (let warmup = 0; warmup < 2; warmup += 1) {
+      autoAnnotateFeatures(doc);
+    }
+
+    const samples: number[] = [];
+    for (let run = 0; run < 5; run += 1) {
+      const start = performance.now();
+      const features = autoAnnotateFeatures(doc);
+      samples.push(performance.now() - start);
+      expect(Array.isArray(features)).toBe(true);
+    }
+    expect(Math.min(...samples)).toBeLessThan(30);
+  });
+});
+
+describe('annotation of real vector records', () => {
+  it('annotates pUC19 with wild-type lac elements and M13 primer sites', () => {
+    const sequence = readSampleSequence('pUC19.gb');
+    expect(sequence).toHaveLength(2686);
+
+    const features = autoAnnotateFeatures(makeDoc(sequence, 'circular'));
+    const names = featureNames(features);
+
+    expect(names.some((name) => /lacZ/i.test(name))).toBe(true);
+    expect(names.some((name) => /^lac promoter$/i.test(name))).toBe(true);
+    expect(names.some((name) => /lacUV5/i.test(name))).toBe(false);
+    expect(names.some((name) => /lac operator/i.test(name))).toBe(true);
+    expect(names.some((name) => /M13 fwd/i.test(name))).toBe(true);
+    expect(names.some((name) => /M13 rev/i.test(name))).toBe(true);
+    expect(names.some((name) => /AmpR/i.test(name))).toBe(true);
+    expect(names.some((name) => /ori/i.test(name))).toBe(true);
+  });
+
+  it('keeps the standard pEGFP-N1 elements annotated', () => {
+    const sequence = readSampleSequence('pEGFP-N1.gb');
+    expect(sequence).toHaveLength(4733);
+
+    const names = featureNames(autoAnnotateFeatures(makeDoc(sequence, 'circular')));
+    expect(names.some((name) => /EGFP/i.test(name))).toBe(true);
+    expect(names.some((name) => /CMV promoter/i.test(name))).toBe(true);
+    expect(names.some((name) => /SV40 polyA/i.test(name))).toBe(true);
+    expect(names.some((name) => /KanR|NeoR/i.test(name))).toBe(true);
+    expect(names.some((name) => /f1 ori/i.test(name))).toBe(true);
+    expect(names.some((name) => /SV40 ori/i.test(name))).toBe(true);
   });
 });

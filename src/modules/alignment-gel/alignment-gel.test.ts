@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { PlasmidDocument, SequenceFeature, SangerTraceData } from '../../types/schema';
 import {
@@ -77,10 +78,19 @@ interface AbifFixtureEntry {
   data: string | number[];
 }
 
+interface AbifFixtureOptions {
+  peaks?: Array<{
+    amplitude?: number;
+    secondaryAmplitude?: number;
+    secondaryBase?: string;
+  }>;
+}
+
 function buildAb1Fixture(
   sequence: string,
   qualities: number[],
-  channelOrder = 'GATC'
+  channelOrder = 'GATC',
+  options: AbifFixtureOptions = {}
 ): ArrayBuffer {
   const samples = sequence.length * 10 + 10;
   const traces: Record<'A' | 'T' | 'G' | 'C', number[]> = {
@@ -93,8 +103,22 @@ function buildAb1Fixture(
   for (let index = 0; index < sequence.length; index += 1) {
     const location = 5 + index * 10;
     locations.push(location);
-    const base = sequence[index] as 'A' | 'T' | 'G' | 'C';
-    traces[base][location] = 1000;
+    const called = sequence[index];
+    const primary = /^[ATGC]$/.test(called) ? (called as 'A' | 'T' | 'G' | 'C') : 'A';
+    const override = options.peaks?.[index];
+    const amplitude = override?.amplitude ?? 1000;
+    traces[primary][location] = amplitude;
+    const secondary = override?.secondaryBase?.toUpperCase();
+    if (
+      secondary &&
+      /^[ATGC]$/.test(secondary) &&
+      secondary !== primary &&
+      override?.secondaryAmplitude !== undefined
+    ) {
+      traces[secondary as 'A' | 'T' | 'G' | 'C'][location] = Math.round(
+        override.secondaryAmplitude
+      );
+    }
   }
 
   const channelBases = channelOrder.split('');
@@ -296,6 +320,80 @@ describe('ABIF trace parsing', () => {
     const trace = await parseAb1Trace(buffer, 'inline-fwo.ab1');
     expect(trace.traces.A[trace.baseLocations[0]]).toBeGreaterThan(900);
     expect(trace.traces.C[trace.baseLocations[1]]).toBeGreaterThan(900);
+  });
+});
+
+describe('estimated trace qualities', () => {
+  const samplePath = process.env.AB1_SAMPLE ?? '';
+  const sampleAvailable = samplePath.length > 0 && existsSync(samplePath);
+
+  it.skipIf(!sampleAvailable)(
+    'assigns low quality to the noisy 3-prime tail of a real read',
+    async () => {
+      const file = readFileSync(samplePath);
+      const buffer = file.buffer.slice(
+        file.byteOffset,
+        file.byteOffset + file.byteLength
+      ) as ArrayBuffer;
+      const trace = await parseAb1Trace(buffer, samplePath);
+
+      expect(trace.calledSequence).toHaveLength(1345);
+      expect(trace.qualityScores).toHaveLength(1345);
+
+      const tail = trace.qualityScores.slice(-60);
+      const tailMean = tail.reduce((sum, value) => sum + value, 0) / tail.length;
+      expect(tailMean).toBeLessThan(20);
+
+      const trimmedLength = trace.trimRange[1] - trace.trimRange[0];
+      expect(trace.trimRange[0]).toBeGreaterThan(0);
+      expect(trimmedLength).toBeLessThan(1345);
+      expect(trimmedLength).toBeGreaterThan(600);
+    }
+  );
+
+  it('scores ambiguous calls at most Q5', async () => {
+    const sequence = 'ACGTNACGTN';
+    const buffer = buildAb1Fixture(
+      sequence,
+      new Array<number>(sequence.length).fill(0)
+    );
+    const trace = await parseAb1Trace(buffer, 'ambiguous.ab1');
+
+    expect(trace.calledSequence).toBe(sequence);
+    for (let index = 0; index < sequence.length; index += 1) {
+      if (sequence[index] === 'N') {
+        expect(trace.qualityScores[index]).toBeLessThanOrEqual(5);
+      }
+    }
+  });
+
+  it('penalizes a near-equal secondary peak more than a weak one', async () => {
+    const sequence = 'ACGTACGTAC';
+    const buffer = buildAb1Fixture(
+      sequence,
+      new Array<number>(sequence.length).fill(0),
+      'GATC',
+      {
+        peaks: [
+          {},
+          {},
+          { amplitude: 1000, secondaryBase: 'A', secondaryAmplitude: 900 },
+          {},
+          {},
+          {},
+          { amplitude: 1000, secondaryBase: 'A', secondaryAmplitude: 100 },
+          {},
+          {},
+          {}
+        ]
+      }
+    );
+    const trace = await parseAb1Trace(buffer, 'peak-ratio.ab1');
+
+    const ambiguous = trace.qualityScores[2];
+    const clean = trace.qualityScores[6];
+    expect(ambiguous).toBeLessThanOrEqual(5);
+    expect(clean).toBeGreaterThan(ambiguous + 20);
   });
 });
 

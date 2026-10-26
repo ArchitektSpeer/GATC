@@ -310,31 +310,159 @@ function peakAt(values: number[], location: number, radius = 4): number {
   return maximum;
 }
 
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[middle];
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function windowSlice<T>(values: T[], center: number, radius: number): T[] {
+  const start = Math.max(0, center - radius);
+  const end = Math.min(values.length, center + radius + 1);
+  return values.slice(start, end);
+}
+
+/**
+ * Estimates Phred scores from raw trace geometry when PCON is absent or
+ * uninformative. Each base is scored from the called peak against the second
+ * highest channel (peak ratio), the local noise level, the local signal
+ * strength and the regularity of neighbouring peak spacing. Non-canonical
+ * calls (N and IUPAC codes) are always reported as low quality.
+ */
 function estimateQualities(
   sequence: string,
   locations: number[],
   traces: Record<BaseChannel, number[]>
 ): number[] {
-  const values: number[] = [];
-  let globalPeak = 1;
-  for (const base of ['A', 'T', 'G', 'C'] as BaseChannel[]) {
-    for (const value of traces[base]) globalPeak = Math.max(globalPeak, value);
-  }
-  for (let index = 0; index < sequence.length; index += 1) {
+  const length = sequence.length;
+  if (length === 0) return [];
+
+  const channels: BaseChannel[] = ['A', 'T', 'G', 'C'];
+  const primaryAmplitudes = new Array<number>(length);
+  const secondaryAmplitudes = new Array<number>(length);
+  for (let index = 0; index < length; index += 1) {
     const location = locations[index] ?? 0;
+    const amplitudes: Record<BaseChannel, number> = {
+      A: peakAt(traces.A, location),
+      T: peakAt(traces.T, location),
+      G: peakAt(traces.G, location),
+      C: peakAt(traces.C, location)
+    };
     const base = sequence[index];
-    const primary = /^[ATGC]$/.test(base)
-      ? peakAt(traces[base as BaseChannel] ?? [], location)
-      : Math.max(
-          peakAt(traces.A, location),
-          peakAt(traces.T, location),
-          peakAt(traces.G, location),
-          peakAt(traces.C, location)
-        );
-    const relative = Math.max(0, primary) / globalPeak;
-    const quality = Math.round(5 + 52 * Math.sqrt(relative));
-    values.push(Math.max(0, Math.min(MAX_PHRED, quality)));
+    const canonical = /^[ATGC]$/.test(base) ? (base as BaseChannel) : undefined;
+    if (canonical) {
+      primaryAmplitudes[index] = amplitudes[canonical];
+      let secondary = 0;
+      for (const channel of channels) {
+        if (channel !== canonical) secondary = Math.max(secondary, amplitudes[channel]);
+      }
+      secondaryAmplitudes[index] = secondary;
+    } else {
+      const ordered = channels
+        .map(channel => amplitudes[channel])
+        .sort((left, right) => right - left);
+      primaryAmplitudes[index] = ordered[0] ?? 0;
+      secondaryAmplitudes[index] = ordered[1] ?? 0;
+    }
   }
+
+  const peakRatios = new Array<number>(length);
+  for (let index = 0; index < length; index += 1) {
+    const primary = primaryAmplitudes[index];
+    peakRatios[index] = primary > 0
+      ? clamp(secondaryAmplitudes[index] / primary, 0, 1)
+      : 1;
+  }
+
+  const spacings = new Array<number>(length).fill(0);
+  for (let index = 1; index < length; index += 1) {
+    spacings[index] = (locations[index] ?? 0) - (locations[index - 1] ?? 0);
+  }
+
+  const SIGNAL_WINDOW = 12;
+  const NOISE_WINDOW = 16;
+  const RATIO_MIDPOINT = 0.42;
+  const RATIO_STEEPNESS = 5;
+  // Isolated weak canonical calls still receive a small score so that a single
+  // dip does not dominate the cumulative Mott sum.
+  const MIN_CANONICAL_QUALITY = 5;
+  const values = new Array<number>(length);
+
+  for (let index = 0; index < length; index += 1) {
+    const base = sequence[index];
+    const ratio = peakRatios[index];
+
+    if (!/^[ATGC]$/.test(base)) {
+      // Every ambiguous call carries the same low ceiling, with weaker calls
+      // scoring even lower.
+      values[index] = clamp(Math.round(5 * (1 - ratio)), 0, 5);
+      continue;
+    }
+
+    const primary = primaryAmplitudes[index];
+    if (primary <= 0) {
+      values[index] = 0;
+      continue;
+    }
+
+    const localPrimary = windowSlice(primaryAmplitudes, index, SIGNAL_WINDOW);
+    const localSignal = Math.max(1, median(localPrimary));
+    const signalRatio = primary / localSignal;
+
+    const localRatios = windowSlice(peakRatios, index, NOISE_WINDOW);
+    const localNoise = median(localRatios);
+
+    const localSpacings: number[] = [];
+    for (
+      let neighbour = Math.max(1, index - SIGNAL_WINDOW);
+      neighbour <= Math.min(length - 1, index + SIGNAL_WINDOW);
+      neighbour += 1
+    ) {
+      localSpacings.push(spacings[neighbour]);
+    }
+    const medianSpacing = Math.max(1, median(localSpacings));
+    let spacingDeviation = 0;
+    let spacingCount = 0;
+    if (index > 0) {
+      spacingDeviation += Math.abs(spacings[index] - medianSpacing) / medianSpacing;
+      spacingCount += 1;
+    }
+    if (index < length - 1) {
+      spacingDeviation +=
+        Math.abs(spacings[index + 1] - medianSpacing) / medianSpacing;
+      spacingCount += 1;
+    }
+    if (spacingCount > 0) spacingDeviation /= spacingCount;
+
+    // A single clean peak is not trustworthy when it sits inside a noisy
+    // neighbourhood, so the local noise level caps the score.
+    const peakRatioQuality =
+      MAX_PHRED /
+      (1 + Math.pow(ratio / RATIO_MIDPOINT, RATIO_STEEPNESS));
+    const noiseQuality = MAX_PHRED * Math.max(0, 1 - 1.4 * localNoise);
+    const spacingPenalty = Math.min(
+      18,
+      50 * Math.max(0, spacingDeviation - 0.15)
+    );
+    const intensityPenalty = Math.min(20, 20 * Math.max(0, 1 - signalRatio));
+
+    const quality =
+      Math.min(peakRatioQuality, noiseQuality) -
+      spacingPenalty -
+      intensityPenalty;
+    values[index] = clamp(
+      Math.round(quality),
+      MIN_CANONICAL_QUALITY,
+      MAX_PHRED
+    );
+  }
+
   return values;
 }
 

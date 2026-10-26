@@ -201,6 +201,17 @@ await check('深色主题', async () => {
   await shot('13-dark');
 });
 
+await check('打开真实 SnapGene .dna（含引物与历史树）', async () => {
+  await closeDialogs();
+  await page.locator('input[type=file]').setInputFiles('test-data/pIB2-SEC13-mEGFP.dna');
+  const t = await toast();
+  if (!/pIB2-SEC13-mEGFP/.test(t)) throw new Error(t);
+  await view('历史树');
+  await page.waitForTimeout(500);
+  await shot('14-dna-history');
+  return t;
+});
+
 await check('导出 GenBank', async () => {
   const [dl] = await Promise.all([page.waitForEvent('download'), (async () => {
     await page.getByRole('button', { name: '导出' }).click();

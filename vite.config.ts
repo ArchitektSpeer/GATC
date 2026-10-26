@@ -25,5 +25,6 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     testTimeout: 30000,
+    env: { AB1_SAMPLE: 'test-data/example1.ab1' },
   },
 });
