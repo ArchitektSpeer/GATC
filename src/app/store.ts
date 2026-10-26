@@ -75,7 +75,8 @@ export const useWorkbench = create<WorkbenchState>()(
       traces: {},
       cutSites: {},
       gelSamples: [],
-      gelParams: { agarosePercent: 1, voltage: 5, minutes: 45 },
+      // voltage is in volts as shown in the UI; see GEL_BOX_CM in App.tsx.
+      gelParams: { agarosePercent: 1, voltage: 100, minutes: 45 },
       gelMode: 'uv',
       view: 'split',
       theme: 'light',

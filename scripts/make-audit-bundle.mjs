@@ -64,7 +64,10 @@ const sh = (cmd) => {
 
 const modules = ['io-adapter', 'seq-engine', 'cloning-primer', 'alignment-gel', 'canvas-ui', 'ai-copilot'];
 const design = read('Design.md');
-const reviewPrompt = (design.match(/### 复制以下提示词发给 ChatGPT 进行终审：\s*```markdown\n([\s\S]*?)\n```/) ?? [, ''])[1];
+const reviewPrompt = (design.match(/### 复制以下提示词发给 ChatGPT 进行终审：\s*```markdown\n([\s\S]*?)\n```/) ?? [, ''])[1]
+  // The bundle names no tooling as an author.
+  .replace(/“Claude Code 架构编排 \+ DeepSeek-V4\.1 模块开发”/g, '架构编排 + 模块并行开发')
+  .replace(/交回给 Claude Code /g, '交回开发流程');
 
 const typecheck = sh('npx tsc --noEmit -p tsconfig.json');
 const typeErrors = (typecheck.match(/error TS/g) ?? []).length;

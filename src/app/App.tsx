@@ -33,6 +33,9 @@ import { selectActiveDoc, useWorkbench, type ViewMode, type WizardKind } from '.
 import { Button, Tabs, cn } from './ui';
 import type { SequenceEdit } from '../modules/seq-engine';
 
+// The gel model takes field strength (V/cm); the UI shows volts across a standard 20 cm tank.
+const GEL_BOX_CM = 20;
+
 const VIEWS: Array<{ value: ViewMode; label: string }> = [
   { value: 'split', label: '双视图' },
   { value: 'map', label: '环形图谱' },
@@ -108,7 +111,7 @@ export default function App() {
   useEffect(() => {
     if (!s.gelSamples.length) return;
     let alive = true;
-    callBio('simulateVirtualGel', s.gelSamples, s.gelParams).then((l) => alive && setLanes(l));
+    callBio('simulateVirtualGel', s.gelSamples, { ...s.gelParams, voltage: s.gelParams.voltage / GEL_BOX_CM }).then((l) => alive && setLanes(l));
     return () => {
       alive = false;
     };

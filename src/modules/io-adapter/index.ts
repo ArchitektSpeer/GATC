@@ -2173,7 +2173,9 @@ export async function parseSnapGeneBuffer(
       configurable: true,
       enumerable: false,
     });
-    const results = (await snapgeneToJson(parserInput, { fileName })) as TeselaGenParseResult[];
+    // In browsers the parser reads through FileReader and requires a Blob.
+    const input = typeof FileReader !== 'undefined' ? new Blob([bytes as Uint8Array<ArrayBuffer>]) : parserInput;
+    const results = (await snapgeneToJson(input, { fileName })) as TeselaGenParseResult[];
     const documents = teselaGenResultsToDocuments(results, { fileName });
     if (documents.length > 0 && documents[0].sequence.length > 0) {
       baseDoc = documents[0];

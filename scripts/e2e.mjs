@@ -160,7 +160,7 @@ await check('克隆向导：酶切连接（EcoRI 自连）', async () => {
   await page.getByRole('button', { name: '连接', exact: true }).click();
   const t = await toast();
   await shot('10-ligation');
-  if (!/已生成/.test(t)) throw new Error(t);
+  if (!/已生成 pUC19_religated \(2686 bp\)/.test(t)) throw new Error(t);
   return t;
 });
 

@@ -25,7 +25,7 @@ npm run tauri:build
 | 酶 | 82 种商业酶（含 7 种 Type IIS），跨零点扫描，Dam/Dcm/CpG 甲基化阻断判定，按单切点/NEB Buffer/甲基化过滤 |
 | 注释 | Aho-Corasick 本地自动注释（48+ 常见元件，100 kb < 15 ms），6 框 ORF + 分子量/等电点 |
 | 克隆 | 单/双酶切连接（同尾酶、补平/削平、去磷酸化）、Gibson / In-Fusion、Golden Gate（保真度评分、内部位点预警）、Gateway BP/LR、PCR、融合 PCR、定点突变（QuikChange / Q5 背靠背 + 静默酶切位点推荐） |
-| 引物 | SantaLucia 1998 最邻近 + Owczarzy 2008 Mg²⁺/dNTP 盐校正（与 Primer3 一致），发夹/二聚体 ΔG，酶切位点 + 保护碱基 / Gibson 同源臂 |
+| 引物 | SantaLucia 1998 最邻近 + Owczarzy 2008 Mg²⁺/dNTP 盐校正（46 条参考引物 Tm 误差 < 0.01 °C），SantaLucia & Hicks 2004 动态规划发夹/二聚体 ΔG（平均误差 0.3–0.5 kcal/mol），酶切位点 + 保护碱基 / Gibson 同源臂 |
 | 测序 | `.ab1` 解析、Mott 修剪、杂合双峰检测、种子 + Gotoh 跨零点比对、CDS 内突变的氨基酸影响注释 |
 | 电泳 | 5 种商业 Ladder、0.5–3% 胶浓度、超螺旋/开环/线性构象、按质量计算亮度 |
 | AI | BYOK：OpenAI / Anthropic / DeepSeek / Gemini / 自定义兼容端点；密钥仅存于浏览器本地；质粒上下文压缩；一键执行的结构化动作卡片（设计引物、酶切跑胶、高亮、添加特征、启动克隆向导） |

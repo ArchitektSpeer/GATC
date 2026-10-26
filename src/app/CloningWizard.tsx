@@ -389,9 +389,11 @@ function RestrictionTab() {
     if (blunt) {
       [v, i] = await Promise.all([callBio('bluntEnds', v, blunt), callBio('bluntEnds', i, blunt)]);
     }
-    const r = await callBio('simulateLigation', [v, i], { circularize: true, dephosphorylatedIds: dephos ? [v.id] : [] });
+    // The same fragment picked as vector and insert means self-ligation.
+    const self = vectorId === insertId && vecPick === insPick;
+    const r = await callBio('simulateLigation', self ? [v] : [v, i], { circularize: true, dephosphorylatedIds: dephos ? [v.id] : [] });
     setResult(r);
-    if (r.product) openProduct({ ...r.product, name: `${vector!.name}::${insert!.name}` }, r.warnings);
+    if (r.product) openProduct({ ...r.product, name: self ? `${vector!.name}_religated` : `${vector!.name}::${insert!.name}` }, r.warnings);
   };
 
   const fragLabel = (f: PlasmidDocument) => {

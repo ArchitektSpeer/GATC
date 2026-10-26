@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type {
   CutSite,
@@ -104,6 +106,50 @@ describe('SantaLucia / Owczarzy thermodynamics', () => {
     const result = calcCrossDimer('AGCGGATAACAATTTCACACAGGA', 'TCCTGTGTGAAATTGTTATCCGCT');
     expect(result.ascii).toContain("5'-");
     expect(result.deltaG).toBeLessThanOrEqual(0);
+  });
+
+  it('reproduces the Primer3 reference Tm and secondary-structure free energies', () => {
+    interface Primer3ReferenceEntry {
+      sequence: string;
+      tm: number;
+      hairpinDeltaG: number;
+      homodimerDeltaG: number;
+    }
+    interface Primer3Reference {
+      conditions: {
+        naMm: number;
+        mgMm: number;
+        dntpMm: number;
+        oligoNm: number;
+      };
+      oligos: Primer3ReferenceEntry[];
+    }
+    const reference = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'test-data/primer3-reference.json'), 'utf8'),
+    ) as Primer3Reference;
+    const hairpinErrors: number[] = [];
+    const homodimerErrors: number[] = [];
+    for (const entry of reference.oligos) {
+      const result = evaluateOligoThermodynamics(entry.sequence, reference.conditions);
+      expect(Math.abs(result.tm - entry.tm)).toBeLessThanOrEqual(0.1);
+      hairpinErrors.push(Math.abs(result.hairpinDeltaG - entry.hairpinDeltaG));
+      homodimerErrors.push(Math.abs(result.selfDimerDeltaG - entry.homodimerDeltaG));
+      if (entry.hairpinDeltaG === 0) {
+        expect(result.hairpinDeltaG).toBeGreaterThanOrEqual(-1);
+      }
+      if (entry.homodimerDeltaG === 0) {
+        expect(result.selfDimerDeltaG).toBeGreaterThanOrEqual(-1);
+      }
+    }
+    const requiredWithinOne = Math.ceil(reference.oligos.length * 0.9);
+    expect(hairpinErrors.filter((error) => error <= 1).length).toBeGreaterThanOrEqual(
+      requiredWithinOne,
+    );
+    expect(homodimerErrors.filter((error) => error <= 1).length).toBeGreaterThanOrEqual(
+      requiredWithinOne,
+    );
+    expect(Math.max(...hairpinErrors)).toBeLessThanOrEqual(2);
+    expect(Math.max(...homodimerErrors)).toBeLessThanOrEqual(2);
   });
 });
 

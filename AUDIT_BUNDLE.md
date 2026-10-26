@@ -1,0 +1,1777 @@
+# OpenSnapGene 跨模块审计包（AUDIT_BUNDLE）
+
+> 生成时间：2026-10-26T20:50:40.473Z
+> 用途：连同第 1 节的审阅提示词一起发给外部审阅模型，做最终的代码与生信算法审计。
+
+## 1. 审阅提示词
+
+```markdown
+你是一位拥有 15 年经验的计算生物学首席架构师与 Web 安全审计专家。我们刚刚通过架构编排 + 模块并行开发完成了一个开源 SnapGene 完整替代品（OpenSnapGene）的代码开发。
+
+请对附件/下方的代码实现进行最严苛的终审（Code & Bio-Algorithm Audit），按 `[P0 致命缺陷]`、`[P1 逻辑偏差]`、`[P2 性能与体验优化]` 三个等级输出审阅报告，并重点核查以下 5 大生信与安全红线：
+
+1. **环状 DNA 跨零点（Origin Wrap-Around）边界正确性**：
+   - 检查当 `SequenceFeature`、`ORF`、酶切识别位点（特别是 Type IIS 酶如 BsaI 识别位点在零点左端、切割位点跨过 `0 bp` 落入右端）以及 `.ab1` 测序比对跨越 `0 bp` 原点时，坐标取模运算 `((pos % len) + len) % len` 是否在所有模块中 100% 严密，有无漏切或负数下标越界？
+2. **正负双链与粘性末端（Overhang）生物化学方向性**：
+   - 检查非回文酶（Type IIS 如 BsaI/BsmBI）在负链（`-1` strand）匹配时，`cutPositionTop` 和 `cutPositionBottom` 是否正确做了翻转对称计算？
+   - 检查酶切连接（Ligation）与 Golden Gate 组装时，5' 突出端与 3' 突出端的互补配对方向（5'→3' vs 3'→5'）及反义插入（Inverted Insert）特征反转计算是否符合真实分子生物学规律？
+3. **SantaLucia 最邻近热力学与盐校正精度**：
+   - 核对 `cloning-primer` 模块中的 10 组二核苷酸 $\Delta H^\circ$、$\Delta S^\circ$ 常量及气体常数 $R = 1.987\text{ cal/(mol}\cdot\text{K)}$、同源/异源寡核苷酸浓度分母（$C_T/4$ vs $C_T/1$）与 Owczarzy $\text{Mg}^{2+}$ 校正公式是否与 Primer3 / SnapGene 标准一致？
+4. **前端 BYOK AI 密钥安全与上下文防幻觉**：
+   - 检查 `ai-copilot` 模块是否存在任何将用户 `apiKey` 打印到日志或发送到非用户指定 `baseUrl` 的风险？
+   - 检查 AI 返回的 `AIToolAction` 坐标（0-based vs 1-based）在应用回主画布前是否有严格的 Schema 边界校验？
+5. **模块解耦度与大质粒（100kb+）渲染性能**：
+   - 检查 `src/modules/*` 之间是否存在任何违规的交叉引用？线性序列视图与 SVG 环形图谱在面对 50,000 bp 以上序列及数百个酶切位点时，是否存在主线程阻塞或 React 重复重渲染瓶颈？
+
+对于发现的每一个问题，请直接给出精确到函数与行号的修复补丁代码（Diff 格式），以便我直接交回开发流程一键打补丁。
+```
+
+## 2. 质量门禁结果
+
+| 项 | 结果 |
+|---|---|
+| `tsc --noEmit` | 0 error ✅ |
+| `vitest run` | Test Files 8 passed (8) Tests 179 passed (179) |
+| 模块间交叉引用 | 无 ✅ |
+
+## 3. 模块规模与公开接口
+
+| 模块 | 文件 | 行数 | 测试文件 |
+|---|---|---|---|
+| io-adapter | 2 | 2876 | 1 |
+| seq-engine | 4 | 2754 | 1 |
+| cloning-primer | 7 | 5658 | 1 |
+| alignment-gel | 7 | 2628 | 1 |
+| canvas-ui | 18 | 6677 | 2 |
+| ai-copilot | 3 | 3407 | 1 |
+| app（集成层） | 11 | 2391 | 1 |
+
+### io-adapter
+
+```text
+index.ts:2107  export function enrichSnapGeneBinary(
+index.ts:2161  export async function parseSnapGeneBuffer(
+index.ts:2204  export async function parseGenBankString(gbkText: string): Promise<PlasmidDocument> {
+index.ts:2218  export async function parseBioFile(
+index.ts:2423  export function exportPlasmidToGenBank(doc: PlasmidDocument): string {
+index.ts:2449  export function exportPlasmidToFasta(doc: PlasmidDocument): string {
+index.ts:2469  export function exportPlasmidToSnapGeneJson(doc: PlasmidDocument): string {
+```
+
+### seq-engine
+
+```text
+enzymes.ts:197  export const COMMERCIAL_ENZYMES: RestrictionEnzyme[] = [
+enzymes.ts:206  export function getEnzymeByName(name: string): RestrictionEnzyme | undefined {
+feature-library.ts:3  export interface FeatureLibraryEntry {
+feature-library.ts:16  export const FEATURE_LIBRARY: FeatureLibraryEntry[] = [
+index.ts:24  export { COMMERCIAL_ENZYMES, getEnzymeByName };
+index.ts:25  export { FEATURE_LIBRARY };
+index.ts:26  export type { FeatureLibraryEntry };
+index.ts:28  export type SequenceEdit =
+index.ts:96  export function calcGcPercent(seq: string): number {
+index.ts:101  export function reverseComplement(seq: string): string {
+index.ts:107  export function translateDna(seq: string): string {
+index.ts:288  export function findCutSites(
+index.ts:485  export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
+index.ts:851  export function mutatePlasmidSequence(
+index.ts:1028  export function reverseComplementPlasmid(doc: PlasmidDocument): PlasmidDocument {
+index.ts:1105  export function rotateCircularOrigin(
+index.ts:1540  export function autoAnnotateFeatures(
+```
+
+### cloning-primer
+
+```text
+cloning.ts:140  export function simulateDigestion(doc: PlasmidDocument, cutSites: CutSite[]): PlasmidDocument[] {
+cloning.ts:214  export function bluntEnds(
+cloning.ts:389  export function simulateLigation(
+cloning.ts:635  export function simulateGibsonAssembly(
+cloning.ts:806  export function designGibsonPrimers(
+cloning.ts:1067  export function simulateGoldenGateAssembly(
+cloning.ts:1173  export function designGoldenGatePrimers(
+cloning.ts:1211  export const GATEWAY_ATT_SITES = {
+cloning.ts:1356  export function simulateGatewayBP(
+cloning.ts:1427  export function simulateGatewayLR(
+cloning.ts:1613  export function simulatePCR(
+cloning.ts:1834  export function simulateOverlapExtensionPCR(
+cloning.ts:1864  export function digestAndReligate(
+cloning.ts:1874  export function pcrProductLength(
+cloning.ts:1884  export function gibsonProductLength(fragments: PlasmidDocument[], options?: { minOverlap?: number; maxOverlap?: number; circular?: boolean }): number {
+cloning.ts:1889  export function mutationProduct(
+cloning.ts:1907  export function defaultEnzymeList(): RestrictionEnzyme[] {
+cloning.ts:1911  export function restrictionEnzymePanel(): RestrictionEnzyme[] {
+cloning.ts:1915  export function isGoldenGateEnzyme(enzyme: RestrictionEnzyme): boolean {
+cloning.ts:1919  export function primerPairOptions(options?: PrimerDesignOptions): PrimerDesignOptions {
+cloning.ts:1923  export function designPrimerPairForFeature(
+cloning.ts:1931  export function gcOf(sequence: string): number {
+enzymes.ts:11  export interface EnzymeDefinition extends RestrictionEnzyme {
+enzymes.ts:15  export function makeEnzyme(
+enzymes.ts:34  export const COMMON_ENZYMES: RestrictionEnzyme[] = [
+enzymes.ts:97  export function enzymeByName(name: string): RestrictionEnzyme | undefined {
+enzymes.ts:102  export function resolveEnzyme(nameOrSequence: string): RestrictionEnzyme | undefined {
+enzymes.ts:112  export interface EnzymeCutCoordinates {
+enzymes.ts:123  export function cutCoordinates(
+enzymes.ts:185  export function cutEnds(
+enzymes.ts:194  export interface MethylationProfile {
+enzymes.ts:220  export function isMethylationBlocked(
+enzymes.ts:244  export function findCutSites(
+enzymes.ts:274  export function endsCompatible(right: OverhangEnd, left: OverhangEnd): boolean {
+enzymes.ts:283  export function reverseEnd(end: OverhangEnd): OverhangEnd {
+enzymes.ts:292  export interface OverhangFidelity {
+enzymes.ts:302  export function scoreOverhang(overhang: string, allOverhangs: string[]): OverhangFidelity {
+enzymes.ts:337  export function isTypeIIS(enzyme: RestrictionEnzyme): boolean {
+enzymes.ts:341  export const NEB_LEADER_BASES: Record<string, string> = {
+enzymes.ts:363  export function recommendedLeader(enzymeName: string): string {
+enzymes.ts:367  export function enzymeRecognitionForTail(
+index.ts:1  export type {
+index.ts:5  export {
+index.ts:17  export type {
+index.ts:22  export {
+index.ts:28  export type {
+index.ts:34  export {
+index.ts:51  export {
+index.ts:66  export type {
+index.ts:71  export {
+primer.ts:42  export interface PrimerDesignOptions {
+primer.ts:54  export function buildPrimer(
+primer.ts:175  export function designPrimerPair(
+primer.ts:311  export interface MutationSpec {
+primer.ts:318  export interface SilentSiteSuggestion {
+primer.ts:591  export function designMutagenesisPrimers(
+primer.ts:754  export function primerEnzymeTail(
+primer.ts:765  export function silentSitePanel(): RestrictionEnzyme[] {
+primer.ts:769  export function cloneFeatureList(features: SequenceFeature[]): SequenceFeature[] {
+primer.ts:773  export function shiftedFeatureList(features: SequenceFeature[], offset: number): SequenceFeature[] {
+primer.ts:777  export function mutationSpecLength(doc: PlasmidDocument, mutation: MutationSpec): number {
+primer.ts:781  export function mutatedDocumentCopy(doc: PlasmidDocument): PlasmidDocument {
+thermo.ts:19  export interface ReactionConditions {
+thermo.ts:26  export const DEFAULT_REACTION_CONDITIONS: Required<ReactionConditions> = {
+thermo.ts:43  export const SANTA_LUCIA_1998: Record<string, NearestNeighborStep> = {
+thermo.ts:62  export const SANTA_LUCIA_INITIATION = {
+thermo.ts:69  export interface NearestNeighborSummary {
+thermo.ts:75  export function nearestNeighborSummary(sequence: string): NearestNeighborSummary {
+thermo.ts:112  export function owczarzySaltCorrection(sequence: string, conditions?: ReactionConditions): number {
+thermo.ts:152  export function meltingTemperature(
+thermo.ts:175  export function deltaG37(sequence: string, conditions?: ReactionConditions): number {
+thermo.ts:436  export function predictHairpin(sequence: string, conditions?: ReactionConditions): HairpinPrediction {
+thermo.ts:548  export function predictDuplex(
+thermo.ts:660  export interface OligoThermo {
+thermo.ts:673  export function evaluateOligoThermodynamics(
+thermo.ts:696  export function calcCrossDimer(
+thermo.ts:705  export function tmDifference(a: number, b: number): number {
+thermo.ts:709  export function normalizeConditions(conditions?: ReactionConditions): Required<ReactionConditions> {
+utils.ts:11  export const GAS_CONSTANT = 1.9872; // cal / (mol * K)
+utils.ts:51  export const CODON_TABLE: Record<string, string> = {
+utils.ts:118  export const AMINO_ACID_NAMES: Record<string, string> = {
+utils.ts:142  export const SYNONYMOUS_CODONS: Record<string, string[]> = (() => {
+utils.ts:153  export function uid(prefix: string): string {
+utils.ts:158  export function nowIso(): string {
+utils.ts:162  export function mod(value: number, length: number): number {
+utils.ts:167  export function clamp(value: number, low: number, high: number): number {
+utils.ts:171  export function normalizeDNA(sequence: string): string {
+utils.ts:175  export function complementBase(base: string): string {
+utils.ts:179  export function reverseComplement(sequence: string): string {
+utils.ts:188  export function reverseSequence(sequence: string): string {
+utils.ts:192  export function isSelfComplementary(sequence: string): boolean {
+utils.ts:197  export function gcPercentOf(sequence: string): number {
+utils.ts:207  export function has3PrimeGCClamp(sequence: string): boolean {
+utils.ts:214  export function isPalindromic(sequence: string): boolean {
+utils.ts:219  export function hammingDistance(a: string, b: string): number {
+utils.ts:233  export function rangeLength(start: number, end: number, length: number, circular: boolean): number {
+utils.ts:241  export function sequenceSlice(
+utils.ts:272  export function motifToRegex(motif: string): RegExp {
+utils.ts:281  export function findMotifPositions(sequence: string, motif: string, circular: boolean): number[] {
+utils.ts:299  export function findMotifOnlyPositions(
+utils.ts:321  export interface StrandedMotifMatch {
+utils.ts:327  export function findMotifOnBothStrands(
+utils.ts:347  export function translateSequence(sequence: string, frame = 0, stopAtStop = false): string {
+utils.ts:359  export function codonStartFor(anchor: number, position: number): number {
+utils.ts:363  export function bluntOverhang(): OverhangEnd {
+utils.ts:367  export function copyOverhang(end: OverhangEnd | undefined): OverhangEnd {
+utils.ts:377  export function reverseOverhang(end: OverhangEnd | undefined): OverhangEnd {
+utils.ts:387  export function cloneFeature(feature: SequenceFeature): SequenceFeature {
+utils.ts:396  export function clonePrimer(primer: Primer): Primer {
+utils.ts:403  export function cloneHistoryNode(node: CloningHistoryNode): CloningHistoryNode {
+utils.ts:419  export function cloneDocument(doc: PlasmidDocument): PlasmidDocument {
+utils.ts:433  export interface MakeDocumentInput {
+utils.ts:446  export function makeDocument(input: MakeDocumentInput): PlasmidDocument {
+utils.ts:468  export function makeHistoryNode(
+utils.ts:495  export interface DocumentSnapshot {
+utils.ts:502  export function documentSnapshot(
+utils.ts:514  export function appendHistory(doc: PlasmidDocument, node: CloningHistoryNode): PlasmidDocument {
+utils.ts:520  export interface SlicedDocumentData {
+utils.ts:591  export function sliceDocumentData(
+utils.ts:664  export function shiftFeature(feature: SequenceFeature, offset: number): SequenceFeature {
+utils.ts:672  export function shiftPrimer(primer: Primer, offset: number): Primer {
+utils.ts:681  export function clipFeatureToLength(feature: SequenceFeature, length: number): SequenceFeature | null {
+utils.ts:690  export interface MutationAdjustment {
+utils.ts:696  export function applySequenceMutation(
+utils.ts:725  export function adjustFeaturesForMutation(
+utils.ts:778  export function findFirstDifference(a: string, b: string): number {
+utils.ts:786  export function formatKcal(value: number): string {
+```
+
+### alignment-gel
+
+```text
+abif.ts:611  export async function parseAb1Trace(buffer: ArrayBuffer, fileName: string): Promise<SangerTraceData> {
+abif.ts:626  export function mottTrim(qualityScores: number[], errorThreshold = 0.05): [number, number] {
+abif.ts:661  export interface SecondaryPeakCall {
+abif.ts:669  export function detectSecondaryPeaks(trace: SangerTraceData, ratio = 0.35): SecondaryPeakCall[] {
+alignment.ts:5  export interface GotohScoring {
+alignment.ts:20  export function gotohLocalAlign(
+alignment.ts:567  export async function alignTraceToPlasmid(
+gel.ts:3  export type LadderName =
+gel.ts:10  export type GelConformation = 'linear' | 'supercoiled' | 'nicked';
+gel.ts:12  export interface LadderBand {
+gel.ts:18  export const DNA_LADDERS: Record<LadderName, LadderBand[]> = {
+gel.ts:89  export interface GelSampleInput {
+gel.ts:101  export interface GelRunParams {
+gel.ts:129  export function computeMigration(apparentBp: number, params: GelRunParams): number {
+gel.ts:178  export function simulateVirtualGel(samples: GelSampleInput[], params: GelRunParams): VirtualGelLane[] {
+genetics.ts:26  export function translateCodon(codon: string): string {
+genetics.ts:31  export function complementBase(base: string): string {
+genetics.ts:35  export function reverseComplement(sequence: string): string {
+genetics.ts:48  export function iupacForPair(first: string, second: string): string {
+genetics.ts:58  export function isCanonicalBase(base: string): boolean {
+index.ts:1  export {
+index.ts:6  export type { SecondaryPeakCall } from './abif';
+index.ts:8  export {
+index.ts:12  export type { GotohScoring } from './alignment';
+index.ts:14  export {
+index.ts:19  export type {
+index.ts:27  export { createSyntheticTrace } from './synthetic';
+index.ts:28  export type { SyntheticTraceOptions } from './synthetic';
+synthetic.ts:5  export interface SyntheticTraceOptions {
+synthetic.ts:42  export function createSyntheticTrace(
+```
+
+### canvas-ui
+
+```text
+CircularPlasmidMap.tsx:69  export interface CircularPlasmidMapProps {
+CircularPlasmidMap.tsx:99  export function CircularPlasmidMap({
+CloningHistoryTree.tsx:13  export interface CloningHistoryTreeProps {
+CloningHistoryTree.tsx:29  export function CloningHistoryTree({
+LinearSequenceEditor.tsx:31  export interface LinearSequenceEditorProps {
+LinearSequenceEditor.tsx:97  export function LinearSequenceEditor({
+SangerAlignmentViewer.tsx:17  export interface SangerAlignmentViewerProps {
+SangerAlignmentViewer.tsx:320  export function SangerAlignmentViewer({
+SeqVizView.tsx:6  export interface SeqVizViewProps {
+SeqVizView.tsx:14  export function SeqVizView({
+VirtualGelSimulator.tsx:16  export interface VirtualGelSimulatorProps {
+VirtualGelSimulator.tsx:49  export function VirtualGelSimulator({
+exportSvg.ts:36  export function exportSvgToPublicationFile(
+exportSvg.ts:46  export async function exportSvgToPng(
+index.tsx:1  export { CircularPlasmidMap } from './CircularPlasmidMap';
+index.tsx:2  export { LinearSequenceEditor } from './LinearSequenceEditor';
+index.tsx:3  export { SangerAlignmentViewer } from './SangerAlignmentViewer';
+index.tsx:4  export { VirtualGelSimulator } from './VirtualGelSimulator';
+index.tsx:5  export { CloningHistoryTree } from './CloningHistoryTree';
+index.tsx:6  export { SeqVizView } from './SeqVizView';
+index.tsx:8  export { exportSvgToPublicationFile, exportSvgToPng } from './exportSvg';
+index.tsx:10  export type {
+index.tsx:19  export type { VizTheme } from './theme';
+index.tsx:20  export { THEMES, getTheme, FEATURE_PALETTE, OPERATION_LABEL } from './theme';
+theme.ts:1  export type VizTheme = 'light' | 'dark' | 'publication';
+theme.ts:3  export interface VizThemeTokens {
+theme.ts:50  export const THEMES: Record<VizTheme, VizThemeTokens> = {
+theme.ts:176  export function getTheme(theme: VizTheme = 'light'): VizThemeTokens {
+theme.ts:180  export function baseColor(base: string, theme: VizThemeTokens): string {
+theme.ts:196  export const OPERATION_LABEL: Record<string, string> = {
+theme.ts:210  export const OPERATION_TINT: Record<string, string> = {
+theme.ts:224  export const FEATURE_PALETTE = [
+types.ts:13  export type { VizTheme };
+types.ts:15  export interface CircularPlasmidMapProps {
+types.ts:27  export interface LinearSequenceEditorProps {
+types.ts:45  export interface SangerAlignmentViewerProps {
+types.ts:52  export interface VirtualGelSimulatorProps {
+types.ts:66  export interface CloningHistoryTreeProps {
+types.ts:73  export interface SeqVizViewProps {
+utils.ts:3  export interface Point {
+utils.ts:8  export interface RangeSegment {
+utils.ts:13  export function mod(value: number, length: number): number {
+utils.ts:18  export function clamp(value: number, min: number, max: number): number {
+utils.ts:24  export function clamp01(value: number): number {
+utils.ts:28  export function round(value: number, precision = 0): number {
+utils.ts:33  export function formatBp(value: number): string {
+utils.ts:37  export function formatPercent(value: number, digits = 1): string {
+utils.ts:41  export function trimNumber(value: number, digits = 1): string {
+utils.ts:50  export function splitRange(
+utils.ts:76  export function featureSegments(
+utils.ts:99  export function segmentsOverlap(a: RangeSegment, b: RangeSegment): boolean {
+utils.ts:103  export function segmentLength(segments: RangeSegment[]): number {
+utils.ts:107  export function pointOnCircle(
+utils.ts:117  export function indexToAngle(index: number, length: number, startAngle = -90): number {
+utils.ts:122  export function angleToIndex(
+utils.ts:131  export function pointToIndex(
+utils.ts:143  export function describeArc(
+utils.ts:162  export function annularSectorPath(
+utils.ts:191  export interface ArrowPolygon {
+utils.ts:196  export function directionalArrow(
+utils.ts:230  export function rectangularArrow(
+utils.ts:257  export interface FeatureTrackAssignment {
+utils.ts:263  export function assignFeatureTracks(
+utils.ts:315  export interface LeaderItem {
+utils.ts:321  export type LeaderSide = 'left' | 'right';
+utils.ts:323  export interface LeaderLabel<T extends LeaderItem = LeaderItem> {
+utils.ts:335  export interface LeaderLayoutOptions {
+utils.ts:347  export interface LeaderSource extends LeaderItem {
+utils.ts:356  export function layoutLeaderLabels<T extends LeaderSource>(
+utils.ts:464  export function niceTickStep(length: number, targetTicks = 12): number {
+utils.ts:477  export function textWidthEstimate(text: string, fontSize: number): number {
+utils.ts:481  export function hexToRgba(hex: string, alpha: number): string {
+utils.ts:495  export function contrastText(hex: string): string {
+```
+
+### ai-copilot
+
+```text
+CopilotSidebar.tsx:46  export interface CopilotSidebarProps {
+CopilotSidebar.tsx:161  export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
+index.ts:16  export const AI_CONFIG_STORAGE_KEY = 'opensnapgene_ai_config';
+index.ts:18  export const PROVIDER_DEFAULTS: Record<AIProviderType, { baseUrl: string; model: string }> = {
+index.ts:41  export const QUICK_PROMPTS: Array<{ id: string; icon: string; label: string; prompt: string }> = [
+index.ts:447  export function buildPlasmidContextPrompt(
+index.ts:615  export function buildSystemPrompt(): string {
+index.ts:739  export function parseAssistantReply(text: string): { content: string; actions: AIToolAction[] } {
+index.ts:893  export function validateAction(
+index.ts:1555  export async function streamChat(
+index.ts:1609  export function loadAIConfig(): AIConfig | null {
+index.ts:1640  export function saveAIConfig(config: AIConfig): void {
+index.ts:1677  export function clearAIConfig(): void {
+```
+
+## 4. 全局数据契约 `src/types/schema.ts`
+
+```typescript
+// src/types/schema.ts
+// OpenSnapGene Global Data Contract (Single Source of Truth - Strictly Immutable Across Modules)
+
+export type StrandDirection = 1 | -1 | 0;
+
+export type FeatureType =
+  | 'CDS'
+  | 'promoter'
+  | 'terminator'
+  | 'rep_origin'
+  | 'primer_bind'
+  | 'misc_feature'
+  | 'regulatory'
+  | 'enhancer'
+  | 'intron'
+  | 'protein_bind'
+  | 'oriT'
+  | 'attachment_site'; // attB, attP, attL, attR, loxP
+
+export interface SequenceFeature {
+  id: string;
+  name: string;
+  type: FeatureType;
+  start: number; // 0-based inclusive index
+  end: number;   // 0-based exclusive index (if start > end in circular DNA, wraps around 0 origin)
+  strand: StrandDirection;
+  color: string; // Hex color code
+  codonStart?: 1 | 2 | 3;
+  notes?: Record<string, string[]>;
+  translation?: string;
+}
+
+export interface RestrictionEnzyme {
+  name: string;
+  recognitionSeq: string;       // Uppercase IUPAC sequence, e.g., "GAATTC" or "GGTCTC"
+  cutIndexTop: number;          // Cut offset relative to recognitionSeq start on 5'->3' strand
+  cutIndexBottom: number;       // Cut offset relative to recognitionSeq start on 3'->5' strand
+  isTypeIIS?: boolean;          // True for BsaI, BsmBI, BbsI, SapI (cuts outside recognition sequence)
+  methylationSensitivity?: {
+    dam?: 'blocked' | 'impaired' | 'insensitive';
+    dcm?: 'blocked' | 'impaired' | 'insensitive';
+    cpg?: 'blocked' | 'impaired' | 'insensitive';
+  };
+  suppliers?: string[];         // e.g., ["NEB", "Thermo", "Takara"]
+  nebBuffers?: Record<'r1.1' | 'r2.1' | 'r3.1' | 'rCutSmart', number>; // Activity % (0-100)
+}
+
+export interface CutSite {
+  id: string;
+  enzyme: RestrictionEnzyme;
+  position: number;             // 0-based start of recognition sequence
+  strand: 1 | -1;               // Important for non-palindromic Type IIS enzymes
+  cutPositionTop: number;       // Actual 0-based cut coordinate on 5'->3' strand (mod length)
+  cutPositionBottom: number;    // Actual 0-based cut coordinate on 3'->5' strand (mod length)
+  overhangType: '5-prime' | '3-prime' | 'blunt';
+  overhangSeq: string;          // Single-stranded overhang sequence (5'->3')
+  isMethylationBlocked: boolean; // True if overlapping Dam (GATC) or Dcm (CCWGG) site blocks cleavage
+  totalCutsInPlasmid: number;
+}
+
+export interface Primer {
+  id: string;
+  name: string;
+  sequence: string;             // Full 5'->3' oligo sequence (tailSequence + annealingSequence)
+  bindingStart: number;         // 0-based start of annealing region on template
+  bindingEnd: number;           // 0-based end of annealing region on template
+  strand: 1 | -1;
+  tailSequence: string;         // 5' non-annealing extension (restriction site, Gibson overlap, etc.)
+  tmAnnealing: number;          // SantaLucia 1998 + Owczarzy salt-corrected Tm of binding region (°C)
+  tmTotal: number;              // Full length Tm (°C)
+  gcPercent: number;
+  has3PrimeGCClamp: boolean;
+  hairpinDeltaG: number;        // kcal/mol (negative values indicate stronger secondary structure)
+  selfDimerDeltaG: number;      // kcal/mol
+  mismatches?: number[];        // 0-based template positions of intentional site-directed mutagenesis bases
+}
+
+export interface ORF {
+  id: string;
+  start: number;
+  end: number;
+  strand: 1 | -1;
+  frame: 1 | 2 | 3 | -1 | -2 | -3;
+  lengthBp: number;
+  aminoAcids: string;
+  mwKda: number;                // Estimated protein molecular weight in kDa
+  pI: number;                   // Theoretical isoelectric point
+}
+
+export type CloningOperationType =
+  | 'import'
+  | 'restriction_ligation'
+  | 'gibson_assembly'
+  | 'golden_gate'
+  | 'gateway_bp'
+  | 'gateway_lr'
+  | 'pcr'
+  | 'soe_pcr'
+  | 'site_directed_mutagenesis'
+  | 'blunting'
+  | 'manual_edit';
+
+export interface CloningHistoryNode {
+  id: string;
+  operation: CloningOperationType;
+  timestamp: string;
+  description: string;
+  enzymesUsed?: string[];
+  primersUsed?: string[];
+  parentSnapshots?: Array<{
+    id: string;
+    name: string;
+    length: number;
+    extractedRange?: [number, number];
+  }>;
+}
+
+export interface OverhangEnd {
+  type: '5-prime' | '3-prime' | 'blunt';
+  sequence: string;             // 5'->3' single-stranded overhang bases
+  phosphorylated: boolean;
+  sourceEnzyme?: string;
+}
+
+export interface PlasmidDocument {
+  id: string;
+  name: string;
+  sequence: string;             // Uppercase IUPAC DNA sequence
+  topology: 'circular' | 'linear';
+  length: number;
+  createdAt: string;
+  updatedAt: string;
+  description?: string;
+  methylationProfile?: {
+    dam: boolean;               // Default true for standard E. coli DH5alpha/TOP10
+    dcm: boolean;               // Default true
+    cpg: boolean;               // Default false
+  };
+  linearEnds?: {                // Present when topology === 'linear' (e.g. digested fragment or PCR product)
+    left: OverhangEnd;
+    right: OverhangEnd;
+  };
+  features: SequenceFeature[];
+  primers: Primer[];
+  history: CloningHistoryNode[];
+}
+
+export interface SelectionRange {
+  start: number;                // 0-based inclusive
+  end: number;                  // 0-based exclusive (wraps around 0 if start > end in circular plasmid)
+  strand?: 1 | -1 | 'both';
+}
+
+export interface SangerTraceData {
+  id: string;
+  fileName: string;
+  calledSequence: string;
+  qualityScores: number[];      // Phred scores (0-62)
+  baseLocations: number[];      // Trace sample index for each called base peak
+  trimRange: [number, number];  // High-quality [startBaseIdx, endBaseIdx] after Mott trimming
+  traces: {
+    A: number[];
+    T: number[];
+    G: number[];
+    C: number[];
+  };
+  alignment?: {
+    refStart: number;
+    refEnd: number;
+    strand: 1 | -1;
+    identityPercent: number;
+    alignedRef: string;
+    alignedQuery: string;
+    mismatches: Array<{
+      refIndex: number;
+      queryIndex: number;
+      type: 'substitution' | 'insertion' | 'deletion' | 'heterozygous_peak';
+      refBase: string;
+      queryBase: string;
+      aminoAcidImpact?: string; // e.g., "Silent (L124L)" or "Missense (E45K in EGFP)"
+    }>;
+  };
+}
+
+export interface VirtualGelLane {
+  id: string;
+  label: string;
+  isLadder?: boolean;
+  bands: Array<{
+    sizeBp: number;
+    conformation: 'linear' | 'supercoiled' | 'nicked';
+    apparentBp: number;         // Effective migration size (supercoiled migrates ~0.7x faster)
+    migrationY: number;         // Normalized 0.0 (well) to 1.0 (bottom of gel)
+    relativeIntensity: number;  // 0.1 to 1.0 (proportional to fragment mass fraction)
+    fragmentDoc?: PlasmidDocument;
+  }>;
+}
+
+// Module 6: BYOK AI Copilot Contracts
+export type AIProviderType = 'openai' | 'anthropic' | 'deepseek' | 'gemini' | 'custom_openai';
+
+export interface AIConfig {
+  provider: AIProviderType;
+  apiKey: string;               // Stored strictly in browser localStorage
+  baseUrl: string;              // e.g., "https://api.deepseek.com/v1" or "https://api.openai.com/v1"
+  model: string;                // e.g., "deepseek-chat", "gpt-4o", "claude-3-7-sonnet-latest"
+  temperature?: number;
+}
+
+export type AIToolAction =
+  | { type: 'DESIGN_PRIMERS'; payload: { targetStart: number; targetEnd: number; cloningMethod: 'gibson' | 'restriction' | 'mutagenesis'; forwardTail?: string; reverseTail?: string; mutationSeq?: string } }
+  | { type: 'ADD_FEATURES'; payload: { features: Omit<SequenceFeature, 'id'>[] } }
+  | { type: 'RUN_DIGESTION'; payload: { enzymeNames: string[] } }
+  | { type: 'HIGHLIGHT_RANGE'; payload: { start: number; end: number; reason: string } }
+  | { type: 'SIMULATE_CLONING'; payload: { method: CloningOperationType; fragmentIds: string[]; enzymes?: string[] } };
+
+export interface AIChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  proposedActions?: AIToolAction[]; // One-click executable actions rendered as interactive cards in UI
+}
+
+```
+
+## 5. 关键路径源码摘录
+
+### 环状跨零点酶切扫描 + 甲基化阻断（seq-engine） — `findCutSites`
+
+```typescript
+// src/modules/seq-engine/index.ts:288
+export function findCutSites(
+  doc: PlasmidDocument,
+  enzymes: RestrictionEnzyme[] = COMMERCIAL_ENZYMES,
+  filter: {
+    uniqueOnly?: boolean;
+    commercialOnly?: boolean;
+    buffer?: 'r1.1' | 'r2.1' | 'r3.1' | 'rCutSmart';
+    excludeMethylationBlocked?: boolean;
+  } = {},
+): CutSite[] {
+  const sequence = normalizeSequence(doc.sequence);
+  const length = sequence.length;
+  if (length === 0) return [];
+
+  const circular = doc.topology === 'circular';
+  const selected = enzymes.filter((enzyme) => {
+    if (filter.commercialOnly && (enzyme.suppliers ?? []).length === 0) {
+      return false;
+    }
+    if (filter.buffer) {
+      const activity = enzyme.nebBuffers?.[filter.buffer];
+      if (activity === undefined || activity <= 0) return false;
+    }
+    return true;
+  });
+  if (selected.length === 0) return [];
+
+  let maximumRecognitionLength = 0;
+  for (const enzyme of selected) {
+    maximumRecognitionLength = Math.max(
+      maximumRecognitionLength,
+      enzyme.recognitionSeq.length,
+    );
+  }
+  const scanSequence = circular
+    ? sequence + sequence.slice(0, maximumRecognitionLength)
+    : sequence;
+  const masks = buildMethylationMasks(
+    sequence,
+    circular,
+    doc.methylationProfile,
+  );
+
+  const allSites: CutSite[] = [];
+
+  for (const enzyme of selected) {
+    const recognition = enzyme.recognitionSeq.toUpperCase();
+    const recognitionLength = recognition.length;
+    const hits: Array<{ position: number; strand: Strand }> = [];
+
+    for (const position of findPatternPositions(scanSequence, recognition)) {
+      if (position < length) hits.push({ position, strand: 1 });
+    }
+
+    if (!isPalindromic(recognition)) {
+      const reverseRecognition = reverseComplement(recognition);
+      for (const position of findPatternPositions(scanSequence, reverseRecognition)) {
+        if (position < length) hits.push({ position, strand: -1 });
+      }
+    }
+
+    const seen = new Set<string>();
+    const enzymeSites: CutSite[] = [];
+
+    for (const hit of hits) {
+      const identity = `${hit.position}:${hit.strand}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+
+      const rawTop =
+        hit.strand === 1
+          ? hit.position + enzyme.cutIndexTop
+          : hit.position + recognitionLength - enzyme.cutIndexBottom;
+      const rawBottom =
+        hit.strand === 1
+          ? hit.position + enzyme.cutIndexBottom
+          : hit.position + recognitionLength - enzyme.cutIndexTop;
+
+      if (
+        !circular &&
+        (rawTop < 0 || rawTop > length || rawBottom < 0 || rawBottom > length)
+      ) {
+        continue;
+      }
+
+      const cutPositionTop = circular ? mod(rawTop, length) : rawTop;
+      const cutPositionBottom = circular ? mod(rawBottom, length) : rawBottom;
+      const overhang = calculateOverhang(sequence, circular, rawTop, rawBottom);
+      const blocked = isMethylationBlocked(
+        enzyme,
+        hit.position,
+        recognitionLength,
+        rawTop,
+        rawBottom,
+        masks,
+        length,
+        circular,
+      );
+
+      enzymeSites.push({
+        id: `${enzyme.name}:${hit.position}:${hit.strand}`,
+        enzyme,
+        position: hit.position,
+        strand: hit.strand,
+        cutPositionTop,
+        cutPositionBottom,
+        overhangType: overhang.type,
+        overhangSeq: overhang.sequence,
+        isMethylationBlocked: blocked,
+        totalCutsInPlasmid: 0,
+      });
+    }
+
+    for (const site of enzymeSites) {
+      site.totalCutsInPlasmid = enzymeSites.length;
+    }
+    allSites.push(...enzymeSites);
+  }
+
+  let result = allSites;
+  if (filter.uniqueOnly) {
+    result = result.filter((site) => site.totalCutsInPlasmid === 1);
+  }
+  if (filter.excludeMethylationBlocked) {
+    result = result.filter((site) => !site.isMethylationBlocked);
+  }
+
+  return result.sort(
+    (left, right) =>
+      left.position - right.position ||
+      left.enzyme.name.localeCompare(right.enzyme.name) ||
+      left.strand - right.strand,
+  );
+}
+```
+
+### 环状 ORF 扫描 — `findAllORFs`
+
+```typescript
+// src/modules/seq-engine/index.ts:485
+export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
+  const sequence = normalizeSequence(doc.sequence);
+  const length = sequence.length;
+  if (length < 3) return [];
+
+  const circular = doc.topology === 'circular';
+  const minimum = Math.max(0, Math.floor(minAaLength));
+  interface Candidate {
+    start: number;
+    endRaw: number;
+    strand: Strand;
+    aminoAcids: string;
+  }
+  const candidates = new Map<string, Candidate>();
+
+  for (const strand of [1, -1] as const) {
+    const oriented = strand === 1 ? sequence : reverseComplement(sequence);
+    const scan = circular ? oriented + oriented : oriented;
+    const orientedLength = oriented.length;
+
+    for (let start = 0; start < length; start += 1) {
+      if (scan.slice(start, start + 3) !== START_CODON) continue;
+
+      const limit = circular ? start + length : orientedLength;
+      let stopStart = -1;
+      for (let position = start; position + 3 <= limit; position += 3) {
+        const codon = scan.slice(position, position + 3);
+        if (STOP_CODONS.has(codon)) {
+          stopStart = position;
+          break;
+        }
+      }
+      if (stopStart < 0) continue;
+
+      const endRaw = stopStart + 3;
+      const lengthBp = endRaw - start;
+      if (lengthBp < 3 || lengthBp > length) continue;
+
+      const aminoAcids = translateDna(scan.slice(start, stopStart));
+      if (aminoAcids.length < minimum) continue;
+
+      const key = `${strand}:${stopStart}`;
+      const current = candidates.get(key);
+      if (!current || start < current.start) {
+        candidates.set(key, {
+          start,
+          endRaw,
+          strand,
+          aminoAcids,
+        });
+      }
+    }
+  }
+
+  const orfs: ORF[] = [];
+  for (const candidate of candidates.values()) {
+    const { start, endRaw, strand, aminoAcids } = candidate;
+    const lengthBp = endRaw - start;
+
+    let topStart: number;
+    let topEnd: number;
+    if (lengthBp === length) {
+      topStart = 0;
+      topEnd = length;
+    } else if (strand === 1) {
+      topStart = start;
+      topEnd = circular ? endRaw % length : endRaw;
+    } else if (circular) {
+      topStart = mod(length - (endRaw % length), length);
+      topEnd = mod(length - (start % length), length);
+    } else {
+      topStart = length - endRaw;
+      topEnd = length - start;
+    }
+
+    orfs.push({
+      id: `orf-${strand === 1 ? 'f' : 'r'}-${topStart}-${topEnd}-${lengthBp}`,
+      start: topStart,
+      end: topEnd,
+      strand,
+      frame: orfFrame(strand === 1 ? topStart : start, strand),
+      lengthBp,
+      aminoAcids,
+      mwKda: Number(proteinMolecularWeightKda(aminoAcids).toFixed(3)),
+      pI: Number(proteinIsoelectricPoint(aminoAcids).toFixed(2)),
+    });
+  }
+
+  return orfs.sort(
+    (left, right) => left.start - right.start || left.strand - right.strand,
+  );
+}
+```
+
+### 序列编辑与特征坐标联动 — `mutatePlasmidSequence`
+
+```typescript
+// src/modules/seq-engine/index.ts:851
+export function mutatePlasmidSequence(
+  doc: PlasmidDocument,
+  edit: SequenceEdit,
+): PlasmidDocument {
+  const sequence = normalizeSequence(doc.sequence);
+  const circular = doc.topology === 'circular';
+
+  if (edit.type === 'insert') {
+    if (
+      !Number.isInteger(edit.position) ||
+      edit.position < 0 ||
+      edit.position > sequence.length
+    ) {
+      throw new Error('Insertion position is outside the sequence');
+    }
+    const bases = normalizeInsertBases(edit.bases);
+    const result = transformInsertion(
+      sequence,
+      doc.features,
+      doc.primers,
+      edit.position,
+      bases,
+      circular,
+    );
+    return withHistory(
+      doc,
+      result.sequence,
+      result.features,
+      result.primers,
+      `Inserted ${bases.length} bp at position ${edit.position}`,
+    );
+  }
+
+  if (edit.type === 'delete') {
+    if (!Number.isInteger(edit.start) || !Number.isInteger(edit.end)) {
+      throw new Error('Deletion coordinates must be integers');
+    }
+    const result = transformDeletion(
+      sequence,
+      doc.features,
+      doc.primers,
+      edit.start,
+      edit.end,
+      circular,
+    );
+    return withHistory(
+      doc,
+      result.sequence,
+      result.features,
+      result.primers,
+      `Deleted ${result.deletedLength} bp from ${edit.start} to ${edit.end}`,
+    );
+  }
+
+  const bases = normalizeInsertBases(edit.bases);
+  if (!Number.isInteger(edit.start) || !Number.isInteger(edit.end)) {
+    throw new Error('Replacement coordinates must be integers');
+  }
+  if (edit.start === 0 && edit.end === sequence.length) {
+    const next = withHistory(
+      doc,
+      bases,
+      [],
+      [],
+      `Replaced entire ${sequence.length} bp sequence with ${bases.length} bp`,
+    );
+    return doc.topology === 'linear'
+      ? { ...next, linearEnds: undefined }
+      : next;
+  }
+  const deleted = transformDeletion(
+    sequence,
+    doc.features,
+    doc.primers,
+    edit.start,
+    edit.end,
+    circular,
+  );
+  const insertionPosition = edit.start <= edit.end ? edit.start : 0;
+  const result = transformInsertion(
+    deleted.sequence,
+    deleted.features,
+    deleted.primers,
+    insertionPosition,
+    bases,
+    circular,
+  );
+
+  // A replacement removes the old bases, but a feature or primer that exactly
+  // spans the replaced interval still describes the new interval. Re-attach
+  // those annotations instead of dropping them with the deleted sequence.
+  if (edit.start <= edit.end) {
+    const delta = bases.length - deleted.deletedLength;
+    const newLength = result.sequence.length;
+    for (const feature of doc.features) {
+      if (feature.start > edit.start || feature.end < edit.end) continue;
+      if (result.features.some((candidate) => candidate.id === feature.id)) continue;
+      let start = feature.start;
+      let end = feature.end + delta;
+      if (circular) {
+        start = mod(start, newLength);
+        end = mod(end, newLength);
+        if (start === 0 && feature.start === 0 && feature.end === sequence.length) {
+          end = newLength;
+        }
+      }
+      result.features.push({ ...feature, start, end });
+    }
+    for (const primer of doc.primers) {
+      if (primer.bindingStart > edit.start || primer.bindingEnd < edit.end) continue;
+      if (result.primers.some((candidate) => candidate.id === primer.id)) continue;
+      let bindingStart = primer.bindingStart;
+      let bindingEnd = primer.bindingEnd + delta;
+      if (circular) {
+        bindingStart = mod(bindingStart, newLength);
+        bindingEnd = mod(bindingEnd, newLength);
+      }
+      result.primers.push({ ...primer, bindingStart, bindingEnd });
+    }
+  } else {
+    // A wrapped replacement can also delete an annotation exactly. The new
+    // bases occupy the start of the rotated sequence, so re-anchor it there.
+    for (const feature of doc.features) {
+      if (feature.start !== edit.start || feature.end !== edit.end) continue;
+      if (result.features.some((candidate) => candidate.id === feature.id)) continue;
+      result.features.push({ ...feature, start: 0, end: bases.length });
+    }
+    for (const primer of doc.primers) {
+      if (
+        primer.bindingStart !== edit.start ||
+        primer.bindingEnd !== edit.end
+      ) {
+        continue;
+      }
+      if (result.primers.some((candidate) => candidate.id === primer.id)) continue;
+      result.primers.push({
+        ...primer,
+        bindingStart: 0,
+        bindingEnd: bases.length,
+      });
+    }
+  }
+
+  return withHistory(
+    doc,
+    result.sequence,
+    result.features,
+    result.primers,
+    `Replaced ${deleted.deletedLength} bp from ${edit.start} to ${edit.end} with ${bases.length} bp`,
+  );
+}
+```
+
+### 重设环状原点 — `rotateCircularOrigin`
+
+```typescript
+// src/modules/seq-engine/index.ts:1105
+export function rotateCircularOrigin(
+  doc: PlasmidDocument,
+  newZeroIndex: number,
+): PlasmidDocument {
+  if (doc.topology !== 'circular') {
+    throw new Error('rotateCircularOrigin requires a circular plasmid');
+  }
+  const sequence = normalizeSequence(doc.sequence);
+  const length = sequence.length;
+  if (!Number.isFinite(newZeroIndex)) {
+    throw new Error('New origin must be a finite number');
+  }
+  if (length === 0) {
+    return withHistory(doc, sequence, [], [], 'Rotated circular origin to 0');
+  }
+  const zeroIndex = mod(Math.floor(newZeroIndex), length);
+  if (zeroIndex === 0) {
+    return withHistory(
+      doc,
+      sequence,
+      doc.features.map((feature) => ({ ...feature })),
+      doc.primers.map((primer) => ({ ...primer })),
+      'Rotated circular origin to 0',
+    );
+  }
+  const nextSequence = sequence.slice(zeroIndex) + sequence.slice(0, zeroIndex);
+
+  const nextFeatures = doc.features.map((feature) => {
+    const [start, end] = rotateRange(
+      feature.start,
+      feature.end,
+      zeroIndex,
+      length,
+    );
+    return { ...feature, start, end };
+  });
+
+  const nextPrimers = doc.primers.map((primer) => {
+    const [bindingStart, bindingEnd] = rotateRange(
+      primer.bindingStart,
+      primer.bindingEnd,
+      zeroIndex,
+      length,
+    );
+    const mismatches = primer.mismatches
+      ?.map((mismatch) => mod(mismatch - zeroIndex, length))
+      .sort((left, right) => left - right);
+    return { ...primer, bindingStart, bindingEnd, mismatches };
+  });
+
+  return withHistory(
+    doc,
+    nextSequence,
+    nextFeatures,
+    nextPrimers,
+    `Rotated circular origin to ${zeroIndex}`,
+  );
+}
+```
+
+### SantaLucia/Owczarzy 热力学 — `evaluateOligoThermodynamics`
+
+```typescript
+// src/modules/cloning-primer/thermo.ts:673
+export function evaluateOligoThermodynamics(
+  sequence: string,
+  conditions?: ReactionConditions,
+): OligoThermo {
+  const seq = normalizeDNA(sequence);
+  const summary = nearestNeighborSummary(seq);
+  const tmResult = meltingTemperature(seq, conditions);
+  const hairpin = predictHairpin(seq, conditions);
+  const selfDimer = predictDuplex(seq, seq, conditions);
+  return {
+    tm: tmResult.tm,
+    deltaH: summary.deltaH,
+    deltaS: summary.deltaS,
+    deltaG37: deltaG37(seq, conditions),
+    gcPercent: summary.gcPercent,
+    has3PrimeGCClamp: has3PrimeGCClamp(seq),
+    hairpinDeltaG: hairpin.deltaG,
+    selfDimerDeltaG: selfDimer.deltaG,
+    hairpinAscii: hairpin.ascii,
+    selfDimerAscii: selfDimer.ascii,
+  };
+}
+```
+
+### 酶切产物与粘性末端 — `simulateDigestion`
+
+```typescript
+// src/modules/cloning-primer/cloning.ts:140
+export function simulateDigestion(doc: PlasmidDocument, cutSites: CutSite[]): PlasmidDocument[] {
+  const cuts = normaliseCutList(doc, cutSites);
+  if (!cuts.length) return [cloneDocument(doc)];
+  const circular = doc.topology === 'circular';
+  const length = doc.length;
+  const fragments: PlasmidDocument[] = [];
+  const enzymesUsed = Array.from(new Set(cuts.map((cut) => cut.enzyme.name)));
+  if (circular) {
+    if (cuts.length === 1) {
+      const cut = cuts[0];
+      const data = sliceDocumentData(doc, cut.top, cut.top + length, { circular: true });
+      fragments.push(
+        linearDocFromData(
+          doc,
+          data,
+          `${doc.name}_linearized_${cut.enzyme.name}`,
+          { left: cut.left, right: cut.right },
+          'restriction_ligation',
+          `Linearized ${doc.name} with ${cut.enzyme.name}; cohesive ends recorded.`,
+          enzymesUsed,
+        ),
+      );
+      return fragments;
+    }
+    for (let index = 0; index < cuts.length; index += 1) {
+      const startCut = cuts[index];
+      const endCut = cuts[(index + 1) % cuts.length];
+      const span = rangeLength(startCut.top, endCut.top, length, true);
+      if (span <= 0) continue;
+      const data = sliceDocumentData(doc, startCut.top, startCut.top + span, { circular: true });
+      fragments.push(
+        linearDocFromData(
+          doc,
+          data,
+          `${doc.name}_${startCut.enzyme.name}_${index + 1}`,
+          { left: startCut.left, right: endCut.right },
+          'restriction_ligation',
+          `Digestion of ${doc.name} with ${enzymesUsed.join(' + ')}; fragment ${index + 1} of ${cuts.length} (${data.length} bp).`,
+          enzymesUsed,
+        ),
+      );
+    }
+    return fragments;
+  }
+  const boundaries = [0, ...cuts.map((cut) => cut.top).filter((value) => value > 0 && value < length), length];
+  const uniqueBoundaries = Array.from(new Set(boundaries)).sort((a, b) => a - b);
+  for (let index = 0; index + 1 < uniqueBoundaries.length; index += 1) {
+    const start = uniqueBoundaries[index];
+    const end = uniqueBoundaries[index + 1];
+    if (end <= start) continue;
+    const data = sliceDocumentData(doc, start, end, { circular: false });
+    const leftEnd =
+      index === 0
+        ? copyOverhang(doc.linearEnds?.left ?? bluntOverhang())
+        : cuts.find((cut) => cut.top === start)?.left ?? bluntOverhang();
+    const rightEnd =
+      index + 2 === uniqueBoundaries.length
+        ? copyOverhang(doc.linearEnds?.right ?? bluntOverhang())
+        : cuts.find((cut) => cut.top === end)?.right ?? bluntOverhang();
+    fragments.push(
+      linearDocFromData(
+        doc,
+        data,
+        `${doc.name}_fragment_${index + 1}`,
+        { left: leftEnd, right: rightEnd },
+        'restriction_ligation',
+        `Digestion of ${doc.name} with ${enzymesUsed.join(' + ')}; fragment ${index + 1} (${data.length} bp).`,
+        enzymesUsed,
+      ),
+    );
+  }
+  return fragments;
+}
+```
+
+### 连接与末端相容性 — `simulateLigation`
+
+```typescript
+// src/modules/cloning-primer/cloning.ts:389
+export function simulateLigation(
+  fragments: PlasmidDocument[],
+  options?: { circularize?: boolean; dephosphorylatedIds?: string[] },
+): {
+  product: PlasmidDocument | null;
+  compatible: boolean;
+  orientations: Array<'forward' | 'reverse'>;
+  destroyedSites: string[];
+  warnings: string[];
+}
+```
+
+### Golden Gate 组装 — `simulateGoldenGateAssembly`
+
+```typescript
+// src/modules/cloning-primer/cloning.ts:1067
+export function simulateGoldenGateAssembly(
+  parts: PlasmidDocument[],
+  enzyme: RestrictionEnzyme,
+  options?: { circular?: boolean },
+): {
+  product: PlasmidDocument | null;
+  overhangs: string[];
+  fidelityScore: number;
+  internalSiteWarnings: string[];
+  warnings: string[];
+}
+```
+
+### cloning-primer 内部 Type IIS 搜索（与 seq-engine 并行实现） — `findCutSites`
+
+```typescript
+// src/modules/cloning-primer/enzymes.ts:244
+export function findCutSites(
+  sequence: string,
+  enzyme: RestrictionEnzyme,
+  circular = true,
+  profile?: MethylationProfile,
+): CutSite[] {
+  const seq = normalizeDNA(sequence);
+  const length = seq.length;
+  if (!length) return [];
+  const matches = findMotifOnBothStrands(seq, enzyme.recognitionSeq, circular);
+  const cuts: CutSite[] = [];
+  for (const match of matches) {
+    const coordinates = cutCoordinates(match.position, enzyme, match.strand, length);
+    const ends = cutEnds(seq, coordinates, circular, enzyme.name);
+    cuts.push({
+      id: `${enzyme.name}_${match.position}_${match.strand}`,
+      enzyme,
+      position: match.position,
+      strand: match.strand,
+      cutPositionTop: coordinates.top,
+      cutPositionBottom: coordinates.bottom,
+      overhangType: ends.left.type,
+      overhangSeq: ends.left.sequence,
+      isMethylationBlocked: profile ? isMethylationBlocked(seq, enzyme, match.position, profile) : false,
+      totalCutsInPlasmid: matches.length,
+    });
+  }
+  return cuts.sort((a, b) => a.position - b.position);
+}
+```
+
+### Sanger 跨零点比对 — `alignTraceToPlasmid`
+
+```typescript
+// src/modules/alignment-gel/alignment.ts:567
+export async function alignTraceToPlasmid(
+  trace: SangerTraceData,
+  doc: PlasmidDocument,
+  options: { useWasm?: boolean; kmer?: number } = {}
+): Promise<SangerTraceData> {
+  const sequence = doc.sequence.toUpperCase();
+  const sequenceLength = sequence.length;
+  if (sequenceLength === 0) {
+    return {
+      ...trace,
+      alignment: {
+        refStart: 0,
+        refEnd: 0,
+        strand: 1,
+        identityPercent: 0,
+        alignedRef: '',
+        alignedQuery: '',
+        mismatches: []
+      }
+    };
+  }
+
+  let trimStart = 0;
+  let trimEnd = trace.calledSequence.length;
+  if (Array.isArray(trace.trimRange) && trace.trimRange.length === 2) {
+    const suppliedStart = Number.isFinite(trace.trimRange[0]) ? trace.trimRange[0] : 0;
+    const suppliedEnd = Number.isFinite(trace.trimRange[1])
+      ? trace.trimRange[1]
+      : trace.calledSequence.length;
+    trimStart = clamp(suppliedStart, 0, trace.calledSequence.length);
+    trimEnd = clamp(suppliedEnd, trimStart, trace.calledSequence.length);
+  }
+  if (trimEnd - trimStart < 8) {
+    trimStart = 0;
+    trimEnd = trace.calledSequence.length;
+  }
+  const query = trace.calledSequence.slice(trimStart, trimEnd).toUpperCase();
+  if (!query.length) {
+    return {
+      ...trace,
+      alignment: {
+        refStart: 0,
+        refEnd: 0,
+        strand: 1,
+        identityPercent: 0,
+        alignedRef: '',
+        alignedQuery: '',
+        mismatches: []
+      }
+    };
+  }
+
+  const circular = doc.topology === 'circular';
+  const reference = circular ? sequence + sequence : sequence;
+  const preferredKmer = clamp(
+    Math.floor(Number.isFinite(options.kmer) ? (options.kmer as number) : 15),
+    4,
+    32
+  );
+
+  let windowStart = 0;
+  let windowEnd = reference.length;
+  let diagonal: number | null = null;
+  if (options.useWasm) {
+    diagonal = await tryMinimap2Diagonal(reference, query);
+  }
+  if (diagonal === null) {
+    const attempts = Array.from(
+      new Set<number>([
+        preferredKmer,
+        Math.max(6, Math.floor(preferredKmer * 0.7)),
+        6
+      ])
+    ).filter(kmer => kmer >= 4 && kmer <= query.length);
+    for (const kmer of attempts) {
+      const candidate = findSeedDiagonal(reference, query, kmer);
+      if (candidate !== null) {
+        diagonal = candidate;
+        break;
+      }
+    }
+  }
+
+  let alignment = {
+    score: 0,
+    refStart: 0,
+    refEnd: 0,
+    queryStart: 0,
+    queryEnd: 0,
+    alignedRef: '',
+    alignedQuery: ''
+  };
+  if (diagonal !== null) {
+    const margin = Math.max(32, Math.ceil(query.length * 0.15));
+    windowStart = clamp(diagonal - margin, 0, reference.length);
+    windowEnd = clamp(diagonal + query.length + margin, 0, reference.length);
+    if (windowEnd <= windowStart) {
+      windowStart = 0;
+      windowEnd = reference.length;
+    }
+    alignment = gotohLocalAlign(reference.slice(windowStart, windowEnd), query);
+  }
+
+  const windowCells = (windowEnd - windowStart + 1) * (query.length + 1);
+  const fullCells = (reference.length + 1) * (query.length + 1);
+  const shouldTryFull =
+    alignment.score <= 0
+      ? fullCells <= 12_000_000
+      : windowCells < 300_000 && reference.length * query.length < 4_000_000;
+  if (shouldTryFull) {
+    const fullAlignment = gotohLocalAlign(reference, query);
+    if (fullAlignment.score > alignment.score) {
+      alignment = fullAlignment;
+      windowStart = 0;
+    }
+  }
+
+  if (alignment.score <= 0) {
+    return {
+      ...trace,
+      alignment: {
+        refStart: 0,
+        refEnd: 0,
+        strand: 1,
+        identityPercent: 0,
+        alignedRef: '',
+        alignedQuery: '',
+        mismatches: []
+      }
+    };
+  }
+
+  let matchCount = 0;
+  for (let index = 0; index < alignment.alignedRef.length; index += 1) {
+    const refChar = alignment.alignedRef[index];
+    const queryChar = alignment.alignedQuery[index];
+    if (refChar !== '-' && queryChar !== '-' && refChar === queryChar) matchCount += 1;
+  }
+  const identityPercent =
+    alignment.alignedRef.length > 0
+      ? Math.round((matchCount / alignment.alignedRef.length) * 100000) / 1000
+      : 0;
+
+  const mismatches = alignmentMismatches(
+    alignment.alignedRef,
+    alignment.alignedQuery,
+    windowStart + alignment.refStart,
+    trimStart + alignment.queryStart,
+    circular,
+    sequenceLength,
+    trace
+  );
+  addImpacts(mismatches, trace, doc);
+
+  const referenceBasesConsumed = alignment.refEnd - alignment.refStart;
+  const absoluteRefStart = windowStart + alignment.refStart;
+  const absoluteRefEnd = absoluteRefStart + referenceBasesConsumed;
+  const refStart = circular ? modulo(absoluteRefStart, sequenceLength) : absoluteRefStart;
+  const refEnd = circular ? modulo(absoluteRefEnd, sequenceLength) : absoluteRefEnd;
+
+  return {
+    ...trace,
+    alignment: {
+      refStart,
+      refEnd,
+      strand: 1,
+      identityPercent,
+      alignedRef: alignment.alignedRef,
+      alignedQuery: alignment.alignedQuery,
+      mismatches
+    }
+  };
+}
+```
+
+### BYOK 密钥读取 — `loadAIConfig`
+
+```typescript
+// src/modules/ai-copilot/index.ts:1609
+export function loadAIConfig(): AIConfig | null {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return null;
+    const raw = storage.getItem(AI_CONFIG_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return null;
+    if (!isProviderType(parsed.provider)) return null;
+    if (typeof parsed.apiKey !== 'string' || parsed.apiKey.trim().length === 0) return null;
+    if (typeof parsed.baseUrl !== 'string' || !isHttpUrl(parsed.baseUrl.trim())) return null;
+    if (typeof parsed.model !== 'string' || parsed.model.trim().length === 0) return null;
+
+    const config: AIConfig = {
+      provider: parsed.provider,
+      apiKey: parsed.apiKey.trim(),
+      baseUrl: parsed.baseUrl.trim(),
+      model: parsed.model.trim(),
+    };
+
+    if (typeof parsed.temperature === 'number' && Number.isFinite(parsed.temperature)) {
+      config.temperature = parsed.temperature;
+    }
+
+    return config;
+  } catch {
+    return null;
+  }
+}
+```
+
+### BYOK 密钥保存 — `saveAIConfig`
+
+```typescript
+// src/modules/ai-copilot/index.ts:1640
+export function saveAIConfig(config: AIConfig): void {
+  if (!config || !isProviderType(config.provider)) {
+    throw new Error('Invalid AI provider.');
+  }
+  if (typeof config.apiKey !== 'string' || config.apiKey.trim().length === 0) {
+    throw new Error('API key is required.');
+  }
+  if (typeof config.baseUrl !== 'string' || !isHttpUrl(config.baseUrl.trim())) {
+    throw new Error('Base URL must be a valid HTTP(S) URL.');
+  }
+  if (typeof config.model !== 'string' || config.model.trim().length === 0) {
+    throw new Error('Model name is required.');
+  }
+  if (
+    config.temperature !== undefined &&
+    (!Number.isFinite(config.temperature) || config.temperature < 0 || config.temperature > 2)
+  ) {
+    throw new Error('Temperature must be between 0 and 2.');
+  }
+
+  const normalized: AIConfig = {
+    provider: config.provider,
+    apiKey: config.apiKey.trim(),
+    baseUrl: config.baseUrl.trim(),
+    model: config.model.trim(),
+  };
+  if (config.temperature !== undefined) normalized.temperature = config.temperature;
+
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return;
+    storage.setItem(AI_CONFIG_STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+    // Storage can be unavailable in private browsing or non-browser runtimes.
+  }
+}
+```
+
+### AI 动作 Schema 与坐标边界校验 — `validateAction`
+
+```typescript
+// src/modules/ai-copilot/index.ts:893
+export function validateAction(
+  action: unknown,
+  doc: PlasmidDocument,
+): { ok: true; action: AIToolAction }
+```
+
+### 浏览器直连流式请求 — `streamChat`
+
+```typescript
+// src/modules/ai-copilot/index.ts:1555
+export async function streamChat(
+  config: AIConfig,
+  messages: AIChatMessage[],
+  onToken: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!config || !isProviderType(config.provider)) {
+    throw new Error('A valid AI provider configuration is required.');
+  }
+  if (typeof config.apiKey !== 'string' || config.apiKey.trim().length === 0) {
+    throw new Error('An API key is required.');
+  }
+  if (signal?.aborted) throw createAbortError();
+
+  const prepared = prepareRequest(config, messages, signal);
+  let content = '';
+
+  const emit = (delta: string): void => {
+    if (!delta) return;
+    content += delta;
+    onToken(delta);
+  };
+
+  let response: Response;
+  try {
+    response = await globalThis.fetch(prepared.url, prepared.init);
+  } catch (error) {
+    if (signal?.aborted) throw createAbortError();
+    throw new Error(redactSecrets(`Failed to reach the AI provider: ${errorMessage(error)}`, config.apiKey));
+  }
+
+  if (response.ok === false || (typeof response.status === 'number' && response.status >= 400)) {
+    let detail = '';
+    try {
+      detail = truncateText(await response.text(), 800);
+    } catch {
+      detail = '';
+    }
+    const suffix = detail ? ` - ${detail}` : '';
+    throw new Error(
+      redactSecrets(`AI request failed with HTTP ${response.status}${suffix}`, config.apiKey),
+    );
+  }
+
+  try {
+    await consumeStream(response, prepared.mode, emit, signal);
+  } catch (error) {
+    if (signal?.aborted) throw createAbortError();
+    throw new Error(redactSecrets(errorMessage(error), config.apiKey));
+  }
+
+  return content;
+}
+```
+
+## 6. 集成层：Worker 池与 AI 动作执行
+
+```typescript
+// Promise-based client for the bio Web Worker pool, with an in-thread
+// fallback for environments without Worker support (Node/vitest, old browsers).
+import { bioApi, type BioApi, type BioFn, type BioRequest, type BioResponse } from './bio-api';
+
+type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
+
+const POOL_SIZE =
+  typeof navigator !== 'undefined' && navigator.hardwareConcurrency
+    ? Math.min(4, Math.max(1, navigator.hardwareConcurrency - 1))
+    : 2;
+
+let workers: Worker[] | null = null;
+let nextWorker = 0;
+let nextId = 1;
+const pending = new Map<number, Pending>();
+
+function getWorkers(): Worker[] | null {
+  if (typeof Worker === 'undefined') return null;
+  if (workers) return workers;
+  try {
+    workers = Array.from({ length: POOL_SIZE }, () => {
+      const w = new Worker(new URL('./bio.worker.ts', import.meta.url), { type: 'module' });
+      w.onmessage = (e: MessageEvent<BioResponse>) => {
+        const p = pending.get(e.data.id);
+        if (!p) return;
+        pending.delete(e.data.id);
+        if (e.data.ok) p.resolve(e.data.result);
+        else p.reject(new Error(e.data.error));
+      };
+      return w;
+    });
+  } catch {
+    workers = null;
+  }
+  return workers;
+}
+
+export function callBioSync<K extends BioFn>(fn: K, ...args: Parameters<BioApi[K]>): ReturnType<BioApi[K]> {
+  return (bioApi[fn] as (...a: unknown[]) => ReturnType<BioApi[K]>)(...args);
+}
+
+export function callBio<K extends BioFn>(
+  fn: K,
+  ...args: Parameters<BioApi[K]>
+): Promise<Awaited<ReturnType<BioApi[K]>>> {
+  const pool = getWorkers();
+  if (!pool) {
+    return Promise.resolve().then(() => callBioSync(fn, ...args) as unknown) as Promise<Awaited<ReturnType<BioApi[K]>>>;
+  }
+  const id = nextId++;
+  const worker = pool[nextWorker++ % pool.length];
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+    const msg: BioRequest = { id, fn, args };
+    worker.postMessage(msg);
+  });
+}
+
+```
+
+```typescript
+// src/app/actions.ts:113
+export async function applyAIAction(action: AIToolAction): Promise<void> {
+  const st = useWorkbench.getState();
+  const doc = selectActiveDoc(st);
+  if (!doc) return;
+  switch (action.type) {
+    case 'HIGHLIGHT_RANGE': {
+      const { start, end, reason } = action.payload;
+      st.setSelection({ start, end });
+      st.setHighlight({ start, end, reason });
+      st.notify(`高亮 ${start + 1}–${end}：${reason}`);
+      return;
+    }
+    case 'ADD_FEATURES': {
+      const features: SequenceFeature[] = action.payload.features.map((f) => ({ ...f, id: uid('f') }));
+      st.replaceDoc({
+        ...doc,
+        features: [...doc.features, ...features],
+        updatedAt: new Date().toISOString(),
+        history: [...doc.history, historyNode('manual_edit', `AI 添加 ${features.length} 个特征`)],
+      });
+      st.notify(`已添加特征：${features.map((f) => f.name).join(', ')}`);
+      return;
+    }
+    case 'RUN_DIGESTION': {
+      await digestToGel(doc, action.payload.enzymeNames);
+      st.setView('gel');
+      return;
+    }
+    case 'DESIGN_PRIMERS': {
+      const p = action.payload;
+      if (p.cloningMethod === 'mutagenesis' && p.mutationSeq) {
+        const r = await callBio('designMutagenesisPrimers', doc, { start: p.targetStart, end: p.targetEnd, newBases: p.mutationSeq }, COMMERCIAL_ENZYMES);
+        st.replaceDoc(addPrimersToDoc(doc, [r.forward, r.reverse], 'AI 定点突变引物'));
+        st.notify(`已设计突变引物 ${r.forward.name} / ${r.reverse.name}${r.warnings.length ? '；' + r.warnings.join('；') : ''}`);
+        return;
+      }
+      const r = await callBio('designPrimerPair', doc, { start: p.targetStart, end: p.targetEnd }, { forwardTail: p.forwardTail, reverseTail: p.reverseTail });
+      st.replaceDoc(addPrimersToDoc(doc, [r.forward, r.reverse], `AI ${p.cloningMethod} 引物`));
+      st.setSelection({ start: p.targetStart, end: p.targetEnd });
+      st.notify(`引物 Tm ${r.forward.tmAnnealing.toFixed(1)} / ${r.reverse.tmAnnealing.toFixed(1)} °C，产物 ${r.productLength} bp`);
+      return;
+    }
+    case 'SIMULATE_CLONING': {
+      st.setWizard(methodToWizard[action.payload.method] ?? 'restriction');
+      return;
+    }
+  }
+}
+```
+
+## 7. 功能与性能评测数据
+
+```json
+{
+  "url": "http://localhost:4173/",
+  "passed": 19,
+  "total": 19,
+  "results": [
+    {
+      "name": "加载示例 pUC19 / pEGFP-N1",
+      "ok": true,
+      "ms": 373,
+      "detail": "tabs visible"
+    },
+    {
+      "name": "Web Worker 计算酶切位点",
+      "ok": true,
+      "ms": 327,
+      "detail": "21 cut sites"
+    },
+    {
+      "name": "环形图谱视图",
+      "ok": true,
+      "ms": 264,
+      "detail": ""
+    },
+    {
+      "name": "线性序列视图",
+      "ok": true,
+      "ms": 190,
+      "detail": ""
+    },
+    {
+      "name": "酶列表 + 过滤（单切点）",
+      "ok": true,
+      "ms": 187,
+      "detail": "21 unique cutters"
+    },
+    {
+      "name": "酶切 EcoRI+HindIII 并跑胶",
+      "ok": true,
+      "ms": 1096,
+      "detail": "EcoRI+HindIII：2 个片段 (51, 2635 bp)"
+    },
+    {
+      "name": "特征 / 引物 / ORF 面板",
+      "ok": true,
+      "ms": 979,
+      "detail": "ORF (4)"
+    },
+    {
+      "name": "切换到 pEGFP-N1 并 Sanger 比对",
+      "ok": true,
+      "ms": 2987,
+      "detail": "Missense (T64N in egfp)"
+    },
+    {
+      "name": "历史树",
+      "ok": true,
+      "ms": 119,
+      "detail": ""
+    },
+    {
+      "name": "Cmd+K 命令面板快速酶切",
+      "ok": true,
+      "ms": 243,
+      "detail": "BamHI+NotI：2 个片段 (741, 3992 bp)"
+    },
+    {
+      "name": "克隆向导：引物设计",
+      "ok": true,
+      "ms": 641,
+      "detail": "PCR 产物 600 bp"
+    },
+    {
+      "name": "克隆向导：PCR 产物生成",
+      "ok": true,
+      "ms": 244,
+      "detail": "已生成 pEGFP-N1_PCR_600bp (600 bp)"
+    },
+    {
+      "name": "克隆向导：酶切连接（EcoRI 自连）",
+      "ok": true,
+      "ms": 536,
+      "detail": "已生成 pUC19_religated (2686 bp)；Ligation junction 1 scar sequence: CCAGTGAATTCG."
+    },
+    {
+      "name": "克隆向导：定点突变",
+      "ok": true,
+      "ms": 1269,
+      "detail": "primers + silent-site suggestions"
+    },
+    {
+      "name": "AI 导师抽屉（BYOK 设置）",
+      "ok": true,
+      "ms": 766,
+      "detail": ""
+    },
+    {
+      "name": "撤销/重做",
+      "ok": true,
+      "ms": 75,
+      "detail": ""
+    },
+    {
+      "name": "深色主题",
+      "ok": true,
+      "ms": 629,
+      "detail": ""
+    },
+    {
+      "name": "打开真实 SnapGene .dna（含引物与历史树）",
+      "ok": true,
+      "ms": 856,
+      "detail": "已打开 pIB2-SEC13-mEGFP"
+    },
+    {
+      "name": "导出 GenBank",
+      "ok": true,
+      "ms": 73,
+      "detail": "pIB2-SEC13-mEGFP.gbk"
+    }
+  ],
+  "consoleErrors": []
+}
+```
