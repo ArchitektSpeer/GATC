@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # seq-engine and coverage-reads assert wall-clock budgets, which a shared runner cannot
+      # hold to. They run locally; everything else runs here.
+      - name: Unit and cross-module tests
+        run: npx vitest run --exclude "**/seq-engine.test.ts" --exclude "**/coverage-reads.test.ts"
+
+      - name: Build
+        run: npm run build
+
+      - name: Build the MCP server and call it over stdio
+        run: |
+          npm run mcp:build
+          node scripts/mcp-check.mjs
+
+      - name: Browser walkthrough
+        run: |
+          npx playwright install --with-deps chromium
+          npx vite preview --port 4173 --strictPort &
+          for i in $(seq 60); do curl -sf -o /dev/null http://127.0.0.1:4173/ && break; sleep 1; done
+          node scripts/e2e.mjs e2e-report
+        env:
+          E2E_URL: http://127.0.0.1:4173/
+
+      - name: Keep the walkthrough screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: e2e-report
+          retention-days: 14
+
+      - name: Third-party notices are current
+        run: |
+          node scripts/gen-third-party-notices.mjs
+          git diff --exit-code THIRD-PARTY-NOTICES.md \
+            || { echo "::error::Dependencies changed; commit the regenerated THIRD-PARTY-NOTICES.md"; exit 1; }

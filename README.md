@@ -2,6 +2,10 @@
 
 ![GATC — the open-source SnapGene alternative](docs/promo/hero-en.png)
 
+[![CI](https://github.com/ArchitektSpeer/GATC/actions/workflows/ci.yml/badge.svg)](https://github.com/ArchitektSpeer/GATC/actions/workflows/ci.yml)
+[![Licence GPL-3.0-or-later](https://img.shields.io/badge/licence-GPL--3.0--or--later-blue)](LICENSE)
+[![Try it in the browser](https://img.shields.io/badge/try%20it-in%20the%20browser-2563eb)](https://architektspeer.github.io/GATC/)
+
 **G**ene **A**ssembly & **T**oolkit for **C**loning — the four DNA bases, and what the tool does.
 
 An open-source, offline-first molecular biology workbench: plasmid maps, sequence editing,
@@ -15,7 +19,26 @@ desktop app.
 
 ## English
 
-### Quick start
+### Install
+
+**In the browser — nothing to install:** <https://architektspeer.github.io/GATC/>
+
+It is a PWA, so it also works offline once loaded and can be installed from the address bar.
+Sequences are parsed in your browser and never leave the machine; there is no account and no
+server to upload to.
+
+**On the desktop:** download from [Releases](https://github.com/ArchitektSpeer/GATC/releases).
+
+| | File | Install |
+|---|---|---|
+| Any Linux | `GATC_0.1.0_amd64.AppImage` | `chmod +x` it and run it |
+| Debian, Ubuntu | `GATC_0.1.0_amd64.deb` | `sudo apt install ./GATC_0.1.0_amd64.deb` |
+| Fedora, RHEL | `GATC-0.1.0-1.x86_64.rpm` | `sudo dnf install ./GATC-0.1.0-1.x86_64.rpm` |
+
+Only Linux packages are published so far. Windows and macOS builds come from the same source —
+`npm run tauri:build` on that platform produces them — they are simply not built here yet.
+
+### Development
 
 ```bash
 npm install
@@ -49,6 +72,14 @@ Shortcuts: `Ctrl/Cmd+K` command palette, `Ctrl/Cmd+F` find, `Ctrl/Cmd+Z` undo,
 | Protein | Back-translation and codon optimisation for 8 hosts (optionally avoiding named restriction sites), CAI |
 | Gels | 36 commercial ladders, 0.5–3% agarose, voltage and run time, supercoiled/nicked/linear conformations, mass-weighted band intensity |
 | AI | Bring your own key: OpenAI, Anthropic, DeepSeek, Gemini or any compatible endpoint; the key stays in the browser; compressed plasmid context; structured action cards you can run with one click |
+
+### Screens
+
+| Dual view — map and sequence side by side | Restriction analysis |
+|---|---|
+| ![Dual view](docs/screenshots/dual-view.png) | ![Enzyme list with cut positions](docs/screenshots/enzymes.png) |
+
+![Virtual agarose gel](docs/screenshots/gel.png)
 
 ### Architecture
 
@@ -133,7 +164,25 @@ GATC 是开源、离线优先的分子生物学工作台：质粒图谱、序列
 Sanger 比对、虚拟电泳，以及自带密钥（BYOK）的 AI 助手。一套代码同时构建纯静态 Web/PWA 与
 Tauri 桌面客户端。
 
-### 快速开始
+### 安装
+
+**浏览器直接用，什么都不用装：**<https://architektspeer.github.io/GATC/>
+
+这是一个 PWA，加载过一次之后可离线使用，也能从地址栏安装到桌面。序列在你自己的浏览器里解析，
+不会离开本机；没有账号，也没有服务器可上传。
+
+**桌面端：**到 [Releases](https://github.com/ArchitektSpeer/GATC/releases) 下载。
+
+| 系统 | 文件 | 安装方式 |
+|---|---|---|
+| 任意 Linux | `GATC_0.1.0_amd64.AppImage` | `chmod +x` 后直接运行 |
+| Debian、Ubuntu | `GATC_0.1.0_amd64.deb` | `sudo apt install ./GATC_0.1.0_amd64.deb` |
+| Fedora、RHEL | `GATC-0.1.0-1.x86_64.rpm` | `sudo dnf install ./GATC-0.1.0-1.x86_64.rpm` |
+
+目前只发布了 Linux 包。Windows 与 macOS 用的是同一套源码，在对应系统上跑 `npm run tauri:build`
+就能构建出来，只是这里还没有构建产物。
+
+### 开发
 
 ```bash
 npm install
@@ -167,6 +216,14 @@ npm run tauri:build
 | 蛋白 | 反向翻译与 8 种宿主密码子优化（可避开指定酶切位点）、CAI 计算 |
 | 电泳 | 36 种商业 Ladder、0.5–3% 胶浓度、电压与时间、超螺旋/开环/线性构象、按质量计算亮度 |
 | AI | 自带密钥：OpenAI、Anthropic、DeepSeek、Gemini 或任意兼容端点；密钥仅存于本地浏览器；质粒上下文压缩；可一键执行的结构化动作卡片 |
+
+### 界面
+
+| 双视图：图谱与序列并排 | 酶切分析 |
+|---|---|
+| ![双视图](docs/screenshots/dual-view.png) | ![酶列表与切口位置](docs/screenshots/enzymes.png) |
+
+![虚拟琼脂糖凝胶](docs/screenshots/gel.png)
 
 ### 架构
 
