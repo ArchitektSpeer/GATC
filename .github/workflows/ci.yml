@@ -39,8 +39,14 @@ jobs:
       - name: Browser walkthrough
         run: |
           npx playwright install --with-deps chromium
-          npx vite preview --port 4173 --strictPort &
-          for i in $(seq 60); do curl -sf -o /dev/null http://127.0.0.1:4173/ && break; sleep 1; done
+          # Bind IPv4 explicitly: "localhost" resolves to ::1 first on the runner, and the
+          # walkthrough asks for 127.0.0.1.
+          npx vite preview --host 127.0.0.1 --port 4173 --strictPort &
+          for i in $(seq 60); do
+            curl -sf -o /dev/null http://127.0.0.1:4173/ && break
+            [ "$i" = 60 ] && { echo "::error::preview server never came up"; exit 1; }
+            sleep 1
+          done
           node scripts/e2e.mjs e2e-report
         env:
           E2E_URL: http://127.0.0.1:4173/

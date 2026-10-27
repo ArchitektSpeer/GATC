@@ -31,11 +31,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # Creates the Pages site on the first run, so no repository setting has to be
-      # changed by hand before this workflow can publish.
+      # One-time setup before this can publish: Settings -> Pages -> Source: GitHub Actions.
+      # The workflow token cannot create the site itself; that needs administration rights,
+      # which `permissions:` cannot grant.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
