@@ -60,7 +60,10 @@ npm run test                          # vitest：单元 + 跨模块集成 + 真�
 npm run build && npx vite preview &   # 然后：
 node scripts/e2e.mjs e2e-report       # Playwright 浏览器功能评测，输出截图与 report.json
 node scripts/make-audit-bundle.mjs    # 生成 AUDIT_BUNDLE.md 供外部审计
+npm run crosscheck                    # 与 Biopython / REBASE / primer3 / pydna 交叉验证（需 Python 3）
 ```
+
+交叉验证使用 SnapGene 自身生成的真实 `.dna` 文件，结果与发现并修复的问题见 [docs/CROSSCHECK.md](docs/CROSSCHECK.md)。
 
 ## 许可
 

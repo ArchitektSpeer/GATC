@@ -36,6 +36,7 @@ export interface RestrictionEnzyme {
   cutIndexTop: number;          // Cut offset relative to recognitionSeq start on 5'->3' strand
   cutIndexBottom: number;       // Cut offset relative to recognitionSeq start on 3'->5' strand
   isTypeIIS?: boolean;          // True for BsaI, BsmBI, BbsI, SapI (cuts outside recognition sequence)
+  secondCut?: { top: number; bottom: number }; // Second cleavage of enzymes that cut on both sides (BaeI, BcgI); same convention as cutIndexTop/Bottom
   methylationSensitivity?: {
     dam?: 'blocked' | 'impaired' | 'insensitive';
     dcm?: 'blocked' | 'impaired' | 'insensitive';

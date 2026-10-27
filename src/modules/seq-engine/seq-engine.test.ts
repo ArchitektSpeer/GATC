@@ -219,6 +219,26 @@ describe('restriction digestion', () => {
     expect(findCutSites(doc, [enzyme!], { uniqueOnly: true })).toHaveLength(1);
   });
 
+  it('uses REBASE cut positions where the upstream enzyme table is wrong', () => {
+    const mluCI = ENZYME_DATABASE.find((enzyme) => enzyme.name === 'MluCI')!;
+    expect([mluCI.cutIndexTop, mluCI.cutIndexBottom]).toEqual([0, 4]); // ^AATT, 5' AATT overhang
+    const pspFI = ENZYME_DATABASE.find((enzyme) => enzyme.name === 'PspFI')!;
+    expect([pspFI.cutIndexTop, pspFI.cutIndexBottom]).toEqual([1, 5]); // C^CCAGC
+    // Enzymes REBASE lists without a known cut position are not offered at all.
+    expect(ENZYME_DATABASE.some((enzyme) => enzyme.name === 'BmgI')).toBe(false);
+  });
+
+  it('reports both cuts of an enzyme that cleaves on either side of its site', () => {
+    // BaeI: (10/15)ACNNNNGTAYC(12/7)
+    const sequence = `${'C'.repeat(30)}ACGGGGGTACC${'C'.repeat(30)}`;
+    const doc = { ...makeDoc(sequence), topology: 'linear' as const };
+    const baeI = ENZYME_DATABASE.find((enzyme) => enzyme.name === 'BaeI')!;
+    const sites = findCutSites(doc, [baeI]);
+    expect(sites.map((site) => site.cutPositionTop).sort((a, b) => a - b)).toEqual([20, 53]);
+    expect(sites.map((site) => site.cutPositionBottom).sort((a, b) => a - b)).toEqual([15, 48]);
+    expect(sites.every((site) => site.totalCutsInPlasmid === 2)).toBe(true);
+  });
+
   it('counts multiple sites and applies the unique-cutter filter', () => {
     const sequence = `GAATTC${'C'.repeat(38)}GAATTC`;
     const doc = makeDoc(sequence);

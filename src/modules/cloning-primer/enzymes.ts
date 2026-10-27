@@ -125,16 +125,19 @@ export function cutCoordinates(
   enzyme: RestrictionEnzyme,
   strand: 1 | -1,
   sequenceLength: number,
+  second = false,
 ): EnzymeCutCoordinates {
   const recognitionLength = enzyme.recognitionSeq.length;
+  const cutTop = second && enzyme.secondCut ? enzyme.secondCut.top : enzyme.cutIndexTop;
+  const cutBottom = second && enzyme.secondCut ? enzyme.secondCut.bottom : enzyme.cutIndexBottom;
   let topLocal: number;
   let bottomLocal: number;
   if (strand === 1) {
-    topLocal = position + enzyme.cutIndexTop;
-    bottomLocal = position + enzyme.cutIndexBottom;
+    topLocal = position + cutTop;
+    bottomLocal = position + cutBottom;
   } else {
-    topLocal = position + recognitionLength - enzyme.cutIndexBottom;
-    bottomLocal = position + recognitionLength - enzyme.cutIndexTop;
+    topLocal = position + recognitionLength - cutBottom;
+    bottomLocal = position + recognitionLength - cutTop;
   }
   return {
     topLocal,
@@ -252,11 +255,12 @@ export function findCutSites(
   if (!length) return [];
   const matches = findMotifOnBothStrands(seq, enzyme.recognitionSeq, circular);
   const cuts: CutSite[] = [];
-  for (const match of matches) {
-    const coordinates = cutCoordinates(match.position, enzyme, match.strand, length);
+  const passes = enzyme.secondCut ? [false, true] : [false];
+  for (const match of matches) for (const second of passes) {
+    const coordinates = cutCoordinates(match.position, enzyme, match.strand, length, second);
     const ends = cutEnds(seq, coordinates, circular, enzyme.name);
     cuts.push({
-      id: `${enzyme.name}_${match.position}_${match.strand}`,
+      id: `${enzyme.name}_${match.position}_${match.strand}${second ? '_2' : ''}`,
       enzyme,
       position: match.position,
       strand: match.strand,
@@ -265,7 +269,7 @@ export function findCutSites(
       overhangType: ends.left.type,
       overhangSeq: ends.left.sequence,
       isMethylationBlocked: profile ? isMethylationBlocked(seq, enzyme, match.position, profile) : false,
-      totalCutsInPlasmid: matches.length,
+      totalCutsInPlasmid: matches.length * passes.length,
     });
   }
   return cuts.sort((a, b) => a.position - b.position);

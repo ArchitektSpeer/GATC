@@ -116,7 +116,12 @@ function normaliseCutList(doc: PlasmidDocument, cutSites: CutSite[]): Array<{
   for (const cut of cutSites) {
     if (cut.isMethylationBlocked) continue;
     if (!circular && (cut.position < 0 || cut.position >= length)) continue;
-    const coordinates = cutCoordinates(cut.position, cut.enzyme, cut.strand, length);
+    let coordinates = cutCoordinates(cut.position, cut.enzyme, cut.strand, length);
+    // Enzymes such as BaeI report each of their two cuts as a separate CutSite at the same position.
+    if (cut.enzyme.secondCut && coordinates.top !== cut.cutPositionTop) {
+      const second = cutCoordinates(cut.position, cut.enzyme, cut.strand, length, true);
+      if (second.top === cut.cutPositionTop) coordinates = second;
+    }
     if (!circular && (coordinates.topLocal <= 0 || coordinates.topLocal >= length)) continue;
     const key = `${coordinates.top}:${coordinates.bottom}:${cut.enzyme.name}`;
     if (seen.has(key)) continue;
@@ -282,24 +287,42 @@ function orientFragment(fragment: PlasmidDocument, reverse: boolean): OrientedFr
       reverse: false,
     };
   }
+  // The stored sequence is the top strand, which carries a left 5' and a right 3' overhang.
+  // Flipped, the old bottom strand becomes the top strand, so its span runs from the left
+  // bottom-strand cut to the right one: prepend a left 3' overhang, append a right 5'
+  // overhang, and drop the left 5' / right 3' bases that only the old top strand had.
+  const left = fragment.linearEnds?.left ?? bluntOverhang();
+  const right = fragment.linearEnds?.right ?? bluntOverhang();
+  const leftShift = left.type === '5-prime' ? left.sequence.length : left.type === '3-prime' ? -left.sequence.length : 0;
+  const rightShift = right.type === '5-prime' ? right.sequence.length : right.type === '3-prime' ? -right.sequence.length : 0;
+  const bottomStrand =
+    (left.type === '3-prime' ? reverseComplement(left.sequence) : '') +
+    fragment.sequence.slice(Math.max(0, leftShift), length + Math.min(0, rightShift)) +
+    (right.type === '5-prime' ? reverseComplement(right.sequence) : '');
+  // Top-strand coordinate of the flipped molecule's origin (its new right edge before flipping).
+  const pivot = length + rightShift;
+  const flippedLength = bottomStrand.length;
+  const clampToFlipped = (value: number) => Math.min(flippedLength, Math.max(0, value));
   return {
     source: fragment,
-    sequence: reverseComplement(fragment.sequence),
-    features: fragment.features.map((feature) => ({
-      ...cloneFeature(feature),
-      start: length - feature.end,
-      end: length - feature.start,
-      strand: (feature.strand === 1 ? -1 : feature.strand === -1 ? 1 : 0) as 1 | -1 | 0,
-    })),
+    sequence: reverseComplement(bottomStrand),
+    features: fragment.features
+      .map((feature) => ({
+        ...cloneFeature(feature),
+        start: clampToFlipped(pivot - feature.end),
+        end: clampToFlipped(pivot - feature.start),
+        strand: (feature.strand === 1 ? -1 : feature.strand === -1 ? 1 : 0) as 1 | -1 | 0,
+      }))
+      .filter((feature) => feature.end > feature.start),
     primers: fragment.primers.map((primer) => ({
       ...clonePrimer(primer),
       sequence: reverseComplement(primer.sequence),
       tailSequence: reverseComplement(primer.tailSequence),
-      bindingStart: length - primer.bindingEnd,
-      bindingEnd: length - primer.bindingStart,
+      bindingStart: clampToFlipped(pivot - primer.bindingEnd),
+      bindingEnd: clampToFlipped(pivot - primer.bindingStart),
       strand: (primer.strand === 1 ? -1 : 1) as 1 | -1,
       mismatches: primer.mismatches
-        ? primer.mismatches.map((position) => length - 1 - position)
+        ? primer.mismatches.map((position) => pivot - 1 - position)
         : undefined,
     })),
     left: reverseEnd(copyOverhang(fragment.linearEnds?.right ?? bluntOverhang())),
@@ -2102,6 +2125,17 @@ export function simulatePCR(
   }
   if (forwardBinding.siteCount > 1) warnings.push(`Forward primer has ${forwardBinding.siteCount} potential binding sites.`);
   if (reverseBinding.siteCount > 1) warnings.push(`Reverse primer has ${reverseBinding.siteCount} potential binding sites.`);
+  // A primer whose 3' end also anneals to the other strand can pair with itself or its partner.
+  for (const [label, primer] of [['Forward', forward], ['Reverse', reverse]] as const) {
+    const oligo = normalizeDNA(typeof primer === 'string' ? primer : primer.sequence);
+    if (oligo.length < minAnneal) continue;
+    const threePrime = oligo.slice(-minAnneal);
+    const ownStrand = label === 'Forward' ? threePrime : reverseComplement(threePrime);
+    const otherHits = countBindingSites(template, reverseComplement(ownStrand), circular, 0);
+    if (otherHits > 0 && ownStrand !== reverseComplement(ownStrand)) {
+      warnings.push(`${label} primer 3' end also anneals to the opposite strand (${otherHits} site${otherHits > 1 ? 's' : ''}); extra products are possible.`);
+    }
+  }
   const forwardStart = forwardBinding.binding.start;
   const forwardEnd = forwardBinding.binding.end;
   const reverseStart = reverseBinding.binding.start;

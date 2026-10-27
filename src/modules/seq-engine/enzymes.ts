@@ -4,6 +4,7 @@ import type { RestrictionEnzyme } from '../../types/schema';
 import { aliasedEnzymesByName } from '@teselagen/sequence-utils';
 import { ENZYME_SUPPLIER_CATALOG } from './enzyme-catalog';
 import { ENZYME_DIGEST_CONDITIONS } from './digest-buffer';
+import { REBASE_OVERRIDES, REBASE_UNKNOWN_CUT } from './rebase-overrides';
 
 type BufferName = 'r1.1' | 'r2.1' | 'r3.1' | 'rCutSmart';
 type NebBuffers = Record<BufferName, number>;
@@ -204,9 +205,20 @@ function buildDatabase(): RestrictionEnzyme[] {
     const name = definition.name?.trim();
     if (!name) continue;
     const key = name.toLowerCase();
-    if (byName.has(key)) continue;
+    if (byName.has(key) || REBASE_UNKNOWN_CUT.has(name)) continue;
     const enzyme = buildDatabaseEnzyme(definition, name);
-    if (enzyme) byName.set(key, enzyme);
+    if (!enzyme) continue;
+    const override = REBASE_OVERRIDES[name];
+    if (override) {
+      const { recognitionSeq, cutIndexTop, cutIndexBottom, secondCut } = override;
+      const outside =
+        secondCut !== undefined ||
+        Math.min(cutIndexTop, cutIndexBottom) < 0 ||
+        Math.max(cutIndexTop, cutIndexBottom) > recognitionSeq.length;
+      Object.assign(enzyme, { recognitionSeq, cutIndexTop, cutIndexBottom, isTypeIIS: outside || enzyme.isTypeIIS });
+      if (secondCut) enzyme.secondCut = { ...secondCut };
+    }
+    byName.set(key, enzyme);
   }
   for (const enzyme of HOMING_ENZYMES) {
     const key = enzyme.name.toLowerCase();

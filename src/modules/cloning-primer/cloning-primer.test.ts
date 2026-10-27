@@ -336,6 +336,29 @@ describe('ligation', () => {
   });
 });
 
+describe('ligation of flipped sticky-end fragments', () => {
+  it('moves each overhang to its own junction when the insert must be reversed', () => {
+    // Vector: HindIII 5' overhang on the left, XbaI on the right (top strand only stores the left one).
+    const vector = linearFragment('vector', 'AGCTTCCCCCCCCT', sticky('5-prime', 'AGCT', 'HindIII'), sticky('5-prime', 'CTAG', 'XbaI'));
+    // Insert cut HindIII ... XbaI in the same order, so it only fits reversed. Its bottom strand
+    // is TGGGGTCTAG, which becomes the top strand CTAGACCCCA after flipping.
+    const insert = linearFragment('insert', 'AGCTTGGGGT', sticky('5-prime', 'AGCT', 'HindIII'), sticky('5-prime', 'CTAG', 'XbaI'));
+    const result = simulateLigation([vector, insert]);
+    expect(result.compatible).toBe(true);
+    const product = result.product?.sequence ?? '';
+    expect(product).toHaveLength(24);
+    expect(product + product).toContain('AGCTTCCCCCCCCTCTAGACCCCA');
+  });
+
+  it('warns when a primer 3\' end can also prime from the opposite strand', () => {
+    const left = 'ATGACCGGTTACGATCGATTGCA';
+    const body = 'GCTAGCTTAGGCTAACGTTAGCCGATTAGGCATCGGATCGTTAGCAGTCAGTACGTTAGC';
+    const template = makeDocument({ name: 't', sequence: left + body + reverseComplement(left.slice(-18)) + 'GGCCTTAA', topology: 'linear' });
+    const result = simulatePCR(template, left, reverseComplement(body.slice(-20)));
+    expect(result.warnings.some((warning) => warning.includes('opposite strand'))).toBe(true);
+  });
+});
+
 describe('Gibson assembly', () => {
   it('circularizes two fragments with two overlaps and preserves features', () => {
     const overlapA = 'ACGTTGCAACGTAGCTAGCT';

@@ -3,3 +3,4 @@ dist
 .build-logs
 src-tauri/target
 e2e-report
+.crosscheck/

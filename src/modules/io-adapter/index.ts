@@ -1143,6 +1143,18 @@ function normalizeTeselaGenLocations(
   }
   if (converted.length === 1) {
     const location = converted[0];
+    // SnapGene stores a feature covering the whole circle from an offset as e.g. "3-2";
+    // start === end means empty elsewhere, so keep it full length and remember the offset.
+    if (circular && sequenceLength > 0 && location.start === location.end && location.start > 0) {
+      return {
+        start: 0,
+        end: sequenceLength,
+        segments: [
+          { start: location.start, end: sequenceLength },
+          { start: 0, end: location.start },
+        ],
+      };
+    }
     if (circular && sequenceLength > 0 && location.start > location.end) {
       return { start: location.start, end: mod(location.end, sequenceLength), segments: converted };
     }
@@ -1586,6 +1598,11 @@ function snapGeneFeatureLocations(
     if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
     if (!circular) start = clamp(start, 0, Math.max(0, sequenceLength - 1));
     else if (sequenceLength > 0) start = mod(start, sequenceLength);
+    // "3-2" on a circle covers every base starting at 3; split it so it is not read as empty.
+    if (circular && sequenceLength > 0 && start === end && start > 0) {
+      locations.push({ start, end: sequenceLength }, { start: 0, end: start });
+      continue;
+    }
     locations.push({ start, end });
   }
   return locations;
@@ -2160,6 +2177,8 @@ function featureSegmentLocations(
       sequenceLength,
     );
     if (span.start === feature.start && span.end === feature.end) return usable;
+    const covered = usable.reduce((sum, segment) => sum + segment.end - segment.start, 0);
+    if (feature.start === 0 && feature.end === sequenceLength && covered === sequenceLength) return usable;
   }
   return splitFeatureSpan(feature.start, feature.end, circular, sequenceLength);
 }

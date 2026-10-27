@@ -504,6 +504,21 @@ describe('multi-segment features', () => {
     ]);
   });
 
+  it('keeps a whole-circle SnapGene feature that starts after the origin', async () => {
+    // SnapGene writes "3-2" for a feature covering every base of the circle starting at base 3.
+    const features =
+      '<Features><Feature name="looped" type="misc_feature"><Segment range="3-2" type="standard"/></Feature></Features>';
+    const buffer = concat([cookiePacket(), dnaPacket(SEQUENCE, true), packet(0x0a, encode(features))]).buffer as ArrayBuffer;
+    const doc = await parseSnapGeneBuffer(buffer, 'looped.dna');
+    const looped = findFeature(doc, 'looped');
+    expect([looped.start, looped.end]).toEqual([0, SEQUENCE.length]);
+
+    const reimported = await parseSnapGeneBuffer(exportPlasmidToSnapGene(doc).buffer as ArrayBuffer, 'looped2.dna');
+    const again = findFeature(reimported, 'looped');
+    expect([again.start, again.end]).toEqual([0, SEQUENCE.length]);
+    expect(again.notes?.segments).toEqual([`2-${SEQUENCE.length}`, '0-2']);
+  });
+
   it('orders negative-strand segments by 5-prime to 3-prime', async () => {
     const genbank = buildGenBank(SEQUENCE).replace(
       'misc_feature    join(20..30,50..60)',

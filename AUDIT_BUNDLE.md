@@ -1,6 +1,6 @@
 # GATC 跨模块审计包（AUDIT_BUNDLE）
 
-> 生成时间：2026-10-27T01:15:31.517Z
+> 生成时间：2026-10-27T02:52:23.562Z
 > 用途：连同第 1 节的审阅提示词一起发给外部审阅模型，做最终的代码与生信算法审计。
 
 ## 1. 审阅提示词
@@ -31,16 +31,16 @@
 | 项 | 结果 |
 |---|---|
 | `tsc --noEmit` | 0 error ✅ |
-| `vitest run` | Test Files 15 passed (15) Tests 369 passed (369) |
+| `vitest run` | Test Files 15 passed (15) Tests 374 passed (374) |
 | 模块间交叉引用 | 无 ✅ |
 
 ## 3. 模块规模与公开接口
 
 | 模块 | 文件 | 行数 | 测试文件 |
 |---|---|---|---|
-| io-adapter | 2 | 5772 | 1 |
-| seq-engine | 10 | 6292 | 2 |
-| cloning-primer | 11 | 9382 | 2 |
+| io-adapter | 2 | 5806 | 1 |
+| seq-engine | 11 | 6383 | 2 |
+| cloning-primer | 11 | 9443 | 2 |
 | alignment-gel | 14 | 6852 | 3 |
 | canvas-ui | 35 | 13161 | 5 |
 | ai-copilot | 3 | 3528 | 1 |
@@ -52,21 +52,21 @@
 index.ts:108  export interface ProteinFeature {
 index.ts:119  export interface ProteinDocument {
 index.ts:130  export interface SequencingRead {
-index.ts:2658  export function exportPlasmidToSnapGene(doc: PlasmidDocument): Uint8Array {
-index.ts:2687  export function parseFastq(text: string): SequencingRead[] {
-index.ts:3670  export async function parseProteinFile(
-index.ts:3736  export function isProteinFile(fileName: string, data: string | ArrayBuffer): boolean {
-index.ts:3795  export function exportProteinToFasta(protein: ProteinDocument): string {
-index.ts:3852  export function exportProteinToGenPept(protein: ProteinDocument): string {
-index.ts:3978  export function normalizeAccession(
-index.ts:4004  export async function fetchFromNCBI(
-index.ts:4110  export function enrichSnapGeneBinary(
-index.ts:4164  export async function parseSnapGeneBuffer(
-index.ts:4207  export async function parseGenBankString(gbkText: string): Promise<PlasmidDocument> {
-index.ts:4223  export async function parseBioFile(
-index.ts:4570  export function exportPlasmidToGenBank(doc: PlasmidDocument): string {
-index.ts:4596  export function exportPlasmidToFasta(doc: PlasmidDocument): string {
-index.ts:4616  export function exportPlasmidToSnapGeneJson(doc: PlasmidDocument): string {
+index.ts:2677  export function exportPlasmidToSnapGene(doc: PlasmidDocument): Uint8Array {
+index.ts:2706  export function parseFastq(text: string): SequencingRead[] {
+index.ts:3689  export async function parseProteinFile(
+index.ts:3755  export function isProteinFile(fileName: string, data: string | ArrayBuffer): boolean {
+index.ts:3814  export function exportProteinToFasta(protein: ProteinDocument): string {
+index.ts:3871  export function exportProteinToGenPept(protein: ProteinDocument): string {
+index.ts:3997  export function normalizeAccession(
+index.ts:4023  export async function fetchFromNCBI(
+index.ts:4129  export function enrichSnapGeneBinary(
+index.ts:4183  export async function parseSnapGeneBuffer(
+index.ts:4226  export async function parseGenBankString(gbkText: string): Promise<PlasmidDocument> {
+index.ts:4242  export async function parseBioFile(
+index.ts:4589  export function exportPlasmidToGenBank(doc: PlasmidDocument): string {
+index.ts:4615  export function exportPlasmidToFasta(doc: PlasmidDocument): string {
+index.ts:4635  export function exportPlasmidToSnapGeneJson(doc: PlasmidDocument): string {
 ```
 
 ### seq-engine
@@ -82,13 +82,13 @@ digest-buffer.ts:16  export const ENZYME_DIGEST_CONDITIONS: Record<string, Enzym
 digest-buffer.ts:360  export function recommendDoubleDigestBuffer(
 digest-buffer.ts:493  export interface DoubleDigestRecommendation {
 enzyme-catalog.ts:3  export const ENZYME_SUPPLIER_CATALOG: Record<string, string[]> = {
-enzymes.ts:220  export const ENZYME_DATABASE: RestrictionEnzyme[] = buildDatabase();
-enzymes.ts:473  export const COMMERCIAL_ENZYMES: RestrictionEnzyme[] = buildCommercialEnzymes();
-enzymes.ts:490  export function getEnzymeByName(name: string): RestrictionEnzyme | undefined {
-enzymes.ts:507  export function findIsoschizomers(
-enzymes.ts:540  export interface EnzymeSet {
-enzymes.ts:628  export const ENZYME_SETS: EnzymeSet[] = [
-enzymes.ts:679  export function filterEnzymes(
+enzymes.ts:232  export const ENZYME_DATABASE: RestrictionEnzyme[] = buildDatabase();
+enzymes.ts:485  export const COMMERCIAL_ENZYMES: RestrictionEnzyme[] = buildCommercialEnzymes();
+enzymes.ts:502  export function getEnzymeByName(name: string): RestrictionEnzyme | undefined {
+enzymes.ts:519  export function findIsoschizomers(
+enzymes.ts:552  export interface EnzymeSet {
+enzymes.ts:640  export const ENZYME_SETS: EnzymeSet[] = [
+enzymes.ts:691  export function filterEnzymes(
 feature-library-extra.ts:8  export interface FeatureLibraryExtraEntry {
 feature-library-extra.ts:15  export const FEATURE_LIBRARY_EXTRA: FeatureLibraryExtraEntry[] = [
 feature-library.ts:4  export interface FeatureLibraryEntry {
@@ -110,13 +110,16 @@ index.ts:154  export function calcGcPercent(seq: string): number {
 index.ts:159  export function reverseComplement(seq: string): string {
 index.ts:165  export function translateDna(seq: string): string {
 index.ts:426  export function findCutSites(
-index.ts:697  export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
-index.ts:1063  export function mutatePlasmidSequence(
-index.ts:1240  export function reverseComplementPlasmid(doc: PlasmidDocument): PlasmidDocument {
-index.ts:1317  export function rotateCircularOrigin(
-index.ts:2052  export function autoAnnotateFeatures(
+index.ts:704  export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
+index.ts:1070  export function mutatePlasmidSequence(
+index.ts:1247  export function reverseComplementPlasmid(doc: PlasmidDocument): PlasmidDocument {
+index.ts:1324  export function rotateCircularOrigin(
+index.ts:2059  export function autoAnnotateFeatures(
 motif-search.ts:3  export interface MotifHit {
 motif-search.ts:294  export function searchMotif(
+rebase-overrides.ts:6  export interface RebaseOverride {
+rebase-overrides.ts:13  export const REBASE_OVERRIDES: Record<string, RebaseOverride> = {
+rebase-overrides.ts:45  export const REBASE_UNKNOWN_CUT: ReadonlySet<string> = new Set([
 ```
 
 ### cloning-primer
@@ -130,31 +133,31 @@ assembly.ts:279  export function simulateGCCloning(
 assembly.ts:322  export function simulateTOPOCloning(
 assembly.ts:441  export function simulateLIC(
 assembly.ts:514  export function designLICPrimers(
-cloning.ts:140  export function simulateDigestion(doc: PlasmidDocument, cutSites: CutSite[]): PlasmidDocument[] {
-cloning.ts:214  export function bluntEnds(
-cloning.ts:389  export function simulateLigation(
-cloning.ts:635  export function simulateGibsonAssembly(
-cloning.ts:806  export function designGibsonPrimers(
-cloning.ts:1067  export function simulateGoldenGateAssembly(
-cloning.ts:1173  export function designGoldenGatePrimers(
-cloning.ts:1223  export const GATEWAY_ATT_SITES = {
-cloning.ts:1411  export function simulateGatewayBP(
-cloning.ts:1482  export function simulateGatewayLR(
-cloning.ts:1848  export function simulateMultiSiteGatewayLR(
-cloning.ts:2081  export function simulatePCR(
-cloning.ts:2302  export function simulateOverlapExtensionPCR(
-cloning.ts:2332  export function digestAndReligate(
-cloning.ts:2342  export function pcrProductLength(
-cloning.ts:2352  export function gibsonProductLength(fragments: PlasmidDocument[], options?: { minOverlap?: number; maxOverlap?: number; circular?: boolean }): number {
-cloning.ts:2357  export function mutationProduct(
-cloning.ts:2375  export function defaultEnzymeList(): RestrictionEnzyme[] {
-cloning.ts:2379  export function restrictionEnzymePanel(): RestrictionEnzyme[] {
-cloning.ts:2383  export function isGoldenGateEnzyme(enzyme: RestrictionEnzyme): boolean {
-cloning.ts:2387  export function primerPairOptions(options?: PrimerDesignOptions): PrimerDesignOptions {
-cloning.ts:2391  export function designPrimerPairForFeature(
-cloning.ts:2399  export function gcOf(sequence: string): number {
-cloning.ts:2403  export * from './assembly';
-cloning.ts:2404  export * from './recombination';
+cloning.ts:145  export function simulateDigestion(doc: PlasmidDocument, cutSites: CutSite[]): PlasmidDocument[] {
+cloning.ts:219  export function bluntEnds(
+cloning.ts:412  export function simulateLigation(
+cloning.ts:658  export function simulateGibsonAssembly(
+cloning.ts:829  export function designGibsonPrimers(
+cloning.ts:1090  export function simulateGoldenGateAssembly(
+cloning.ts:1196  export function designGoldenGatePrimers(
+cloning.ts:1246  export const GATEWAY_ATT_SITES = {
+cloning.ts:1434  export function simulateGatewayBP(
+cloning.ts:1505  export function simulateGatewayLR(
+cloning.ts:1871  export function simulateMultiSiteGatewayLR(
+cloning.ts:2104  export function simulatePCR(
+cloning.ts:2336  export function simulateOverlapExtensionPCR(
+cloning.ts:2366  export function digestAndReligate(
+cloning.ts:2376  export function pcrProductLength(
+cloning.ts:2386  export function gibsonProductLength(fragments: PlasmidDocument[], options?: { minOverlap?: number; maxOverlap?: number; circular?: boolean }): number {
+cloning.ts:2391  export function mutationProduct(
+cloning.ts:2409  export function defaultEnzymeList(): RestrictionEnzyme[] {
+cloning.ts:2413  export function restrictionEnzymePanel(): RestrictionEnzyme[] {
+cloning.ts:2417  export function isGoldenGateEnzyme(enzyme: RestrictionEnzyme): boolean {
+cloning.ts:2421  export function primerPairOptions(options?: PrimerDesignOptions): PrimerDesignOptions {
+cloning.ts:2425  export function designPrimerPairForFeature(
+cloning.ts:2433  export function gcOf(sequence: string): number {
+cloning.ts:2437  export * from './assembly';
+cloning.ts:2438  export * from './recombination';
 enzymes.ts:11  export interface EnzymeDefinition extends RestrictionEnzyme {
 enzymes.ts:15  export function makeEnzyme(
 enzymes.ts:34  export const COMMON_ENZYMES: RestrictionEnzyme[] = [
@@ -162,18 +165,18 @@ enzymes.ts:97  export function enzymeByName(name: string): RestrictionEnzyme | u
 enzymes.ts:102  export function resolveEnzyme(nameOrSequence: string): RestrictionEnzyme | undefined {
 enzymes.ts:112  export interface EnzymeCutCoordinates {
 enzymes.ts:123  export function cutCoordinates(
-enzymes.ts:185  export function cutEnds(
-enzymes.ts:194  export interface MethylationProfile {
-enzymes.ts:220  export function isMethylationBlocked(
-enzymes.ts:244  export function findCutSites(
-enzymes.ts:274  export function endsCompatible(right: OverhangEnd, left: OverhangEnd): boolean {
-enzymes.ts:283  export function reverseEnd(end: OverhangEnd): OverhangEnd {
-enzymes.ts:292  export interface OverhangFidelity {
-enzymes.ts:302  export function scoreOverhang(overhang: string, allOverhangs: string[]): OverhangFidelity {
-enzymes.ts:337  export function isTypeIIS(enzyme: RestrictionEnzyme): boolean {
-enzymes.ts:341  export const NEB_LEADER_BASES: Record<string, string> = {
-enzymes.ts:363  export function recommendedLeader(enzymeName: string): string {
-enzymes.ts:367  export function enzymeRecognitionForTail(
+enzymes.ts:188  export function cutEnds(
+enzymes.ts:197  export interface MethylationProfile {
+enzymes.ts:223  export function isMethylationBlocked(
+enzymes.ts:247  export function findCutSites(
+enzymes.ts:278  export function endsCompatible(right: OverhangEnd, left: OverhangEnd): boolean {
+enzymes.ts:287  export function reverseEnd(end: OverhangEnd): OverhangEnd {
+enzymes.ts:296  export interface OverhangFidelity {
+enzymes.ts:306  export function scoreOverhang(overhang: string, allOverhangs: string[]): OverhangFidelity {
+enzymes.ts:341  export function isTypeIIS(enzyme: RestrictionEnzyme): boolean {
+enzymes.ts:345  export const NEB_LEADER_BASES: Record<string, string> = {
+enzymes.ts:367  export function recommendedLeader(enzymeName: string): string {
+enzymes.ts:371  export function enzymeRecognitionForTail(
 fragment-assembly.ts:27  export type HomologyAssemblyKit = 'Gibson' | 'NEBuilder HiFi' | 'In-Fusion';
 fragment-assembly.ts:109  export function designHomologyAssemblyPrimers(
 fragment-assembly.ts:662  export function simulateInsertFragment(
@@ -574,6 +577,7 @@ export interface RestrictionEnzyme {
   cutIndexTop: number;          // Cut offset relative to recognitionSeq start on 5'->3' strand
   cutIndexBottom: number;       // Cut offset relative to recognitionSeq start on 3'->5' strand
   isTypeIIS?: boolean;          // True for BsaI, BsmBI, BbsI, SapI (cuts outside recognition sequence)
+  secondCut?: { top: number; bottom: number }; // Second cleavage of enzymes that cut on both sides (BaeI, BcgI); same convention as cutIndexTop/Bottom
   methylationSensitivity?: {
     dam?: 'blocked' | 'impaired' | 'insensitive';
     dcm?: 'blocked' | 'impaired' | 'insensitive';
@@ -894,15 +898,22 @@ export function findCutSites(
           (sensitivity.cpg === 'blocked' && masks.profile.cpg)));
     const firstSiteIndex = allSites.length;
 
+    const cuts = [{ top: enzyme.cutIndexTop, bottom: enzyme.cutIndexBottom, suffix: '' }];
+    if (enzyme.secondCut) cuts.push({ ...enzyme.secondCut, suffix: ':2' });
+
     const addPosition = (position: number, strand: Strand): void => {
+      for (const cut of cuts) addCut(position, strand, cut.top, cut.bottom, cut.suffix);
+    };
+
+    const addCut = (position: number, strand: Strand, cutTop: number, cutBottom: number, suffix: string): void => {
       const rawTop =
         strand === 1
-          ? position + enzyme.cutIndexTop
-          : position + recognitionLength - enzyme.cutIndexBottom;
+          ? position + cutTop
+          : position + recognitionLength - cutBottom;
       const rawBottom =
         strand === 1
-          ? position + enzyme.cutIndexBottom
-          : position + recognitionLength - enzyme.cutIndexTop;
+          ? position + cutBottom
+          : position + recognitionLength - cutTop;
 
       if (
         !circular &&
@@ -924,7 +935,7 @@ export function findCutSites(
               Math.abs(difference),
             );
       allSites.push({
-        id: `${enzyme.name}:${position}:${strand}`,
+        id: `${enzyme.name}:${position}:${strand}${suffix}`,
         enzyme,
         position,
         strand,
@@ -981,7 +992,7 @@ export function findCutSites(
 ### 环状 ORF 扫描 — `findAllORFs`
 
 ```typescript
-// src/modules/seq-engine/index.ts:697
+// src/modules/seq-engine/index.ts:704
 export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
   const sequence = normalizeSequence(doc.sequence);
   const length = sequence.length;
@@ -1079,7 +1090,7 @@ export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
 ### 序列编辑与特征坐标联动 — `mutatePlasmidSequence`
 
 ```typescript
-// src/modules/seq-engine/index.ts:1063
+// src/modules/seq-engine/index.ts:1070
 export function mutatePlasmidSequence(
   doc: PlasmidDocument,
   edit: SequenceEdit,
@@ -1236,7 +1247,7 @@ export function mutatePlasmidSequence(
 ### 重设环状原点 — `rotateCircularOrigin`
 
 ```typescript
-// src/modules/seq-engine/index.ts:1317
+// src/modules/seq-engine/index.ts:1324
 export function rotateCircularOrigin(
   doc: PlasmidDocument,
   newZeroIndex: number,
@@ -1328,7 +1339,7 @@ export function evaluateOligoThermodynamics(
 ### 酶切产物与粘性末端 — `simulateDigestion`
 
 ```typescript
-// src/modules/cloning-primer/cloning.ts:140
+// src/modules/cloning-primer/cloning.ts:145
 export function simulateDigestion(doc: PlasmidDocument, cutSites: CutSite[]): PlasmidDocument[] {
   const cuts = normaliseCutList(doc, cutSites);
   if (!cuts.length) return [cloneDocument(doc)];
@@ -1407,7 +1418,7 @@ export function simulateDigestion(doc: PlasmidDocument, cutSites: CutSite[]): Pl
 ### 连接与末端相容性 — `simulateLigation`
 
 ```typescript
-// src/modules/cloning-primer/cloning.ts:389
+// src/modules/cloning-primer/cloning.ts:412
 export function simulateLigation(
   fragments: PlasmidDocument[],
   options?: { circularize?: boolean; dephosphorylatedIds?: string[] },
@@ -1423,7 +1434,7 @@ export function simulateLigation(
 ### Golden Gate 组装 — `simulateGoldenGateAssembly`
 
 ```typescript
-// src/modules/cloning-primer/cloning.ts:1067
+// src/modules/cloning-primer/cloning.ts:1090
 export function simulateGoldenGateAssembly(
   parts: PlasmidDocument[],
   enzyme: RestrictionEnzyme,
@@ -1440,7 +1451,7 @@ export function simulateGoldenGateAssembly(
 ### cloning-primer 内部 Type IIS 搜索（与 seq-engine 并行实现） — `findCutSites`
 
 ```typescript
-// src/modules/cloning-primer/enzymes.ts:244
+// src/modules/cloning-primer/enzymes.ts:247
 export function findCutSites(
   sequence: string,
   enzyme: RestrictionEnzyme,
@@ -1452,11 +1463,12 @@ export function findCutSites(
   if (!length) return [];
   const matches = findMotifOnBothStrands(seq, enzyme.recognitionSeq, circular);
   const cuts: CutSite[] = [];
-  for (const match of matches) {
-    const coordinates = cutCoordinates(match.position, enzyme, match.strand, length);
+  const passes = enzyme.secondCut ? [false, true] : [false];
+  for (const match of matches) for (const second of passes) {
+    const coordinates = cutCoordinates(match.position, enzyme, match.strand, length, second);
     const ends = cutEnds(seq, coordinates, circular, enzyme.name);
     cuts.push({
-      id: `${enzyme.name}_${match.position}_${match.strand}`,
+      id: `${enzyme.name}_${match.position}_${match.strand}${second ? '_2' : ''}`,
       enzyme,
       position: match.position,
       strand: match.strand,
@@ -1465,7 +1477,7 @@ export function findCutSites(
       overhangType: ends.left.type,
       overhangSeq: ends.left.sequence,
       isMethylationBlocked: profile ? isMethylationBlocked(seq, enzyme, match.position, profile) : false,
-      totalCutsInPlasmid: matches.length,
+      totalCutsInPlasmid: matches.length * passes.length,
     });
   }
   return cuts.sort((a, b) => a.position - b.position);
@@ -1927,174 +1939,5 @@ export async function applyAIAction(action: AIToolAction): Promise<void> {
       return;
     }
   }
-}
-```
-
-## 7. 功能与性能评测数据
-
-```json
-{
-  "url": "http://localhost:4173/",
-  "passed": 26,
-  "total": 26,
-  "results": [
-    {
-      "name": "加载示例 pUC19 / pEGFP-N1",
-      "ok": true,
-      "ms": 419,
-      "detail": "tabs visible"
-    },
-    {
-      "name": "Web Worker 计算酶切位点",
-      "ok": true,
-      "ms": 749,
-      "detail": "94 cut sites"
-    },
-    {
-      "name": "环形图谱视图",
-      "ok": true,
-      "ms": 237,
-      "detail": ""
-    },
-    {
-      "name": "线性序列视图",
-      "ok": true,
-      "ms": 203,
-      "detail": ""
-    },
-    {
-      "name": "酶列表 + 过滤（单切点）",
-      "ok": true,
-      "ms": 325,
-      "detail": "94 unique cutters"
-    },
-    {
-      "name": "酶切 EcoRI+HindIII 并跑胶",
-      "ok": true,
-      "ms": 1151,
-      "detail": "EcoRI+HindIII：2 个片段 (51, 2635 bp)"
-    },
-    {
-      "name": "特征 / 引物 / ORF 面板",
-      "ok": true,
-      "ms": 999,
-      "detail": "ORF (4)"
-    },
-    {
-      "name": "切换到 pEGFP-N1 并 Sanger 比对",
-      "ok": true,
-      "ms": 2941,
-      "detail": "Missense (T64N in egfp)"
-    },
-    {
-      "name": "历史树",
-      "ok": true,
-      "ms": 117,
-      "detail": ""
-    },
-    {
-      "name": "Cmd+K 命令面板快速酶切",
-      "ok": true,
-      "ms": 217,
-      "detail": "BamHI+NotI：2 个片段 (741, 3992 bp)"
-    },
-    {
-      "name": "克隆向导：引物设计",
-      "ok": true,
-      "ms": 748,
-      "detail": "PCR 产物 600 bp"
-    },
-    {
-      "name": "克隆向导：PCR 产物生成",
-      "ok": true,
-      "ms": 335,
-      "detail": "已生成 pEGFP-N1_PCR_600bp (600 bp)"
-    },
-    {
-      "name": "克隆向导：酶切连接（EcoRI 自连）",
-      "ok": true,
-      "ms": 630,
-      "detail": "已生成 pUC19_religated (2686 bp)；Ligation junction 1 scar sequence: CCAGTGAATTCG."
-    },
-    {
-      "name": "克隆向导：定点突变",
-      "ok": true,
-      "ms": 1297,
-      "detail": "primers + silent-site suggestions"
-    },
-    {
-      "name": "AI 导师抽屉（BYOK 设置）",
-      "ok": true,
-      "ms": 786,
-      "detail": ""
-    },
-    {
-      "name": "撤销/重做",
-      "ok": true,
-      "ms": 64,
-      "detail": ""
-    },
-    {
-      "name": "深色主题",
-      "ok": true,
-      "ms": 670,
-      "detail": ""
-    },
-    {
-      "name": "打开真实 SnapGene .dna（含引物与历史树）",
-      "ok": true,
-      "ms": 942,
-      "detail": "已打开 pIB2-SEC13-mEGFP"
-    },
-    {
-      "name": "导出 GenBank",
-      "ok": true,
-      "ms": 76,
-      "detail": "pIB2-SEC13-mEGFP.gbk"
-    },
-    {
-      "name": "导出 SnapGene .dna 并重新打开",
-      "ok": true,
-      "ms": 182,
-      "detail": "5445 bytes, reopened"
-    },
-    {
-      "name": "导出图谱 PDF（矢量）",
-      "ok": true,
-      "ms": 233,
-      "detail": "16104 bytes"
-    },
-    {
-      "name": "查找序列（Ctrl+F, IUPAC）",
-      "ok": true,
-      "ms": 1066,
-      "detail": "BamHI 第 1 / 1 个命中; GRATYC 第 1 / 2 个命中"
-    },
-    {
-      "name": "添加 / 编辑特征（可撤销）",
-      "ok": true,
-      "ms": 520,
-      "detail": "13 → 14 → undo 13"
-    },
-    {
-      "name": "酶集切换（预设 / 全部市售）",
-      "ok": true,
-      "ms": 1395,
-      "detail": "9 sets; 全部市售酶 (550): 94 rows; Common 6+ base cutters (57): 18 rows"
-    },
-    {
-      "name": "多序列比对",
-      "ok": true,
-      "ms": 979,
-      "detail": "3 条序列 · 4,759 列 · 490 ms · 同一性矩阵 (%)"
-    },
-    {
-      "name": "反向翻译 / 密码子优化",
-      "ok": true,
-      "ms": 324,
-      "detail": "717 bp · CAI 1.000 · GC 39.5%"
-    }
-  ],
-  "consoleErrors": []
 }
 ```

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "crosscheck": "bash scripts/crosscheck/run.sh"
   },
   "dependencies": {
     "@biowasm/aioli": "^3.2.3",

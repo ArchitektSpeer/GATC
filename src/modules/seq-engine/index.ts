@@ -549,15 +549,22 @@ export function findCutSites(
           (sensitivity.cpg === 'blocked' && masks.profile.cpg)));
     const firstSiteIndex = allSites.length;
 
+    const cuts = [{ top: enzyme.cutIndexTop, bottom: enzyme.cutIndexBottom, suffix: '' }];
+    if (enzyme.secondCut) cuts.push({ ...enzyme.secondCut, suffix: ':2' });
+
     const addPosition = (position: number, strand: Strand): void => {
+      for (const cut of cuts) addCut(position, strand, cut.top, cut.bottom, cut.suffix);
+    };
+
+    const addCut = (position: number, strand: Strand, cutTop: number, cutBottom: number, suffix: string): void => {
       const rawTop =
         strand === 1
-          ? position + enzyme.cutIndexTop
-          : position + recognitionLength - enzyme.cutIndexBottom;
+          ? position + cutTop
+          : position + recognitionLength - cutBottom;
       const rawBottom =
         strand === 1
-          ? position + enzyme.cutIndexBottom
-          : position + recognitionLength - enzyme.cutIndexTop;
+          ? position + cutBottom
+          : position + recognitionLength - cutTop;
 
       if (
         !circular &&
@@ -579,7 +586,7 @@ export function findCutSites(
               Math.abs(difference),
             );
       allSites.push({
-        id: `${enzyme.name}:${position}:${strand}`,
+        id: `${enzyme.name}:${position}:${strand}${suffix}`,
         enzyme,
         position,
         strand,
