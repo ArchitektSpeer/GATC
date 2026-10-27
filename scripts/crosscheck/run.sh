@@ -4,6 +4,7 @@
 #   2. restriction sites vs REBASE, primer Tm vs primer3, CDS translations vs SnapGene's stored proteins
 #   3. digest / PCR / restriction cloning vs pydna; Gibson and Golden Gate against known answers
 #   4. Gateway BP/LR and Cre/lox vs pydna, on real Gateway vectors
+#   5. pairwise alignment vs Biopython, TA/TOPO/LIC/GC and gel read-back, mutagenesis vs primer3
 # Usage: npm run crosscheck            (work files go to .crosscheck/, which is git-ignored)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -68,4 +69,9 @@ echo "== 4. Gateway and site-specific recombination =="
 $PY scripts/crosscheck/ref_recombination.py gen "$W/out/rec.json" "${GWF[@]}" >/dev/null
 node scripts/crosscheck/gatc_recombination.mjs "$W/out/rec.json" "$W/out/rec-gatc.json" 2>/dev/null
 $PY scripts/crosscheck/ref_recombination.py check "$W/out/rec.json" "$W/out/rec-gatc.json" || status=1
+
+echo "== 5. alignment, single-fragment cloning, mutagenesis, gel =="
+node scripts/crosscheck/gatc_misc.mjs "$W/out/misc.json" \
+  "$W/refdata/gateway/pENTR1A.dna" "$W/refdata/gateway/pDEST14.dna" 2>/dev/null
+$PY scripts/crosscheck/ref_misc.py "$W/out/misc.json" | grep -vE "^  OK " || status=1
 exit $status

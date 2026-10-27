@@ -331,6 +331,7 @@ npm run crosscheck  # 需要 Python 3；首次运行时下载参考文件并建�
 | 2 | 酶切位点、引物 Tm、CDS 翻译 | REBASE、primer3、文件内保存的蛋白序列 |
 | 3 | 酶切片段、PCR、酶切连接；Gibson、Golden Gate | pydna；已知答案 |
 | 4 | Gateway BP、LR；Cre/lox | pydna 的 `gateway_assembly`、`recombinase_assembly` |
+| 5 | 双序列比对；TA/TOPO/LIC/GC 克隆；定点突变；电泳读数 | Biopython 的 `PairwiseAligner`；已知答案；Biopython 翻译与 primer3；按梯度反读片段大小 |
 
 - 样本使用由 SnapGene 生成的真实 `.dna` 文件（官网质粒库、Biopython 测试集、Gateway 载体）。参考文件在运行时下载，不提交到仓库，并记录来源与版本。
 - 每一项结果都应一致。出现差异时，判定为"本项目缺陷"或"参考工具口径差异"：前者修复并补充回归测试，后者在脚本中注明理由后跳过。

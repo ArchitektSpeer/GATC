@@ -23,6 +23,11 @@ pLenti6_V5-DEST).
 | Gateway BP, 4 real pDONR vectors | pydna `gateway_assembly` | 12/12 identical |
 | Gateway LR, 7 real pDEST vectors | pydna `gateway_assembly` | 14/14 identical |
 | Cre/lox excision, inversion and integration | pydna `recombinase_assembly` | 8/8 identical |
+| Gateway LR on a real entry vector with its annotations removed | pydna `gateway_assembly` | identical |
+| Pairwise alignment, global and local (match 2, mismatch −1, gap −5/−1) | Biopython `PairwiseAligner` | 10/10 scores identical |
+| TA, GC, TOPO blunt, directional TOPO and LIC cloning, including the cases each must refuse | known answer | 10/10 as expected |
+| Site-directed mutagenesis: substitution, deletion, insertion | Biopython translation; primer3 Tm | 12/12 as expected |
+| Virtual gel: a fragment's size read back off the NEB 1 kb Plus ladder | self-consistency, within 12% | 7/7 within 1% |
 
 ## Defects this found and fixed
 
@@ -56,5 +61,8 @@ pLenti6_V5-DEST).
 - Opening GATC-written files in SnapGene itself (Biopython is an independent reader, not SnapGene).
 - 3011 enzymes in the database are not in Biopython's REBASE subset (mostly isoschizomer and
   historical names), and 15 of 550 commercial enzymes could not be checked.
-- TA/TOPO, LIC, mutagenesis primers, Sanger alignment and the virtual gel have unit tests only.
+- The virtual gel's migration model is only checked for self-consistency (a band's size reads
+  back off the ladder) and monotonicity, not against a measured gel.
+- Sanger base calling from `.ab1` traces, the MSA, and the trace-to-reference alignment have
+  unit tests only; of the alignment engines only the pairwise aligner is cross-checked.
 - Multi-site Gateway (attB4/attB3 series) is not compared; only the attB1/attB2 series is.
