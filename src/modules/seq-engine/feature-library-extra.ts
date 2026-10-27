@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Common laboratory element sequences compiled from public NCBI GenBank
 // records, the iGEM Registry and published vector maps. Representative

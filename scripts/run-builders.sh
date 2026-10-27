@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GATC - Gene Assembly & Toolkit for Cloning
-# Copyright (C) 2026 Qiu Shui
+# Copyright (C) 2026 Xu Zhonghe
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Runs the module builders (opencode + DeepSeek) in parallel, one log per module.
 # Usage: scripts/run-builders.sh [mod-1-io mod-2-seq-engine ...]   (defaults to all six)

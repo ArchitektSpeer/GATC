@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Sequence tools: motif search, back-translation and the multiple-alignment view.
 import { useEffect, useMemo, useState } from 'react';

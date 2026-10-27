@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Minimal shadcn/ui-style primitives used by the workbench shell.
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';

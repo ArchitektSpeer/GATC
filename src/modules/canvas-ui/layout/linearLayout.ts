@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 import type { Primer, SequenceFeature, CutSite } from '../../../types/schema';
 import type { RangeSegment } from '../utils';

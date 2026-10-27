@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Dumps GATC algorithm outputs for cross-checking against Biopython / primer3:
 // restriction cut positions, enzyme definitions, primer Tm and CDS translations.

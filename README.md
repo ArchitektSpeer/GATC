@@ -111,7 +111,7 @@ Results, and the defects this found and fixed, are in [docs/CROSSCHECK.md](docs/
 
 ### Licence
 
-Copyright (C) 2026 Qiu Shui
+Copyright (C) 2026 Xu Zhonghe
 
 This program is free software: you can redistribute it and/or modify it under the terms of the
 GNU General Public License as published by the Free Software Foundation, either version 3 of
@@ -225,7 +225,7 @@ npm run crosscheck                    # 与 Biopython / REBASE / primer3 / pydna
 
 ### 许可
 
-版权所有 (C) 2026 Qiu Shui
+版权所有 (C) 2026 Xu Zhonghe
 
 本程序是自由软件：你可以依据自由软件基金会发布的 GNU 通用公共许可证第 3 版，或（按你的选择）
 任何更新的版本，重新发布和/或修改它。本程序的发布是希望它有用，但**不提供任何担保**。完整条款

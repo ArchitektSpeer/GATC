@@ -2,7 +2,7 @@
 name = "gatc"
 version = "0.1.0"
 description = "GATC (Gene Assembly & Toolkit for Cloning) desktop shell"
-authors = ["Qiu Shui"]
+authors = ["Xu Zhonghe"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/ArchitektSpeer/GATC"
 edition = "2024"

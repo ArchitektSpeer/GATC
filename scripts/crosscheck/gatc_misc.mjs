@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Remaining engine checks: pairwise alignment, single-fragment cloning (TA/TOPO/LIC/GC),
 // mutagenesis primers, gel ladder read-back, and an LR reaction on a real entry vector whose

@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Cloning history with replay: restore the sequence as it was after a step, or
 // reopen the step's wizard with its recorded enzymes and parent fragments.

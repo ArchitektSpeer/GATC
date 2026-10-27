@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // NEBuffer activity, incubation temperature, heat-inactivation and star-activity
 // data transcribed from the public NEBuffer Performance Chart with Restriction

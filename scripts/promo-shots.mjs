@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Renders the promotional banners in docs/promo/promo.html to PNG at 2x.
 // The page embeds a real screenshot, so refresh that first with scripts/ui-shots.mjs.

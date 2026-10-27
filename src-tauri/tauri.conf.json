@@ -27,6 +27,8 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "Xu Zhonghe",
+    "copyright": "Copyright (C) 2026 Xu Zhonghe. Licensed under GPL-3.0-or-later.",
     "targets": "all",
     "resources": {
       "../LICENSE": "LICENSE",

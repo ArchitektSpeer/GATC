@@ -1,5 +1,5 @@
 # GATC - Gene Assembly & Toolkit for Cloning
-# Copyright (C) 2026 Qiu Shui
+# Copyright (C) 2026 Xu Zhonghe
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Compares gatc_algos.mjs output with Biopython Restriction (REBASE), primer3 and SnapGene's
 stored CDS translations. Usage: python ref_algos.py gatc-algos.json seqfile1 ...

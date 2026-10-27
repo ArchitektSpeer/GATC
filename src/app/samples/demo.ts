@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Demo library: real NCBI records (pBR322 J01749, pGEX-4T-1 U13853, mCherry AY678264,
 // GFP protein P42212) plus one construct derived from pBR322 for the Cre/loxP demo.

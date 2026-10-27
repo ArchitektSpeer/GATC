@@ -1,5 +1,5 @@
 // GATC - Gene Assembly & Toolkit for Cloning
-// Copyright (C) 2026 Qiu Shui
+// Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Runs the scenarios written by ref_cloning.py through GATC's cloning engine.
 // Usage: node scripts/crosscheck/gatc_cloning.mjs scenarios.json out.json

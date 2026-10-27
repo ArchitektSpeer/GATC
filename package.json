@@ -2,6 +2,7 @@
   "name": "gatc",
   "private": true,
   "version": "0.1.0",
+  "author": "Xu Zhonghe",
   "type": "module",
   "scripts": {
     "dev": "vite",
