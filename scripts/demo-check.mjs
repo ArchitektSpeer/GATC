@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Plays demo mode end to end and records each step (screenshot + status).
 // Usage: node scripts/demo-check.mjs <outDir>   (expects vite preview on :4173, or E2E_URL)
 import { chromium } from 'playwright';

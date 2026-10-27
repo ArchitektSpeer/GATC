@@ -1,3 +1,6 @@
+# GATC - Gene Assembly & Toolkit for Cloning
+# Copyright (C) 2026 Qiu Shui
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Gateway and site-specific recombination cross-check against pydna, on real Gateway vectors.
 
   python ref_recombination.py gen   scenarios.json donor1.dna ...   # write scenarios

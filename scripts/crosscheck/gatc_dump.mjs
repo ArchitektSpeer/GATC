@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Parses .dna files with GATC's io-adapter and dumps the same normalized JSON as
 // ref_snapgene.py; also re-exports each document as .dna for the reverse check.
 // Usage: node scripts/crosscheck/gatc_dump.mjs out.json exportDir file1.dna ...

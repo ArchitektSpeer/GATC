@@ -1,3 +1,5 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Builds the MCP server (src/mcp/main.ts) into one self-contained Node script.
 import { defineConfig } from 'vite';

@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Compute-heavy functions from Modules 2/3/4 exposed through a single table,
 // shared by the Web Worker and the synchronous fallback.
 import {

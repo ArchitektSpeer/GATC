@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 /*
  * Xdna parsing follows the publicly documented binary layout used by
  * Biopython's Bio.SeqIO.XdnaIO (Biopython License Agreement / BSD-3-Clause)

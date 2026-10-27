@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Supplier catalogue membership compiled from the public REBASE commercial
 // enzyme listings (commdata); names follow REBASE canonical spelling.
 export const ENZYME_SUPPLIER_CATALOG: Record<string, string[]> = {

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# GATC - Gene Assembly & Toolkit for Cloning
+# Copyright (C) 2026 Qiu Shui
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Cross-checks GATC against independent tools on real SnapGene-authored files:
 #   1. .dna interoperability: GATC import vs Biopython's SnapGene parser, and GATC export read back by Biopython
 #   2. restriction sites vs REBASE, primer Tm vs primer3, CDS translations vs SnapGene's stored proteins

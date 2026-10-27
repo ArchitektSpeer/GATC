@@ -1,3 +1,6 @@
+# GATC - Gene Assembly & Toolkit for Cloning
+# Copyright (C) 2026 Qiu Shui
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Checks the output of gatc_misc.mjs against Biopython, primer3 and pydna.
 
   python ref_misc.py gatc-misc.json

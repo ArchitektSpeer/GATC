@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Cross-module workflows assembled from module primitives. Modules never call
 // each other directly; this layer pipes data between them through schema types.
 import type { AIToolAction, CloningHistoryNode, CutSite, PlasmidDocument, Primer, RestrictionEnzyme, SequenceFeature } from '../types/schema';

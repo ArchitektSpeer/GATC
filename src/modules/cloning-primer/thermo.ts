@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 /*
  * Nearest-neighbour thermodynamics for DNA oligonucleotides. Watson-Crick
  * stacking follows SantaLucia (1998); mismatch, terminal-contact, bulge and

@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Captures the main views at two widths for a quick look at layout and legibility.
 // Usage: node scripts/ui-shots.mjs <outDir>   (expects a preview server; override with E2E_URL)
 import { chromium } from 'playwright';

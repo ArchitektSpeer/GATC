@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Pure geometry and sampling helpers for the linear map and sequence printout.
  * Everything in this module runs in Node and inside a Web Worker.

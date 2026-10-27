@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // NCBI accession import and the persistent primer library.
 import { useMemo, useState } from 'react';
 import { Download, Plus, Search, Trash2 } from 'lucide-react';

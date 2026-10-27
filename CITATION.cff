@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+title: "GATC — Gene Assembly & Toolkit for Cloning"
+message: "If you use GATC in work you publish, please cite it as below."
+type: software
+authors:
+  - family-names: Qiu
+    given-names: Shui
+    alias: ArchitektSpeer
+repository-code: "https://github.com/ArchitektSpeer/GATC"
+url: "https://github.com/ArchitektSpeer/GATC"
+abstract: >-
+  An open-source, offline-first molecular biology workbench: plasmid maps, sequence editing,
+  restriction and cloning simulation, primer design, Sanger and multiple sequence alignment and
+  virtual gels. It reads and writes the SnapGene .dna format alongside GenBank, FASTA, EMBL and
+  other common formats. Every computation is cross-checked against an independent
+  implementation (Biopython, REBASE, primer3 and pydna).
+keywords:
+  - molecular-biology
+  - molecular-cloning
+  - plasmid
+  - sequence-analysis
+  - restriction-enzyme
+  - primer-design
+  - bioinformatics
+  - snapgene
+license: GPL-3.0-or-later
+version: 0.1.0
+date-released: "2026-10-27"

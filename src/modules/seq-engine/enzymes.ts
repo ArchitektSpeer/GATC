@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Enzyme definitions are derived from @teselagen/sequence-utils (MIT) and
 // public REBASE catalogue metadata; no third-party source files are copied.
 import type { RestrictionEnzyme } from '../../types/schema';

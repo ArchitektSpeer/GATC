@@ -1,3 +1,6 @@
+# GATC - Gene Assembly & Toolkit for Cloning
+# Copyright (C) 2026 Qiu Shui
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Cloning-simulation cross-check against pydna and against constructions with a known answer.
 
   python ref_cloning.py gen  scenarios.json seqfile1.dna ...   # write random scenarios

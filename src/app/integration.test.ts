@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // End-to-end pipelines across modules on the bundled real plasmids.
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PlasmidDocument, SangerTraceData } from '../types/schema';

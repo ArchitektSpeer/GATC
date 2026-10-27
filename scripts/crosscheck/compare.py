@@ -1,3 +1,6 @@
+# GATC - Gene Assembly & Toolkit for Cloning
+# Copyright (C) 2026 Qiu Shui
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Compare two normalized dumps (reference vs GATC). Prints per-file diffs, exits 1 on mismatch.
 
 Usage: python compare.py ref.json gatc.json [--key-by-basename]

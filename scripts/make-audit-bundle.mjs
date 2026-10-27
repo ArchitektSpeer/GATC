@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Builds AUDIT_BUNDLE.md: module interfaces, critical-path source excerpts,
 // verification results and the final review prompt (Design.md section 8).
 // Usage: node scripts/make-audit-bundle.mjs [evaluation.json]

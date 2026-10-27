@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Promise-based client for the bio Web Worker pool, with an in-thread
 // fallback for environments without Worker support (Node/vitest, old browsers).
 import type { PlasmidDocument } from '../types/schema';

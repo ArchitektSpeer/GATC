@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function ensureExtension(fileName: string, extension: string): string {

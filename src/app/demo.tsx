@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Demo mode: plays through the main workflows on real sequences, one step at a time.
 import { useEffect, useRef, useState } from 'react';
 import { Pause, Play, SkipForward, X } from 'lucide-react';

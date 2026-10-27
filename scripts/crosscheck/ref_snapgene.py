@@ -1,3 +1,6 @@
+# GATC - Gene Assembly & Toolkit for Cloning
+# Copyright (C) 2026 Qiu Shui
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Dump .dna files via Biopython's independent SnapGene parser as normalized JSON.
 
 Usage: python ref_snapgene.py out.json file1.dna [file2.dna ...]

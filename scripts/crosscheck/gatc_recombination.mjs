@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Runs the Gateway / Cre-lox scenarios from ref_recombination.py through GATC.
 // Usage: node scripts/crosscheck/gatc_recombination.mjs scenarios.json out.json
 import { createServer } from 'vite';

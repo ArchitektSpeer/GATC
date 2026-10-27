@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Built-in laboratory examples: pUC19 (NCBI L09137) and pEGFP-N1 (NCBI U55762),
 // auto-annotated on load, plus a synthetic Sanger read across EGFP.
 import type { PlasmidDocument, SangerTraceData } from '../../types/schema';

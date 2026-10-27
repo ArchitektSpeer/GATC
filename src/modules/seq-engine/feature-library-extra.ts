@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Common laboratory element sequences compiled from public NCBI GenBank
 // records, the iGEM Registry and published vector maps. Representative
 // records: M77789, U55762, J01749, X81837, X06403, LT727576, LT727317,

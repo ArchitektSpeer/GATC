@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Browser functional evaluation against a running `vite preview` (default http://localhost:4173).
 // Usage: node scripts/e2e.mjs [outDir]
 import { chromium } from 'playwright';

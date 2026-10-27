@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { useId, useMemo, useRef, useState } from 'react';
 import type * as React from 'react';
 import { FlaskConical, Microscope, Sun, Timer, Zap } from 'lucide-react';

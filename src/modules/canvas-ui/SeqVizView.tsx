@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { useMemo } from 'react';
 import SeqViz from 'seqviz';
 import type { SeqVizProps } from 'seqviz';

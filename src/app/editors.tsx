@@ -1,3 +1,6 @@
+// GATC - Gene Assembly & Toolkit for Cloning
+// Copyright (C) 2026 Qiu Shui
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Manual feature and primer editing dialogs. Edits go through replaceDoc, so they are undoable.
 import { useEffect, useState } from 'react';
 import type { FeatureType, PlasmidDocument, Primer, SequenceFeature, StrandDirection } from '../types/schema';
