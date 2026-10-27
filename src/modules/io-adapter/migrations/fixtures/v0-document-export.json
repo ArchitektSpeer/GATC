@@ -1,0 +1,35 @@
+{
+  "id": "doc-v0-lacz",
+  "name": "lacZ-alpha fragment",
+  "sequence": "ATGACCATGATTACGGATTCACTGGCCGTCGTTTTACAACGTCGTGACTGGGAAAACCCTGGCGTTACCCAACTTAATCGCCTTGCAGCACATCCCCCTTTCGCCAGCTGGCGTAATAG",
+  "topology": "linear",
+  "length": 119,
+  "createdAt": "2026-09-01T08:00:00.000Z",
+  "updatedAt": "2026-09-02T09:30:00.000Z",
+  "methylationProfile": {
+    "dam": true,
+    "dcm": true,
+    "cpg": false
+  },
+  "features": [
+    {
+      "id": "f1",
+      "name": "lacZα",
+      "type": "CDS",
+      "start": 0,
+      "end": 119,
+      "strand": 1,
+      "color": "#3b82f6",
+      "codonStart": 1
+    }
+  ],
+  "primers": [],
+  "history": [
+    {
+      "id": "h1",
+      "operation": "import",
+      "timestamp": "2026-09-01T08:00:00.000Z",
+      "description": "Imported"
+    }
+  ]
+}

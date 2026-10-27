@@ -11,6 +11,8 @@ export async function loadSample(gbk: string, name: string): Promise<PlasmidDocu
   const parsed = await parseGenBankString(gbk);
   const base: PlasmidDocument = {
     ...parsed,
+    // A stable id lets crash recovery match an edited sample to the one loaded on start.
+    id: `sample-${name}`,
     name,
     topology: 'circular',
     // Drop the whole-record 'source' feature and misc_feature duplicates of typed features.

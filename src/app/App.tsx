@@ -11,17 +11,19 @@ import {
   Moon,
   MonitorPlay,
   Redo2,
+  Save,
   Search,
   Sun,
   Undo2,
   X,
 } from 'lucide-react';
-import type { ORF, PlasmidDocument, VirtualGelLane } from '../types/schema';
+import type { ORF, PlasmidDocument, SangerTraceData, VirtualGelLane } from '../types/schema';
 import {
   parseBioFile,
-  parseFastq,
   parseProteinFile,
   isProteinFile,
+  isProjectFile,
+  parseProjectFile,
   exportPlasmidToFasta,
   exportPlasmidToGenBank,
   exportPlasmidToSnapGene,
@@ -43,8 +45,9 @@ import {
   exportSvgToPublicationFile,
 } from '../modules/canvas-ui';
 import { CopilotSidebar } from '../modules/ai-copilot/CopilotSidebar';
-import { callBio } from './bio-client';
-import { applyAIAction, digestToGel, historyNode, refreshCutSites, uncutPlasmidSample, uid } from './actions';
+import { callBio, callBioForDoc, callBioSync } from './bio-client';
+import { STALE_RESULT, applyAIAction, digestToGel, historyNode, refreshCutSites, replaceIfCurrent, uncutPlasmidSample, uid, updateDoc } from './actions';
+import { docRevision } from './revision';
 import { CloningWizard } from './CloningWizard';
 import { EnzymePanel, FeaturePanel, Inspector } from './panels';
 import { AlignView, BackTranslateDialog, FindDialog } from './tools';
@@ -52,7 +55,9 @@ import { HistoryView } from './history';
 import { DemoPlayer, startDemo } from './demo';
 import { NcbiDialog, PrimerLibraryDialog } from './library';
 import { loadSampleLibrary } from './samples';
-import { selectActiveDoc, useWorkbench, type ViewMode, type WizardKind } from './store';
+import { download, openProject, recordSave, saveFile, saveProject } from './files';
+import { SessionManager, requestCloseDoc } from './session';
+import { isDirty, isDocCurrent, selectActiveDoc, selectDirtyIds, selectCutSites, tracesAlignedToCurrent, useWorkbench, type ViewMode, type WizardKind } from './store';
 import { Button, Select, Tabs, cn } from './ui';
 import type { SequenceEdit } from '../modules/seq-engine';
 
@@ -71,25 +76,26 @@ const VIEWS: Array<{ value: ViewMode; label: string }> = [
   { value: 'history', label: '历史树' },
 ];
 
-type ExportFormat = 'gbk' | 'dna' | 'fasta' | 'json' | 'svg' | 'png' | 'pdf' | 'print-map' | 'print-seq';
+type ExportFormat = 'project' | 'gbk' | 'dna' | 'fasta' | 'json' | 'svg' | 'png' | 'pdf' | 'print-map' | 'print-seq';
+
+const NO_TRACES: SangerTraceData[] = [];
+
+const UNDO_SCOPE = '撤销范围：序列文档的内容与打开/关闭（序列、特征、引物、历史、甲基化设置）。不含测序数据、电泳设置、视图与选区。';
 
 // FASTQ reads beyond this are not shown as traces; aligning thousands in the viewer is not useful.
 const MAX_FASTQ_TRACES = 200;
 
-function download(name: string, content: string | Uint8Array<ArrayBuffer>, type = 'text/plain') {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 export default function App() {
   const s = useWorkbench();
   const doc = selectActiveDoc(s);
-  const cutSites = (doc && s.cutSites[doc.id]) || [];
-  const traces = (doc && s.traces[doc.id]) || [];
+  const cutSites = selectCutSites(s, doc);
+  const rawTraces = (doc && s.traces[doc.id]) || NO_TRACES;
+  const tracesCurrent = !!doc && tracesAlignedToCurrent(s, doc);
+  // Alignments made against an earlier revision are hidden until realigned.
+  const traces = useMemo(
+    () => (tracesCurrent ? rawTraces : rawTraces.map(({ alignment: _stale, ...t }) => t)),
+    [rawTraces, tracesCurrent],
+  );
   const mapRef = useRef<SVGSVGElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [lanes, setLanes] = useState<VirtualGelLane[]>([]);
@@ -111,7 +117,7 @@ export default function App() {
     if (useWorkbench.getState().docs.length) return;
     loadSampleLibrary().then(({ docs, traces }) => {
       const st = useWorkbench.getState();
-      st.openDocs(docs);
+      st.openDocs(docs, true, { saved: true });
       Object.entries(traces).forEach(([id, t]) => st.setTraces(id, t));
       temporal.getState().clear();
       if (new URLSearchParams(window.location.search).has('demo')) startDemo();
@@ -123,13 +129,21 @@ export default function App() {
     if (doc) refreshCutSites(doc);
   }, [doc, s.enzymeSetId, s.customEnzymeSets]);
 
-  // Align any unaligned Sanger reads against their plasmid.
+
+  // Align Sanger reads against the current revision of their plasmid: new reads,
+  // and all reads again after the plasmid was edited.
   useEffect(() => {
-    if (!doc || !traces.some((t) => !t.alignment)) return;
-    Promise.all(traces.map((t) => (t.alignment ? t : callBio('alignTraceToPlasmid', t, doc)))).then((aligned) =>
-      useWorkbench.getState().setTraces(doc.id, aligned),
-    );
-  }, [doc, traces]);
+    if (!doc || !rawTraces.length || (tracesCurrent && rawTraces.every((t) => t.alignment))) return;
+    const revision = docRevision(doc);
+    Promise.all(
+      rawTraces.map((t) => (tracesCurrent && t.alignment ? t : callBioForDoc(doc, 'alignTraceToPlasmid', t, doc))),
+    ).then((aligned) => {
+      const st = useWorkbench.getState();
+      // Drop the result if the plasmid changed or reads were added meanwhile.
+      if (aligned.some((t) => !t) || st.traces[doc.id] !== rawTraces) return;
+      st.setTraces(doc.id, aligned as SangerTraceData[], revision);
+    });
+  }, [doc, rawTraces, tracesCurrent]);
 
   // Default gel: ladder + uncut active plasmid.
   useEffect(() => {
@@ -165,22 +179,26 @@ export default function App() {
           const active = selectActiveDoc(useWorkbench.getState());
           if (!active) throw new Error('请先打开参考质粒');
           const trace = await callBio('parseAb1Trace', await file.arrayBuffer(), file.name);
-          st.setTraces(active.id, [...(useWorkbench.getState().traces[active.id] ?? []), trace]);
+          st.addTraces(active.id, [trace]);
           st.setView('sanger');
           continue;
         }
         if (/\.(fastq|fq)$/i.test(file.name)) {
           const active = selectActiveDoc(useWorkbench.getState());
           if (!active) throw new Error('请先打开参考序列');
-          const reads = parseFastq(await file.text());
-          const traces = await callBio('readsToTraces', reads.slice(0, MAX_FASTQ_TRACES));
-          st.setTraces(active.id, [...(useWorkbench.getState().traces[active.id] ?? []), ...traces]);
+          // Parsed in the worker so a large file does not block the page; only the first reads are kept.
+          const { traces, total } = await callBio('fastqToTraces', await file.text(), MAX_FASTQ_TRACES);
+          st.addTraces(active.id, traces);
           st.setView('sanger');
-          st.notify(`已载入 ${Math.min(reads.length, MAX_FASTQ_TRACES)} / ${reads.length} 条读长，正在比对到 ${active.name}`);
+          st.notify(`已载入 ${traces.length} / ${total} 条读长，正在比对到 ${active.name}`);
           continue;
         }
         const binary = /\.(dna|prot|xdna|cm5)$/i.test(file.name);
         const data = binary ? await file.arrayBuffer() : await file.text();
+        if (typeof data === 'string' && isProjectFile(file.name, data)) {
+          openProject(parseProjectFile(data), file.name);
+          continue;
+        }
         if (isProteinFile(file.name, data)) {
           const proteins = await parseProteinFile(file.name, data);
           st.openProteins(proteins);
@@ -188,7 +206,7 @@ export default function App() {
           continue;
         }
         const docs = await parseBioFile(file.name, data);
-        st.openDocs(docs);
+        st.openDocs(docs, true, { saved: true });
         st.notify(`已打开 ${docs.map((d) => d.name).join(', ')}`);
       } catch (e) {
         st.notify(`无法读取 ${file.name}：${e instanceof Error ? e.message : String(e)}`);
@@ -196,11 +214,15 @@ export default function App() {
     }
   }, []);
 
+  // An edit's coordinates refer to the version the editor showed. It is applied
+  // synchronously, so the next keystroke already sees the result; an edit made
+  // against an older version is refused instead of landing at a shifted position.
   const onEdit = useCallback(
-    async (edit: SequenceEdit) => {
+    (edit: SequenceEdit) => {
       if (!doc) return;
-      const next = await callBio('mutatePlasmidSequence', doc, edit);
-      useWorkbench.getState().replaceDoc(next);
+      const st = useWorkbench.getState();
+      if (!isDocCurrent(doc.id, docRevision(doc))) return st.notify('序列已在别处更新，这次编辑未应用，请重试');
+      st.replaceDoc(callBioSync('mutatePlasmidSequence', doc, edit));
     },
     [doc],
   );
@@ -208,27 +230,44 @@ export default function App() {
   const transform = async (kind: 'revcomp' | 'origin' | 'annotate' | 'topology') => {
     if (!doc) return;
     const st = useWorkbench.getState();
-    if (kind === 'revcomp') st.replaceDoc(await callBio('reverseComplementPlasmid', doc));
-    if (kind === 'origin' && s.selection) st.replaceDoc(await callBio('rotateCircularOrigin', doc, s.selection.start));
-    if (kind === 'annotate') {
-      const found = await callBio('autoAnnotateFeatures', doc);
-      st.replaceDoc({
-        ...doc,
-        features: [...doc.features, ...found],
-        updatedAt: new Date().toISOString(),
-        history: [...doc.history, historyNode('manual_edit', `自动注释 ${found.length} 个特征`)],
-      });
-      st.notify(`自动注释新增 ${found.length} 个特征`);
+    if (kind === 'revcomp') await updateDoc(doc.id, (d) => callBio('reverseComplementPlasmid', d));
+    if (kind === 'origin' && s.selection) {
+      // The new origin is a coordinate on this version; do not apply it to a newer one.
+      const next = await callBioForDoc(doc, 'rotateCircularOrigin', doc, s.selection.start);
+      if (next) replaceIfCurrent(doc, next);
+      else st.notify(STALE_RESULT);
     }
-    if (kind === 'topology') st.replaceDoc({ ...doc, topology: doc.topology === 'circular' ? 'linear' : 'circular' });
+    if (kind === 'annotate') {
+      let added = 0;
+      const next = await updateDoc(doc.id, async (d) => {
+        const found = await callBio('autoAnnotateFeatures', d);
+        added = found.length;
+        return {
+          ...d,
+          features: [...d.features, ...found],
+          updatedAt: new Date().toISOString(),
+          history: [...d.history, historyNode('manual_edit', `自动注释 ${found.length} 个特征`)],
+        };
+      });
+      if (next) st.notify(`自动注释新增 ${added} 个特征`);
+    }
+    if (kind === 'topology') await updateDoc(doc.id, (d) => ({ ...d, topology: d.topology === 'circular' ? 'linear' : 'circular' }));
   };
 
   const exportAs = (fmt: ExportFormat) => {
     if (!doc) return;
     if (fmt === 'gbk') download(`${doc.name}.gbk`, exportPlasmidToGenBank(doc));
-    if (fmt === 'dna') download(`${doc.name}.dna`, exportPlasmidToSnapGene(doc) as Uint8Array<ArrayBuffer>, 'application/octet-stream');
+    // .dna and JSON keep the whole document and count as saving it; GenBank and
+    // FASTA drop parts of it (see docs/COMPATIBILITY.md), so they do not.
+    const keep = (name: string, content: string | Uint8Array<ArrayBuffer>, type: string, ext: string) =>
+      saveFile(name, content, type, ext)
+        .then((outcome) => recordSave([doc.id], outcome, ` ${name}`))
+        .catch((e) => s.notify(`保存失败：${e instanceof Error ? e.message : String(e)}`));
+    if (fmt === 'dna') void keep(`${doc.name}.dna`, exportPlasmidToSnapGene(doc) as Uint8Array<ArrayBuffer>, 'application/octet-stream', '.dna');
     if (fmt === 'fasta') download(`${doc.name}.fasta`, exportPlasmidToFasta(doc));
-    if (fmt === 'json') download(`${doc.name}.json`, exportPlasmidToSnapGeneJson(doc), 'application/json');
+    if (fmt === 'json') void keep(`${doc.name}.json`, exportPlasmidToSnapGeneJson(doc), 'application/json', '.json');
+    if (fmt === 'project') void saveProject();
+    if ((fmt === 'gbk' || fmt === 'fasta') && isDirty(s, doc)) s.notify(`已导出 ${fmt === 'gbk' ? 'GenBank' : 'FASTA'}；该格式不保留全部信息，「未保存」标记保留。完整保存请用 Ctrl+S`);
     if (fmt === 'print-seq') return printSequenceText(doc, { bpPerLine: 60, showFeatures: true });
     const figure = fmt === 'svg' || fmt === 'png' || fmt === 'pdf' || fmt === 'print-map';
     if (figure && mapRef.current) {
@@ -259,6 +298,9 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'y' && !typing) {
         e.preventDefault();
         temporal.getState().redo();
+      } else if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        void saveProject();
       } else if (e.key.toLowerCase() === 'o') {
         e.preventDefault();
         fileRef.current?.click();
@@ -365,9 +407,12 @@ export default function App() {
           type="file"
           multiple
           hidden
-          accept=".dna,.prot,.gb,.gbk,.gp,.genbank,.ape,.seq,.xdna,.cm5,.fasta,.fa,.fas,.faa,.embl,.gff,.ab1,.abi,.fastq,.fq,.json,.xml,.sbol,.txt,.geneious"
+          accept=".gatc,.dna,.prot,.gb,.gbk,.gp,.genbank,.ape,.seq,.xdna,.cm5,.fasta,.fa,.fas,.faa,.embl,.gff,.ab1,.abi,.fastq,.fq,.json,.xml,.sbol,.txt,.geneious"
           onChange={(e) => e.target.files && openFiles(e.target.files)}
         />
+        <Button size="sm" onClick={() => saveProject()} disabled={!s.docs.length} title="保存全部文档为 GATC 项目 (Ctrl+S)">
+          <Save size={14} /> 保存
+        </Button>
         <ExportMenu onExport={exportAs} disabled={!doc} />
         <Button size="sm" onClick={() => s.setTool('ncbi')} title="按登录号从 NCBI 导入">
           <Globe size={14} /> NCBI
@@ -381,13 +426,14 @@ export default function App() {
         <Button size="sm" variant="primary" onClick={() => s.setWizard('restriction')} disabled={!doc}>
           <FlaskConical size={14} /> 克隆向导
         </Button>
-        <Button size="icon" variant="ghost" onClick={() => temporal.getState().undo()} title="撤销 (Ctrl+Z)">
+        <Button size="icon" variant="ghost" onClick={() => temporal.getState().undo()} title={`撤销 (Ctrl+Z)\n${UNDO_SCOPE}`}>
           <Undo2 size={15} />
         </Button>
-        <Button size="icon" variant="ghost" onClick={() => temporal.getState().redo()} title="重做 (Ctrl+Shift+Z)">
+        <Button size="icon" variant="ghost" onClick={() => temporal.getState().redo()} title={`重做 (Ctrl+Shift+Z)\n${UNDO_SCOPE}`}>
           <Redo2 size={15} />
         </Button>
         <div className="flex-1" />
+        <SaveStatus />
         <Button size="sm" variant={s.demo ? 'primary' : 'default'} onClick={() => (s.demo ? s.setDemo(null) : startDemo())} disabled={!doc} title="自动演示主要功能">
           <MonitorPlay size={14} /> 演示
         </Button>
@@ -420,10 +466,15 @@ export default function App() {
               onClick={() => s.setActive(d.id)}
             >
               {d.name}
+              {isDirty(s, d) && (
+                <span className="text-amber-500" title="有未保存的修改" aria-label="未保存">
+                  ●
+                </span>
+              )}
               <span className="text-[var(--muted)]">{d.length} bp</span>
               <button
                 className="opacity-40 hover:opacity-100"
-                onClick={(e) => (e.stopPropagation(), s.closeDoc(d.id))}
+                onClick={(e) => (e.stopPropagation(), requestCloseDoc(d.id))}
                 aria-label="关闭"
               >
                 <X size={12} />
@@ -528,11 +579,13 @@ export default function App() {
         )}
         {doc && s.copilotOpen && (
           <CopilotSidebar
+            // One conversation per document: its action cards can only apply to that document.
+            key={doc.id}
             doc={doc}
             cutSites={cutSites}
             selection={s.selection}
             traces={traces}
-            onApplyAction={applyAIAction}
+            onApplyAction={(action) => applyAIAction(action, doc.id)}
             open={s.copilotOpen}
             onClose={() => s.setCopilotOpen(false)}
           />
@@ -550,6 +603,7 @@ export default function App() {
         </div>
       )}
 
+      <SessionManager />
       <CloningWizard />
       <DemoPlayer />
       <FindDialog />
@@ -566,6 +620,64 @@ export default function App() {
   );
 }
 
+/** Unsaved count, autosave outcome and the save/undo settings. */
+function SaveStatus() {
+  const dirty = useWorkbench((s) => selectDirtyIds(s).length);
+  const autosave = useWorkbench((s) => s.autosave);
+  const settings = useWorkbench((s) => s.settings);
+  const setSettings = useWorkbench((s) => s.setSettings);
+  const [open, setOpen] = useState(false);
+  const text =
+    autosave.state === 'error'
+      ? '自动保存失败'
+      : dirty
+        ? `${dirty} 个未保存${autosave.state === 'saved' ? ` · 已自动备份 ${new Date(autosave.at).toLocaleTimeString()}` : ''}`
+        : '全部已保存';
+  return (
+    <div className="relative">
+      <button
+        className={cn(
+          'rounded px-1.5 py-0.5 text-[11px]',
+          autosave.state === 'error' ? 'bg-red-50 font-medium text-red-700 dark:bg-red-950/50 dark:text-red-300' : 'text-[var(--muted)] hover:bg-slate-100 dark:hover:bg-slate-800',
+        )}
+        title={autosave.state === 'error' ? autosave.error : '自动保存与撤销设置'}
+        onClick={() => setOpen(!open)}
+      >
+        {text}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-8 z-30 w-72 space-y-2 rounded-md border border-[var(--border)] bg-[var(--panel)] p-3 text-xs shadow-lg" onMouseLeave={() => setOpen(false)}>
+          {autosave.state === 'error' && <div className="text-red-600">{autosave.error}</div>}
+          <div className="text-[var(--muted)]">
+            有未保存修改时，工作区会在停止操作后自动备份到本机（{'__TAURI_INTERNALS__' in window ? '应用数据目录' : '浏览器 IndexedDB'}），用于异常退出后恢复。它不替代保存：要交给他人或长期保留，请用 Ctrl+S 保存为 .gatc 项目。
+          </div>
+          <label className="flex items-center justify-between gap-2">
+            自动备份延迟
+            <Select value={settings.autosaveDelayMs} onChange={(e) => setSettings({ autosaveDelayMs: Number(e.target.value) })}>
+              {[1000, 3000, 5000, 10000, 30000].map((ms) => (
+                <option key={ms} value={ms}>
+                  {ms / 1000} 秒
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="flex items-center justify-between gap-2">
+            撤销步数（重启后生效）
+            <Select value={settings.undoLimit} onChange={(e) => setSettings({ undoLimit: Number(e.target.value) })}>
+              {[100, 500, 1000, 2000].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <div className="text-[var(--muted)]">{UNDO_SCOPE}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExportMenu({ onExport, disabled }: { onExport: (f: ExportFormat) => void; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   return (
@@ -577,6 +689,7 @@ function ExportMenu({ onExport, disabled }: { onExport: (f: ExportFormat) => voi
         <div className="absolute left-0 top-9 z-30 w-48 rounded-md border border-[var(--border)] bg-[var(--panel)] p-1 shadow-lg" onMouseLeave={() => setOpen(false)}>
           {(
             [
+              ['project', 'GATC 项目 (.gatc，全部文档)'],
               ['dna', 'SnapGene (.dna)'],
               ['gbk', 'GenBank (.gbk, SnapGene/ApE)'],
               ['fasta', 'FASTA'],
@@ -680,6 +793,7 @@ function CommandPalette({
             </Command.Group>
             <Command.Group heading="文件">
               <Command.Item onSelect={run(onOpen)}>打开文件…</Command.Item>
+              <Command.Item onSelect={run(() => onExport('project'))}>保存项目 (.gatc)</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('ncbi'))}>从 NCBI 导入（登录号）</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('primerlib'))}>引物库</Command.Item>
               <Command.Item onSelect={run(() => onExport('print-map'))}>打印图谱</Command.Item>

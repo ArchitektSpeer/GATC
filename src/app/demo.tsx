@@ -4,7 +4,7 @@ import { Pause, Play, SkipForward, X } from 'lucide-react';
 import type { PlasmidDocument } from '../types/schema';
 import { getEnzymeByName } from '../modules/seq-engine';
 import { callBio } from './bio-client';
-import { addPrimersToDoc, digestToGel, newDocument, openProduct, uncutPlasmidSample, uid } from './actions';
+import { addPrimersToDoc, replaceIfCurrent, digestToGel, newDocument, openProduct, uncutPlasmidSample, uid } from './actions';
 import { loadDemoLibrary } from './samples/demo';
 import { useWorkbench } from './store';
 import { Button } from './ui';
@@ -45,7 +45,7 @@ const STEPS: DemoStep[] = [
     text: '从 NCBI 下载的真实记录：pBR322（J01749）、pGEX-4T-1（U13853）、mCherry（AY678264）、GFP 蛋白（P42212），以及一个在 pBR322 tet 基因两侧插入 loxP 的演示构建。',
     run: async () => {
       const { docs, proteins } = await loadDemoLibrary();
-      st().openDocs(docs.filter((d) => !st().docs.some((x) => x.id === d.id)), false);
+      st().openDocs(docs.filter((d) => !st().docs.some((x) => x.id === d.id)), false, { saved: true });
       st().openProteins(proteins.filter((p) => !st().proteins.some((x) => x.id === p.id)));
       activate('pBR322', 'split');
     },
@@ -109,7 +109,7 @@ const STEPS: DemoStep[] = [
       const pair = await callBio('designPrimerPair', doc, { start: f.start, end: f.end }, { enzymeSiteForward: 'BamHI', enzymeSiteReverse: 'NotI', leaderBases: 'GCG' });
       pair.forward.name = 'mCherry-BamHI-F';
       pair.reverse.name = 'mCherry-NotI-R';
-      st().replaceDoc(addPrimersToDoc(doc, [pair.forward, pair.reverse], '演示：BamHI/NotI 克隆引物'));
+      if (!replaceIfCurrent(doc, addPrimersToDoc(doc, [pair.forward, pair.reverse], '演示：BamHI/NotI 克隆引物'))) return st().setDemo(null);
       activate('mCherry', 'features');
       st().notify(`引物 Tm ${pair.forward.tmAnnealing.toFixed(1)} / ${pair.reverse.tmAnnealing.toFixed(1)} °C，产物 ${pair.productLength} bp`);
     },
@@ -157,7 +157,7 @@ const STEPS: DemoStep[] = [
       const egfp = cds(doc, /egfp/i);
       const at = egfp.start + 65 * 3;
       const r = await callBio('designMutagenesisPrimers', doc, { start: at, end: at + 3, newBases: 'CAC', mode: 'q5_back_to_back' });
-      st().replaceDoc(addPrimersToDoc(doc, [r.forward, r.reverse], '演示：EGFP Y66H 突变引物'));
+      if (!replaceIfCurrent(doc, addPrimersToDoc(doc, [r.forward, r.reverse], '演示：EGFP Y66H 突变引物'))) return st().setDemo(null);
       openProduct({ ...r.mutatedDoc, name: 'pEGFP-N1_Y66H' }, [`${r.silentSiteSuggestions.length} 个静默位点建议`]);
       st().setView('sequence');
       st().setSelection({ start: at, end: at + 3 });

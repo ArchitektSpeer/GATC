@@ -92,7 +92,7 @@ export function FeatureEditor({
       end,
       strand: draft.strand,
       color: draft.color || TYPE_COLORS[draft.type] || '#64748b',
-      notes: draft.note.trim() ? { ...(feature?.notes ?? {}), note: [draft.note.trim()] } : feature?.notes,
+      notes: withNote(feature?.notes, draft.note.trim()),
     };
     const features = feature ? doc.features.map((f) => (f.id === feature.id ? next : f)) : [...doc.features, next];
     replaceDoc(edited(doc, { features }, feature ? `编辑特征 ${next.name}` : `添加特征 ${next.name}`));
@@ -151,6 +151,13 @@ export function FeatureEditor({
  * Locates where an oligo anneals: the longest 3'-terminal stretch (>= 15 nt) found
  * exactly on either strand. Bases 5' of that stretch become the tail.
  */
+/** Set or clear the free-text note, keeping every other qualifier. */
+export function withNote(notes: SequenceFeature['notes'], note: string): SequenceFeature['notes'] {
+  const { note: _old, ...rest } = notes ?? {};
+  if (note) return { ...rest, note: [note] };
+  return Object.keys(rest).length ? rest : undefined;
+}
+
 export function locatePrimer(doc: PlasmidDocument, oligo: string): { start: number; end: number; strand: 1 | -1; tail: string } | null {
   const seq = doc.sequence.toUpperCase();
   const hay = doc.topology === 'circular' ? seq + seq.slice(0, Math.min(oligo.length, seq.length - 1)) : seq;
@@ -184,10 +191,13 @@ export function PrimerEditor({ doc, open, onClose }: { doc: PlasmidDocument; ope
     }
   }, [open, doc.primers.length]);
 
-  const oligo = sequence.toUpperCase().replace(/[^ACGT]/g, '');
-  const site = oligo.length >= 15 ? locatePrimer(doc, oligo) : null;
+  // Whitespace is ignored and U read as T; IUPAC codes are kept (e.g. an N tail), anything else is refused.
+  const oligo = sequence.toUpperCase().replace(/\s+/g, '').replace(/U/g, 'T');
+  const invalid = [...new Set(oligo.replace(/[ACGTRYSWKMBDHVN]/g, ''))].join('');
+  const site = oligo.length >= 15 && !invalid ? locatePrimer(doc, oligo) : null;
 
   const save = () => {
+    if (invalid) return setError(`序列含无效字符：${invalid}`);
     if (oligo.length < 15) return setError('引物至少 15 nt');
     if (!site) return setError('未在序列任一链上找到 ≥15 nt 的 3′ 端结合区');
     const annealing = oligo.slice(site.tail.length);
@@ -223,7 +233,9 @@ export function PrimerEditor({ doc, open, onClose }: { doc: PlasmidDocument; ope
         </Field>
         {oligo.length >= 15 && (
           <div className="text-xs text-[var(--muted)]">
-            {site
+            {invalid
+              ? `含无效字符：${invalid}`
+              : site
               ? `结合位置 ${site.start + 1}–${site.end}（${site.strand === 1 ? '正链' : '负链'}）${site.tail ? `，5′ 尾巴 ${site.tail.length} nt` : ''}`
               : '未找到结合位点'}
           </div>

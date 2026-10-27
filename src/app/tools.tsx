@@ -21,9 +21,10 @@ export function FindDialog() {
   const [hits, setHits] = useState<MotifHit[] | null>(null);
   const [current, setCurrent] = useState(0);
 
+  // Searching (and moving the selection to the first hit) only while the dialog is open.
   useEffect(() => {
     const q = pattern.trim();
-    if (!doc || q.length < (protein ? 2 : 3)) {
+    if (!open || !doc || q.length < (protein ? 2 : 3)) {
       setHits(null);
       return;
     }
@@ -40,7 +41,7 @@ export function FindDialog() {
       alive = false;
       clearTimeout(t);
     };
-  }, [doc, pattern, protein, mismatches, setSelection]);
+  }, [open, doc, pattern, protein, mismatches, setSelection]);
 
   const go = (i: number) => {
     if (!hits?.length) return;
@@ -131,9 +132,12 @@ export function BackTranslateDialog() {
   const [strategy, setStrategy] = useState<'most-frequent' | 'weighted'>('most-frequent');
   const [avoid, setAvoid] = useState('EcoRI, BamHI, XhoI, NotI');
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
+  // A result keeps the settings it was computed with; editing the inputs does not relabel it.
+  const [computed, setComputed] = useState<{ dna: string; organism: CodonUsageOrganism; strategy: typeof strategy; aa: string } | null>(null);
   const aa = protein.toUpperCase().replace(/[^ACDEFGHIKLMNPQRSTVWY*]/g, '');
-  const cai = useMemo(() => (result ? codonAdaptationIndex(result, organism) : null), [result, organism]);
+  const result = computed?.dna ?? null;
+  const outdated = !!computed && (computed.aa !== aa || computed.organism !== organism || computed.strategy !== strategy);
+  const cai = useMemo(() => (computed ? codonAdaptationIndex(computed.dna, computed.organism) : null), [computed]);
 
   const run = async () => {
     setError(null);
@@ -141,7 +145,8 @@ export function BackTranslateDialog() {
     const { enzymes, missing } = resolveEnzymes(names);
     if (missing.length) return setError(`未知酶：${missing.join(', ')}`);
     try {
-      setResult(await callBio('backTranslate', aa, organism, { strategy, avoidSites: enzymes.map((e) => e.recognitionSeq), seed: 1 }));
+      const dna = await callBio('backTranslate', aa, organism, { strategy, avoidSites: enzymes.map((e) => e.recognitionSeq), seed: 1 });
+      setComputed({ dna, organism, strategy, aa });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -180,16 +185,18 @@ export function BackTranslateDialog() {
           <Button variant="primary" disabled={aa.length < 2} onClick={run}>
             <Play size={14} /> 反向翻译
           </Button>
-          {result && (
+          {computed && (
             <Button
               onClick={() => {
-                openProduct(newDocument(`backtranslated_${organism.replace(/[^A-Za-z]/g, '')}`, result, 'linear', `反向翻译（${organism}，${strategy}）`));
+                const { dna, organism: host, strategy: how } = computed;
+                openProduct(newDocument(`backtranslated_${host.replace(/[^A-Za-z]/g, '')}`, dna, 'linear', `反向翻译（${host}，${how}）`));
                 setTool(null);
               }}
             >
               作为新序列打开
             </Button>
           )}
+          {outdated && <span className="self-center text-xs text-amber-600">输入或设置已修改，下方结果仍是上次计算（{computed.organism}，{computed.strategy}），请重新运行</span>}
         </div>
         {error && <div className="text-xs text-red-600">{error}</div>}
         {result && (

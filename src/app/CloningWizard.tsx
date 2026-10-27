@@ -3,7 +3,8 @@ import { FlaskConical, Play, Plus, Trash2 } from 'lucide-react';
 import type { PlasmidDocument, Primer } from '../types/schema';
 import { COMMERCIAL_ENZYMES } from '../modules/seq-engine';
 import { callBio } from './bio-client';
-import { addPrimersToDoc, openProduct, resolveEnzymes } from './actions';
+import { addPrimersToDoc, openProduct, replaceIfCurrent, resolveEnzymes } from './actions';
+import { fromUiRange, rangeSequence } from './ranges';
 import { selectActiveDoc, useWorkbench, type WizardKind } from './store';
 import { Badge, Button, Dialog, Field, Input, Select, Tabs } from './ui';
 
@@ -154,14 +155,14 @@ function Grid({ children }: { children: ReactNode }) {
 function PrimerDesignTab() {
   const doc = useWorkbench(selectActiveDoc);
   const selection = useWorkbench((s) => s.selection);
-  const replaceDoc = useWorkbench((s) => s.replaceDoc);
   const [start, setStart] = useState(selection ? selection.start + 1 : 1);
   const [end, setEnd] = useState(selection ? selection.end : 600);
   const [fwdSite, setFwdSite] = useState('');
   const [revSite, setRevSite] = useState('');
   const [fwdTail, setFwdTail] = useState('');
   const [revTail, setRevTail] = useState('');
-  const [result, setResult] = useState<Awaited<ReturnType<typeof designPair>> | null>(null);
+  // The document version a result was computed from; it only applies to that version.
+  const [result, setResult] = useState<{ base: PlasmidDocument; value: Awaited<ReturnType<typeof designPair>> } | null>(null);
   const { busy, error, run } = useRun();
 
   const siteOf = (name: string) => (name ? COMMERCIAL_ENZYMES.find((e) => e.name === name)?.recognitionSeq : undefined);
@@ -199,30 +200,36 @@ function PrimerDesignTab() {
         </Field>
       </Grid>
       <div className="flex gap-2">
-        <Button variant="primary" disabled={busy} onClick={() => run(async () => setResult(await designPair(doc)))}>
+        <Button variant="primary" disabled={busy} onClick={() => run(async () => setResult({ base: doc, value: await designPair(doc) }))}>
           <Play size={14} /> 设计引物
         </Button>
-        {result && (
+        {result && result.base === doc && (
           <Button
             onClick={() => {
-              replaceDoc(addPrimersToDoc(doc, [result.forward, result.reverse], '设计引物对'));
-              useWorkbench.getState().notify('引物已添加到当前质粒');
+              if (replaceIfCurrent(result.base, addPrimersToDoc(result.base, [result.value.forward, result.value.reverse], '设计引物对')))
+                useWorkbench.getState().notify('引物已添加到当前质粒');
             }}
           >
             <Plus size={14} /> 添加到质粒
           </Button>
         )}
+        {result && result.base !== doc && <StaleNote />}
       </div>
       <ErrorLine error={error} />
       {result && (
         <>
-          <PrimerTable primers={[result.forward, result.reverse]} />
-          <div className="text-xs text-[var(--muted)]">PCR 产物 {result.productLength} bp</div>
-          <Warnings items={result.warnings} />
+          <PrimerTable primers={[result.value.forward, result.value.reverse]} />
+          <div className="text-xs text-[var(--muted)]">PCR 产物 {result.value.productLength} bp</div>
+          <Warnings items={result.value.warnings} />
         </>
       )}
     </div>
   );
+}
+
+/** Shown in place of the apply buttons once the template changed after a result was computed. */
+function StaleNote() {
+  return <span className="self-center text-xs text-amber-600">序列在设计之后已改变，结果已失效，请重新计算</span>;
 }
 
 function EnzymeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -381,6 +388,13 @@ function RestrictionTab() {
   const vector = useDoc(vectorId);
   const insert = useDoc(insertId);
   const { busy, error, run } = useRun();
+
+  // Fragments come from these exact inputs; changing any of them discards them.
+  useEffect(() => {
+    setVecFrags([]);
+    setInsFrags([]);
+    setResult(null);
+  }, [vector, insert, enzymesText]);
 
   const digest = async () => {
     const { enzymes, missing } = resolveEnzymes(enzymesText.split(/[,\s+]+/).filter(Boolean));
@@ -648,12 +662,11 @@ function GoldenGateTab() {
 function MutagenesisTab() {
   const doc = useWorkbench(selectActiveDoc);
   const selection = useWorkbench((s) => s.selection);
-  const replaceDoc = useWorkbench((s) => s.replaceDoc);
   const [start, setStart] = useState(selection ? selection.start + 1 : 1);
   const [end, setEnd] = useState(selection ? selection.end : 1);
   const [newBases, setNewBases] = useState('');
   const [mode, setMode] = useState<'quikchange' | 'q5_back_to_back'>('q5_back_to_back');
-  const [result, setResult] = useState<Awaited<ReturnType<typeof callBio<'designMutagenesisPrimers'>>> | null>(null);
+  const [result, setResult] = useState<{ base: PlasmidDocument; value: Awaited<ReturnType<typeof callBio<'designMutagenesisPrimers'>>> } | null>(null);
   const { busy, error, run } = useRun();
 
   useEffect(() => {
@@ -664,7 +677,9 @@ function MutagenesisTab() {
   }, [selection]);
 
   if (!doc) return null;
-  const original = doc.sequence.slice(Math.max(0, start - 1), Math.max(start - 1, end));
+  // Preview and design read the range the same way, including ranges across the origin.
+  const range = fromUiRange(doc, start, end);
+  const original = 'error' in range ? '' : rangeSequence(doc, range);
   return (
     <div className="flex flex-col gap-3">
       <Grid>
@@ -680,38 +695,42 @@ function MutagenesisTab() {
             <option value="quikchange">QuikChange 重叠</option>
           </Select>
         </Field>
-        <Field label={`原序列：${original || '（插入）'}`} hint="新序列留空 = 删除">
+        <Field label={'error' in range ? range.error : `原序列：${original || '（插入）'}`} hint="新序列留空 = 删除">
           <Input className="mono" value={newBases} onChange={(e) => setNewBases(e.target.value.toUpperCase().replace(/[^ACGT]/g, ''))} />
         </Field>
       </Grid>
       <div className="flex gap-2">
         <Button
           variant="primary"
-          disabled={busy}
+          disabled={busy || 'error' in range}
           onClick={() =>
-            run(async () => setResult(await callBio('designMutagenesisPrimers', doc, { start: start - 1, end, newBases, mode }, COMMERCIAL_ENZYMES)))
+            'error' in range ||
+            run(async () =>
+              setResult({ base: doc, value: await callBio('designMutagenesisPrimers', doc, { start: range.start, end: range.end, newBases, mode }, COMMERCIAL_ENZYMES) }),
+            )
           }
         >
           <Play size={14} /> 设计突变引物
         </Button>
-        {result && (
+        {result && result.base === doc && (
           <>
-            <Button onClick={() => replaceDoc(addPrimersToDoc(doc, [result.forward, result.reverse], '定点突变引物'))}>
+            <Button onClick={() => replaceIfCurrent(result.base, addPrimersToDoc(result.base, [result.value.forward, result.value.reverse], '定点突变引物'))}>
               <Plus size={14} /> 添加引物
             </Button>
-            <Button onClick={() => openProduct({ ...result.mutatedDoc, name: `${doc.name}-mut` })}>打开突变质粒</Button>
+            <Button onClick={() => openProduct({ ...result.value.mutatedDoc, name: `${doc.name}-mut` })}>打开突变质粒</Button>
           </>
         )}
+        {result && result.base !== doc && <StaleNote />}
       </div>
       <ErrorLine error={error} />
       {result && (
         <>
-          <PrimerTable primers={[result.forward, result.reverse]} />
-          {result.silentSiteSuggestions.length > 0 && (
+          <PrimerTable primers={[result.value.forward, result.value.reverse]} />
+          {result.value.silentSiteSuggestions.length > 0 && (
             <div className="text-xs">
               <div className="mb-1 font-medium">静默酶切位点筛选建议</div>
               <ul className="space-y-1">
-                {result.silentSiteSuggestions.map((s, i) => (
+                {result.value.silentSiteSuggestions.map((s, i) => (
                   <li key={i}>
                     <Badge tone={s.action === 'introduce' ? 'green' : 'amber'}>{s.action === 'introduce' ? '引入' : '消除'}</Badge>{' '}
                     <b>{s.enzyme}</b> @ {s.position + 1}：<span className="mono">{s.changedBases}</span> — {s.note}
@@ -720,7 +739,7 @@ function MutagenesisTab() {
               </ul>
             </div>
           )}
-          <Warnings items={result.warnings} />
+          <Warnings items={result.value.warnings} />
         </>
       )}
     </div>
@@ -859,10 +878,9 @@ function LicTab() {
   const activeId = useActiveId();
   const doc = useWorkbench(selectActiveDoc)!;
   const selection = useWorkbench((s) => s.selection);
-  const replaceDoc = useWorkbench((s) => s.replaceDoc);
   const [vectorId, setVectorId] = useState(activeId);
   const [insertId, setInsertId] = useState(activeId);
-  const [primers, setPrimers] = useState<Primer[] | null>(null);
+  const [primers, setPrimers] = useState<{ base: PlasmidDocument; value: Primer[] } | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const vector = useDoc(vectorId);
   const insert = useDoc(insertId);
@@ -878,20 +896,21 @@ function LicTab() {
           onClick={() =>
             run(async () => {
               const r = await callBio('designLICPrimers', doc, range!);
-              setPrimers([r.forward, r.reverse]);
+              setPrimers({ base: doc, value: [r.forward, r.reverse] });
             })
           }
         >
           <Play size={14} /> 设计 LIC 引物
         </Button>
         {!range && <span className="text-xs text-[var(--muted)]">先在图谱或序列中选择要扩增的区域</span>}
-        {primers && (
-          <Button onClick={() => replaceDoc(addPrimersToDoc(doc, primers, 'LIC 引物'))}>
+        {primers && primers.base === doc && (
+          <Button onClick={() => replaceIfCurrent(primers.base, addPrimersToDoc(primers.base, primers.value, 'LIC 引物'))}>
             <Plus size={14} /> 添加引物
           </Button>
         )}
+        {primers && primers.base !== doc && <StaleNote />}
       </div>
-      {primers && <PrimerTable primers={primers} />}
+      {primers && <PrimerTable primers={primers.value} />}
       <div className="mt-2 text-xs font-medium">2. 模拟 LIC 退火</div>
       <Grid>
         <DocPicker label="线性化 LIC 载体" value={vectorId} onChange={setVectorId} />
@@ -1011,7 +1030,7 @@ function InsertFragmentTab() {
   return (
     <div className="flex flex-col gap-3">
       <div className="text-xs text-[var(--muted)]">
-        把插入片段（全长或指定区间）放进载体的指定位置。载体区间为空（终点 = 起点 − 1）表示纯插入，否则替换该区间。坐标为 1-based 闭区间。
+        把插入片段（全长或指定区间）放进载体的指定位置。载体区间为空（终点 = 起点 − 1）表示纯插入，否则替换该区间；环状载体上终点小于起点表示跨越原点的区间。坐标为 1-based 闭区间。
       </div>
       <Grid>
         <DocPicker label="载体" value={vectorId} onChange={setVectorId} />
@@ -1038,10 +1057,13 @@ function InsertFragmentTab() {
           disabled={busy || !vector || !insert}
           onClick={() =>
             run(async () => {
+              // end = start − 1 is a pure insertion; on a circular vector end < start − 1 spans the origin.
+              const vRange = fromUiRange(vector!, vStart, vEnd);
+              if ('error' in vRange) throw new Error(`载体区间：${vRange.error}`);
               const r = await callBio(
                 'simulateInsertFragment',
                 vector!,
-                { start: vStart - 1, end: Math.max(vStart - 1, vEnd) },
+                vRange,
                 insert!,
                 { start: iStart - 1, end: iEnd > 0 ? iEnd : insert!.length },
                 { reverseInsert: reverse },

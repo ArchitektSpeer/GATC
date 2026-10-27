@@ -1,5 +1,5 @@
 // src/types/schema.ts
-// OpenSnapGene Global Data Contract (Single Source of Truth - Strictly Immutable Across Modules)
+// GATC Global Data Contract (Single Source of Truth - Strictly Immutable Across Modules)
 
 export type StrandDirection = 1 | -1 | 0;
 
@@ -195,6 +195,24 @@ export interface VirtualGelLane {
     relativeIntensity: number;  // 0.1 to 1.0 (proportional to fragment mass fraction)
     fragmentDoc?: PlasmidDocument;
   }>;
+}
+
+// Native project file (.gatc). Holds what cannot be recomputed: documents, raw
+// sequencing reads and the workspace layout. Derived data (cut sites, trace
+// alignments, translations) is recomputed on load and never written.
+export interface ProjectWorkspace {
+  activeDocId: string | null;
+  view?: string;                // Main view id at save time (e.g. "split", "sanger")
+}
+
+export interface ProjectFile {
+  format: 'gatc-project';
+  schemaVersion: number;        // Data format version; see io-adapter/migrations
+  appVersion: string;           // GATC version that wrote the file
+  savedAt: string;              // ISO timestamp
+  documents: PlasmidDocument[]; // In tab order
+  traces: Record<string, Omit<SangerTraceData, 'alignment'>[]>; // Keyed by document id
+  workspace: ProjectWorkspace;
 }
 
 // Module 6: BYOK AI Copilot Contracts

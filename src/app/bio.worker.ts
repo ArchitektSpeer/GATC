@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import './worker-globals';
 import { bioApi, type BioRequest, type BioResponse } from './bio-api';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;

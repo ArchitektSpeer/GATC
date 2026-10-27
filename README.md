@@ -22,6 +22,7 @@ npm run tauri:build
 
 | 领域 | 能力 |
 |---|---|
+| 保存 | `.gatc` 项目文件（全部文档 + 原始测序数据 + 工作区，带版本号与迁移）；未保存标记与关闭提醒；有未保存修改时自动备份到本机（IndexedDB / 桌面应用数据目录，原子写入与轮换备份），异常退出后可恢复。见 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
 | 文件 | 读写 SnapGene `.dna`（含引物、甲基化、构建历史树、多段特征）；读取 GenBank / ApE / Vector NTI / Benchling、FASTA、EMBL、GFF、DNASTAR `.seq`、Serial Cloner `.xdna`、Geneious、SBOL；蛋白文件 `.prot` / GenPept / 蛋白 FASTA；FASTQ 读长；按登录号从 NCBI 导入；导出 GenBank（join 多段特征、ApE 颜色）/ FASTA / JSON；图谱导出 SVG、300 dpi PNG、矢量 PDF，图谱与序列可直接打印 |
 | 视图 | 环形与线性图谱（多轨道特征、防碰撞引线、多段特征、ORF、GC 曲线、可配置显示选项）、虚拟滚动双链序列（酶切阶梯切口、引物、CDS 翻译）、蛋白序列视图（按理化性质着色、分子量/pI）、酶列表、特征/引物/ORF、虚拟电泳、Sanger 峰图与覆盖度、多序列比对、可重放的克隆历史树；浅色/深色/出版白底主题 |
 | 编辑 | 碱基级编辑、特征与引物的手动添加/编辑/删除（均可撤销）、ORF 一键转为 CDS、自动注释、反向互补、重设原点、环状/线性切换 |
@@ -59,6 +60,7 @@ npm run typecheck                     # tsc --noEmit
 npm run test                          # vitest：单元 + 跨模块集成 + 真实文件
 npm run build && npx vite preview &   # 然后：
 node scripts/e2e.mjs e2e-report       # Playwright 浏览器功能评测，输出截图与 report.json
+npm run check:session                 # 浏览器走查：编辑 → 强制关闭 → 恢复 → 保存 → 重新打开
 node scripts/make-audit-bundle.mjs    # 生成 AUDIT_BUNDLE.md 供外部审计
 npm run crosscheck                    # 与 Biopython / REBASE / primer3 / pydna 交叉验证（需 Python 3）
 ```

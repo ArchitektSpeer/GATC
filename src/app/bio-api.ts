@@ -49,6 +49,13 @@ import {
   alignReadsToReference,
   readsToTraces,
 } from '../modules/alignment-gel';
+import { parseFastq } from '../modules/io-adapter';
+
+/** Parse FASTQ text and convert the first `max` reads to traces; parsing a large file stays off the main thread. */
+function fastqToTraces(text: string, max: number) {
+  const reads = parseFastq(text);
+  return { traces: readsToTraces(reads.slice(0, max)), total: reads.length };
+}
 
 export const bioApi = {
   findCutSites,
@@ -94,6 +101,7 @@ export const bioApi = {
   alignReadsToReference,
   readsToTraces,
   recommendDoubleDigestBuffer,
+  fastqToTraces,
 };
 
 export type BioApi = typeof bioApi;
@@ -103,6 +111,8 @@ export interface BioRequest {
   id: number;
   fn: BioFn;
   args: unknown[];
+  /** The document revision a task was computed for, when it derives from one. */
+  doc?: { docId: string; revision: number };
 }
 
 export type BioResponse =

@@ -23,6 +23,7 @@ import type {
   SequenceFeature,
   StrandDirection,
 } from '../../types/schema';
+import { loadProject } from './project';
 
 /* -------------------------------------------------------------------------- */
 /* TeselaGen parser surface                                                    */
@@ -4493,6 +4494,9 @@ function applyRawGenBankSegmentNotes(
 
 function parseJsonDocuments(text: string, fileName: string): PlasmidDocument[] {
   const parsed = JSON.parse(text) as unknown;
+  if (parsed && typeof parsed === 'object' && (parsed as { format?: unknown }).format === 'gatc-project') {
+    return loadProject(parsed).project.documents;
+  }
   const candidates: unknown[] = Array.isArray(parsed)
     ? parsed
     : parsed && typeof parsed === 'object' && 'document' in parsed
@@ -4635,3 +4639,5 @@ export function exportPlasmidToFasta(doc: PlasmidDocument): string {
 export function exportPlasmidToSnapGeneJson(doc: PlasmidDocument): string {
   return JSON.stringify(doc, null, 2);
 }
+
+export * from './project';

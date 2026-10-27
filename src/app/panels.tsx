@@ -333,6 +333,8 @@ export function Inspector({ doc }: { doc: PlasmidDocument }) {
   const sel = selection && selection.start !== selection.end ? selectionSeq(doc, selection.start, selection.end) : '';
   const thermo = useMemo(() => (sel.length >= 8 && sel.length <= 60 ? evaluateOligoThermodynamics(sel) : null), [sel]);
   const methyl = doc.methylationProfile ?? { dam: true, dcm: true, cpg: false };
+  // Whole-sequence GC only changes with the sequence, not with the selection.
+  const gc = useMemo(() => calcGcPercent(doc.sequence), [doc.sequence]);
 
   return (
     <div className="flex flex-col gap-4 p-3 text-xs">
@@ -346,7 +348,7 @@ export function Inspector({ doc }: { doc: PlasmidDocument }) {
           <span className="text-[var(--muted)]">拓扑</span>
           <span>{doc.topology === 'circular' ? '环状' : '线性'}</span>
           <span className="text-[var(--muted)]">GC</span>
-          <span>{calcGcPercent(doc.sequence).toFixed(1)}%</span>
+          <span>{gc.toFixed(1)}%</span>
         </div>
         <div className="mt-2 flex flex-wrap gap-3">
           {(['dam', 'dcm', 'cpg'] as const).map((k) => (

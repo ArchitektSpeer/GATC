@@ -21,6 +21,8 @@ const check = async (name, fn) => {
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+// Exports go through downloads here; a native save dialog cannot be driven headless.
+await page.addInitScript(() => delete window.showSaveFilePicker);
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
 
@@ -40,7 +42,7 @@ const toast = async () => {
   lastToast = (await loc.textContent()) ?? '';
   return lastToast;
 };
-const tab = (name) => page.locator('div.cursor-pointer', { hasText: new RegExp(`^${name}\\d`) }).first().click();
+const tab = (name) => page.locator('div.cursor-pointer', { hasText: new RegExp(`^${name}●?\\d`) }).first().click();
 const closeDialogs = async () => {
   for (let i = 0; i < 2; i++) await page.keyboard.press('Escape');
 };
@@ -277,7 +279,7 @@ await check('添加 / 编辑特征（可撤销）', async () => {
   await page.getByLabel('名称').fill('E2E test feature');
   await page.getByLabel('起点 (1-based)').fill('100');
   await page.getByLabel('终点 (含)').fill('250');
-  await page.getByRole('button', { name: '保存' }).click();
+  await page.locator('.fixed.inset-0').getByRole('button', { name: '保存', exact: true }).click();
   await page.getByText('E2E test feature').waitFor();
   const after = await page.locator('tbody tr').count();
   await page.locator('main').click({ position: { x: 5, y: 5 } });

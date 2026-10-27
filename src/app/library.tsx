@@ -6,7 +6,7 @@ import { fetchFromNCBI, normalizeAccession } from '../modules/io-adapter';
 import type { PrimerBindingHit } from '../modules/cloning-primer';
 import { evaluateOligoThermodynamics } from '../modules/cloning-primer';
 import { callBio } from './bio-client';
-import { addPrimersToDoc, uid } from './actions';
+import { addPrimersToDoc, replaceIfCurrent, uid } from './actions';
 import { selectActiveDoc, useWorkbench, type LibraryPrimer } from './store';
 import { Badge, Button, Dialog, Field, Input } from './ui';
 
@@ -154,11 +154,10 @@ export function PrimerLibraryDialog() {
     }
   };
 
+  // `doc` is the version the binding site was found on; the hit's coordinates only hold for it.
   const addToDoc = (doc: PlasmidDocument, lib: LibraryPrimer, hit: PrimerBindingHit) => {
-    const st = useWorkbench.getState();
-    const current = st.docs.find((d) => d.id === doc.id) ?? doc;
-    st.replaceDoc(addPrimersToDoc(current, [toPrimer(current, lib, hit)], `从引物库添加 ${lib.name}`));
-    st.notify(`已把 ${lib.name} 添加到 ${doc.name}`);
+    if (replaceIfCurrent(doc, addPrimersToDoc(doc, [toPrimer(doc, lib, hit)], `从引物库添加 ${lib.name}`), `${doc.name} 在搜索之后已改变，结合位置已失效，请重新查找`))
+      useWorkbench.getState().notify(`已把 ${lib.name} 添加到 ${doc.name}`);
   };
 
   return (
