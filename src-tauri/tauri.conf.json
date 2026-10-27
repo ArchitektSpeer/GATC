@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "OpenSnapGene",
+  "productName": "GATC",
   "version": "0.1.0",
-  "identifier": "io.github.architektspeer.opensnapgene",
+  "identifier": "io.github.architektspeer.gatc",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "OpenSnapGene",
+        "title": "GATC — Gene Assembly & Toolkit for Cloning",
         "width": 1440,
         "height": 900,
         "resizable": true,

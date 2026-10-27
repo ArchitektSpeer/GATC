@@ -1,9 +1,16 @@
+/*
+ * Xdna parsing follows the publicly documented binary layout used by
+ * Biopython's Bio.SeqIO.XdnaIO (Biopython License Agreement / BSD-3-Clause)
+ * and the format notes published by incenp.org.
+ */
 import {
   anyToJson,
   fastaToJson,
   genbankToJson,
+  geneiousXmlToJson,
   jsonToFasta,
   jsonToGenbank,
+  sbolXmlToJson,
   snapgeneToJson,
 } from '@teselagen/bio-parsers';
 import type {
@@ -94,6 +101,39 @@ interface SnapGenePrimerBinding {
   annealedBases?: string;
 }
 
+/**
+ * Protein annotation. Coordinates are amino-acid positions in a 0-based,
+ * half-open interval, matching the global document convention.
+ */
+export interface ProteinFeature {
+  id: string;
+  name: string;
+  type: string;
+  start: number;
+  end: number;
+  color: string;
+  notes?: Record<string, string[]>;
+}
+
+/** Protein document contract shared across modules without a schema entry. */
+export interface ProteinDocument {
+  id: string;
+  name: string;
+  sequence: string;
+  description?: string;
+  features: ProteinFeature[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A single sequencing read with Phred qualities (ASCII offset 33). */
+export interface SequencingRead {
+  id: string;
+  name: string;
+  sequence: string;
+  qualities: number[];
+}
+
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -128,8 +168,14 @@ const FEATURE_TYPES: readonly FeatureType[] = [
   'attachment_site',
 ];
 
-const SEGMENTS_NOTE = 'OpenSnapGene_segments';
-const ORIGINAL_TYPE_NOTE = 'OpenSnapGene_original_type';
+const SEGMENTS_NOTE = 'GATC_segments';
+const SEGMENTS_PUBLIC_NOTE = 'segments';
+const ORIGINAL_TYPE_NOTE = 'GATC_original_type';
+// Keys written before the project was renamed; still recognised when reading.
+const LEGACY_SEGMENTS_NOTE = 'OpenSnapGene_segments';
+const LEGACY_ORIGINAL_TYPE_NOTE = 'OpenSnapGene_original_type';
+const isInternalNoteKey = (key: string) =>
+  key === SEGMENTS_NOTE || key === LEGACY_SEGMENTS_NOTE || key === ORIGINAL_TYPE_NOTE || key === LEGACY_ORIGINAL_TYPE_NOTE;
 
 const OPERATION_MAP: Record<string, CloningOperationType> = {
   import: 'import',
@@ -263,6 +309,10 @@ function normalizeSequence(value: unknown): string {
     return '';
   }
   return value.replace(/^\uFEFF/, '').toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+function normalizeProteinSequence(value: string): string {
+  return value.replace(/^\uFEFF/, '').toUpperCase().replace(/[^A-Z*]/g, '');
 }
 
 const DNA_COMPLEMENT: Record<string, string> = {
@@ -548,8 +598,22 @@ function xmlChildText(node: XmlNode | undefined, tag: string): string | undefine
   return text || undefined;
 }
 
+function xmlChildTextLocal(node: XmlNode | undefined, name: string): string | undefined {
+  const child = xmlChildrenLocal(node, name)[0];
+  if (!child) return undefined;
+  const text = child.text.trim();
+  return text || undefined;
+}
+
 function xmlFirstText(node: XmlNode | undefined, tag: string): string | undefined {
   const child = xmlDescendants(node, tag)[0];
+  if (!child) return undefined;
+  const text = child.text.trim();
+  return text || undefined;
+}
+
+function xmlFirstTextLocal(node: XmlNode | undefined, name: string): string | undefined {
+  const child = xmlDescendantsLocal(node, name)[0];
   if (!child) return undefined;
   const text = child.text.trim();
   return text || undefined;
@@ -576,6 +640,28 @@ function xmlValue(node: XmlNode): string[] {
     if (text) values.push(decodeEntities(text));
   }
   return values;
+}
+
+function xmlLocalName(tag: string): string {
+  const separator = tag.lastIndexOf(':');
+  return separator >= 0 ? tag.slice(separator + 1) : tag;
+}
+
+function xmlChildrenLocal(node: XmlNode | undefined, name: string): XmlNode[] {
+  if (!node) return [];
+  return node.children.filter((child) => xmlLocalName(child.tag) === name);
+}
+
+function xmlDescendantsLocal(node: XmlNode | undefined, name: string): XmlNode[] {
+  if (!node) return [];
+  const result: XmlNode[] = [];
+  const stack = [...node.children];
+  while (stack.length) {
+    const current = stack.pop() as XmlNode;
+    if (xmlLocalName(current.tag) === name) result.push(current);
+    stack.push(...current.children);
+  }
+  return result;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1082,6 +1168,38 @@ function normalizeTeselaGenLocations(
   return { start, end, segments: converted };
 }
 
+function publicSegmentsForLocations(
+  locations: TeselaGenLocation[],
+  strand: StrandDirection,
+  circular: boolean,
+  sequenceLength: number,
+): TeselaGenLocation[] {
+  const usable = locations.filter(
+    (location) =>
+      Number.isFinite(location.start) &&
+      Number.isFinite(location.end) &&
+      location.start >= 0 &&
+      location.end >= 0 &&
+      (sequenceLength === 0 ||
+        (location.start <= sequenceLength && location.end <= sequenceLength)),
+  );
+  if (usable.length === 0) return [];
+  if (usable.length === 1) {
+    const location = usable[0];
+    if (circular && sequenceLength > 0 && location.start > location.end) {
+      const split: TeselaGenLocation[] = [];
+      if (location.start < sequenceLength) {
+        split.push({ start: location.start, end: sequenceLength });
+      }
+      if (location.end > 0) split.push({ start: 0, end: location.end });
+      return strand === -1 ? [...split].reverse() : split;
+    }
+    return usable;
+  }
+  const ordered = strand === -1 ? [...usable].reverse() : [...usable];
+  return ordered.filter((location) => location.start !== location.end);
+}
+
 function convertTeselaGenFeature(
   feature: TeselaGenFeature,
   sequenceLength: number,
@@ -1092,6 +1210,7 @@ function convertTeselaGenFeature(
   const notes: Record<string, string[]> = {};
   if (feature.notes && typeof feature.notes === 'object') {
     for (const [key, value] of Object.entries(feature.notes)) {
+      if (isInternalNoteKey(key) || key === SEGMENTS_PUBLIC_NOTE) continue;
       const values = noteArray(value);
       if (values.length > 0) notes[key] = values;
     }
@@ -1102,10 +1221,28 @@ function convertTeselaGenFeature(
 
   const location = normalizeTeselaGenLocations(feature, sequenceLength, circular);
   if (location.start === location.end && location.segments.length === 0) return undefined;
+
+  const strand: StrandDirection =
+    Number(feature.strand) === -1 ? -1 : Number(feature.strand) === 0 ? 0 : 1;
+  const locations =
+    location.segments.length > 0
+      ? location.segments
+      : [{ start: location.start, end: location.end }];
   if (location.segments.length > 1) {
     notes[SEGMENTS_NOTE] = [
       location.segments.map((segment) => `${segment.start}-${segment.end}`).join(','),
     ];
+  }
+  const publicSegments = publicSegmentsForLocations(
+    locations,
+    strand,
+    circular,
+    sequenceLength,
+  );
+  if (publicSegments.length > 1) {
+    notes[SEGMENTS_PUBLIC_NOTE] = publicSegments.map(
+      (segment) => `${segment.start}-${segment.end}`,
+    );
   }
 
   const color = normalizeColor(
@@ -1120,8 +1257,6 @@ function convertTeselaGenFeature(
     notes.label?.[0] ||
     notes.ApEinfo_label?.[0] ||
     mapped.type;
-  const strand: StrandDirection =
-    Number(feature.strand) === -1 ? -1 : Number(feature.strand) === 0 ? 0 : 1;
   const codonStartRaw = Number.parseInt(notes.codon_start?.[0] ?? '', 10);
   const translation = notes.translation?.[0]?.replace(/\s+/g, '');
 
@@ -1501,7 +1636,7 @@ function parseSnapGeneFeatures(
     const notes: Record<string, string[]> = {};
     for (const qualifier of xmlChildren(node, 'Q')) {
       const key = qualifier.attrs.name;
-      if (!key) continue;
+      if (!key || isInternalNoteKey(key) || key === SEGMENTS_PUBLIC_NOTE) continue;
       const values = xmlValue(qualifier).map((value) => stripHtml(value));
       if (values.length > 0) notes[key] = values;
     }
@@ -1537,6 +1672,18 @@ function parseSnapGeneFeatures(
     else if (directionality === 3) strand = 0;
     if (directionNote === 'NONE') strand = 0;
     if (directionNote === 'BOTH') strand = 0;
+
+    const publicSegments = publicSegmentsForLocations(
+      locations,
+      strand,
+      circular,
+      sequenceLength,
+    );
+    if (publicSegments.length > 1) {
+      notes[SEGMENTS_PUBLIC_NOTE] = publicSegments.map(
+        (segment) => `${segment.start}-${segment.end}`,
+      );
+    }
 
     const name =
       node.attrs.name?.trim() ||
@@ -1960,6 +2107,63 @@ function parseSegmentsNote(value: string | undefined): TeselaGenLocation[] {
   return segments;
 }
 
+function parseSegmentNoteValues(values: string[] | undefined): TeselaGenLocation[] {
+  if (!values || values.length === 0) return [];
+  const segments: TeselaGenLocation[] = [];
+  for (const value of values) {
+    segments.push(...parseSegmentsNote(value));
+  }
+  return segments;
+}
+
+function splitFeatureSpan(
+  start: number,
+  end: number,
+  circular: boolean,
+  sequenceLength: number,
+): TeselaGenLocation[] {
+  if (start === end) return [];
+  if (circular && sequenceLength > 0 && start > end) {
+    const segments: TeselaGenLocation[] = [];
+    if (start < sequenceLength) segments.push({ start, end: sequenceLength });
+    if (end > 0) segments.push({ start: 0, end });
+    return segments;
+  }
+  return [{ start, end: Math.max(start, end) }];
+}
+
+function featureSegmentLocations(
+  feature: SequenceFeature,
+  circular: boolean,
+  sequenceLength: number,
+): TeselaGenLocation[] {
+  const publicSegments = parseSegmentNoteValues(feature.notes?.[SEGMENTS_PUBLIC_NOTE]);
+  const legacySegments = parseSegmentNoteValues(feature.notes?.[SEGMENTS_NOTE] ?? feature.notes?.[LEGACY_SEGMENTS_NOTE]);
+  const stored =
+    publicSegments.length > 0
+      ? feature.strand === -1
+        ? [...publicSegments].reverse()
+        : publicSegments
+      : legacySegments;
+  const usable = stored.filter(
+    (segment) =>
+      segment.start >= 0 &&
+      segment.end <= sequenceLength &&
+      segment.start < segment.end,
+  );
+  if (usable.length > 0) {
+    const span = segmentSpan(
+      usable,
+      feature.start,
+      feature.end,
+      circular,
+      sequenceLength,
+    );
+    if (span.start === feature.start && span.end === feature.end) return usable;
+  }
+  return splitFeatureSpan(feature.start, feature.end, circular, sequenceLength);
+}
+
 function segmentSpan(
   segments: TeselaGenLocation[],
   featureStart: number,
@@ -1992,7 +2196,12 @@ function featureToTeselaGen(
   const notes: Record<string, string[]> = {};
   if (feature.notes) {
     for (const [key, values] of Object.entries(feature.notes)) {
-      if (key === SEGMENTS_NOTE || key === ORIGINAL_TYPE_NOTE) continue;
+      if (
+        isInternalNoteKey(key) ||
+        key === SEGMENTS_PUBLIC_NOTE
+      ) {
+        continue;
+      }
       if (key === 'label') continue;
       const cleaned = values.filter((value) => value !== undefined && value !== null);
       if (cleaned.length > 0) notes[key] = cleaned;
@@ -2004,20 +2213,13 @@ function featureToTeselaGen(
   if (feature.codonStart) notes.codon_start = [String(feature.codonStart)];
   if (feature.translation) notes.translation = [feature.translation];
 
-  const storedSegments = parseSegmentsNote(feature.notes?.[SEGMENTS_NOTE]?.[0]);
-  const storedSpan = segmentSpan(
-    storedSegments,
-    feature.start,
-    feature.end,
+  let locations: TeselaGenLocation[] = featureSegmentLocations(
+    feature,
     circular,
     sequenceLength,
-  );
-  let locations: TeselaGenLocation[] =
-    storedSegments.length > 0 &&
-    storedSpan.start === feature.start &&
-    storedSpan.end === feature.end
-      ? storedSegments.map((segment) => ({ start: segment.start, end: segment.end - 1 }))
-      : [];
+  )
+    .filter((segment) => segment.start < segment.end)
+    .map((segment) => ({ start: segment.start, end: segment.end - 1 }));
   if (locations.length === 0) {
     if (feature.start > feature.end && circular && sequenceLength > 0) {
       locations = [{ start: feature.start, end: sequenceLength - 1 }];
@@ -2095,8 +2297,1809 @@ function documentToTeselaGen(doc: PlasmidDocument): TeselaGenSequence {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Public API                                                                  */
+/* SnapGene binary writing                                                     */
 /* -------------------------------------------------------------------------- */
+
+const SNAP_GENE_EXPORT_VERSION = 14;
+const SNAP_GENE_IMPORT_VERSION = 14;
+
+const SNAP_GENE_OPERATIONS: Record<CloningOperationType, string> = {
+  import: 'invalid',
+  restriction_ligation: 'restrictionCloning',
+  gibson_assembly: 'gibsonAssembly',
+  golden_gate: 'goldenGateAssembly',
+  gateway_bp: 'gatewayBPCloning',
+  gateway_lr: 'gatewayLRCloning',
+  pcr: 'amplifyFragment',
+  soe_pcr: 'amplifyFragment',
+  site_directed_mutagenesis: 'primerDirectedMutagenesis',
+  blunting: 'replace',
+  manual_edit: 'replace',
+};
+
+function encodeUtf8(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.byteLength;
+  }
+  return result;
+}
+
+function snapGenePacket(type: number, payload: Uint8Array): Uint8Array {
+  const result = new Uint8Array(5 + payload.byteLength);
+  const view = new DataView(result.buffer);
+  view.setUint8(0, type);
+  view.setUint32(1, payload.byteLength, false);
+  result.set(payload, 5);
+  return result;
+}
+
+function escapeXmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+}
+
+function escapeXmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+}
+
+function snapGeneDateParts(iso: string): { date: string; time: string } {
+  const parsed = new Date(iso);
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return {
+    date: `${date.getUTCFullYear()}.${date.getUTCMonth() + 1}.${date.getUTCDate()}`,
+    time: `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`,
+  };
+}
+
+function buildSnapGeneCookie(): Uint8Array {
+  const payload = new Uint8Array(14);
+  payload.set(encodeAscii('SnapGene'), 0);
+  const view = new DataView(payload.buffer);
+  view.setUint16(8, 1, false);
+  view.setUint16(10, SNAP_GENE_EXPORT_VERSION, false);
+  view.setUint16(12, SNAP_GENE_IMPORT_VERSION, false);
+  return snapGenePacket(0x09, payload);
+}
+
+function encodeAscii(text: string): Uint8Array {
+  const bytes = new Uint8Array(text.length);
+  for (let index = 0; index < text.length; index += 1) {
+    bytes[index] = text.charCodeAt(index) & 0xff;
+  }
+  return bytes;
+}
+
+function buildSnapGeneDnaPacket(
+  sequence: string,
+  circular: boolean,
+  methylation: PlasmidDocument['methylationProfile'],
+): Uint8Array {
+  let flags = 0x02; // Double-stranded DNA.
+  if (circular) flags |= 0x01;
+  if (methylation?.dam) flags |= 0x04;
+  if (methylation?.dcm) flags |= 0x08;
+  const sequenceBytes = encodeAscii(sequence);
+  const payload = new Uint8Array(1 + sequenceBytes.byteLength);
+  payload[0] = flags;
+  payload.set(sequenceBytes, 1);
+  return snapGenePacket(0x00, payload);
+}
+
+function buildSnapGeneNotesPacket(doc: PlasmidDocument): Uint8Array {
+  const created = snapGeneDateParts(doc.createdAt);
+  const modified = snapGeneDateParts(doc.updatedAt ?? doc.createdAt);
+  const lines = ['<Notes>', '<Type>Synthetic</Type>', '<ConfirmedExperimentally>0</ConfirmedExperimentally>'];
+  lines.push(`<CustomMapLabel>${escapeXmlText(doc.name)}</CustomMapLabel>`);
+  lines.push('<UseCustomMapLabel>1</UseCustomMapLabel>');
+  if (doc.description && doc.description.trim()) {
+    lines.push(`<Description>${escapeXmlText(doc.description)}</Description>`);
+  }
+  lines.push(`<Created UTC="${created.time}">${created.date}</Created>`);
+  lines.push(`<LastModified UTC="${modified.time}">${modified.date}</LastModified>`);
+  lines.push('<SequenceClass>UNA</SequenceClass>');
+  const methylation = doc.methylationProfile ?? { dam: true, dcm: true, cpg: false };
+  const disabled: string[] = [];
+  if (!methylation.dam) disabled.push('dam-');
+  if (!methylation.dcm) disabled.push('dcm-');
+  if (!methylation.cpg && disabled.length > 0) disabled.push('cpg-');
+  const transformedInto = disabled.length > 0 ? disabled.join(' ') : 'unspecified';
+  lines.push(`<TransformedInto>${escapeXmlText(transformedInto)}</TransformedInto>`);
+  lines.push('</Notes>');
+  return snapGenePacket(0x06, encodeUtf8(lines.join('')));
+}
+
+function snapGeneFeatureSegments(
+  feature: SequenceFeature,
+  circular: boolean,
+  sequenceLength: number,
+): TeselaGenLocation[] {
+  const stored = featureSegmentLocations(feature, circular, sequenceLength).filter(
+    (segment) =>
+      segment.start >= 0 &&
+      segment.end <= sequenceLength &&
+      segment.start < segment.end,
+  );
+  if (stored.length > 0) return stored;
+  if (feature.start === feature.end) return [];
+  if (circular && feature.start > feature.end) {
+    const segments: TeselaGenLocation[] = [];
+    if (feature.start < sequenceLength) {
+      segments.push({ start: feature.start, end: sequenceLength });
+    }
+    if (feature.end > 0) segments.push({ start: 0, end: feature.end });
+    return segments;
+  }
+  if (feature.end < feature.start) return [];
+  return [{ start: feature.start, end: feature.end }];
+}
+
+function buildSnapGeneFeatureXml(
+  feature: SequenceFeature,
+  circular: boolean,
+  sequenceLength: number,
+): string | undefined {
+  const segments = snapGeneFeatureSegments(feature, circular, sequenceLength);
+  if (segments.length === 0) return undefined;
+
+  const originalType = (feature.notes?.[ORIGINAL_TYPE_NOTE] ?? feature.notes?.[LEGACY_ORIGINAL_TYPE_NOTE])?.[0]?.trim();
+  const type = originalType || feature.type;
+  const directionality = feature.strand === -1 ? 2 : feature.strand === 1 ? 1 : 0;
+  const attributes = [
+    `name="${escapeXmlAttribute(feature.name)}"`,
+    `type="${escapeXmlAttribute(type)}"`,
+    `directionality="${directionality}"`,
+  ];
+  const parts: string[] = [`<Feature ${attributes.join(' ')}>`];
+  const color = normalizeColor(feature.color, DEFAULT_FEATURE_COLORS[feature.type]);
+  for (const segment of segments) {
+    parts.push(
+      `<Segment range="${segment.start + 1}-${segment.end}" color="${escapeXmlAttribute(color)}" type="standard"/>`,
+    );
+  }
+
+  const notes = feature.notes ?? {};
+  let wroteCodonStart = false;
+  let wroteTranslation = false;
+  for (const [key, values] of Object.entries(notes)) {
+    if (
+      isInternalNoteKey(key) ||
+      key === SEGMENTS_PUBLIC_NOTE
+    ) {
+      continue;
+    }
+    if (key === 'codon_start') wroteCodonStart = true;
+    if (key === 'translation') wroteTranslation = true;
+    if (!values || values.length === 0) continue;
+    const qualifier = [`<Q name="${escapeXmlAttribute(key)}">`];
+    for (const value of values) {
+      qualifier.push(`<V text="${escapeXmlAttribute(value)}"/>`);
+    }
+    qualifier.push('</Q>');
+    parts.push(qualifier.join(''));
+  }
+  if (feature.codonStart && !wroteCodonStart) {
+    parts.push(`<Q name="codon_start"><V int="${feature.codonStart}"/></Q>`);
+  }
+  if (feature.translation && !wroteTranslation) {
+    parts.push(
+      `<Q name="translation"><V text="${escapeXmlAttribute(feature.translation)}"/></Q>`,
+    );
+  }
+  parts.push('</Feature>');
+  return parts.join('');
+}
+
+function buildSnapGeneFeaturesPacket(doc: PlasmidDocument, sequenceLength: number): Uint8Array {
+  const circular = doc.topology === 'circular';
+  const features: string[] = [];
+  let featureId = 0;
+  for (const feature of doc.features) {
+    const xml = buildSnapGeneFeatureXml(feature, circular, sequenceLength);
+    if (xml) {
+      features.push(xml.replace('<Feature ', `<Feature recentID="${featureId}" `));
+      featureId += 1;
+    }
+  }
+  const xml = [
+    '<?xml version="1.0"?>',
+    `<Features nextValidID="${featureId}">`,
+    ...features,
+    '</Features>',
+  ].join('');
+  return snapGenePacket(0x0a, encodeUtf8(xml));
+}
+
+function buildSnapGenePrimersPacket(doc: PlasmidDocument): Uint8Array {
+  const sequence = normalizeSequence(doc.sequence);
+  const circular = doc.topology === 'circular';
+  const primers: string[] = [];
+  let primerId = 0;
+  for (const primer of doc.primers) {
+    if (primer.bindingStart === primer.bindingEnd || sequence.length === 0) continue;
+    const bindingEnd = primer.bindingEnd === 0 ? sequence.length : primer.bindingEnd;
+    const location = `${primer.bindingStart}-${bindingEnd - 1}`;
+    const template = templateSlice(
+      sequence,
+      primer.bindingStart,
+      bindingEnd,
+      circular,
+    );
+    let annealed = primer.strand === -1 ? reverseComplement(template) : template;
+    if (!annealed || !normalizeSequence(primer.sequence).endsWith(annealed)) {
+      const bindingLength =
+        primer.bindingEnd > primer.bindingStart
+          ? primer.bindingEnd - primer.bindingStart
+          : sequence.length - primer.bindingStart + primer.bindingEnd;
+      annealed = primer.sequence.slice(Math.max(0, primer.sequence.length - bindingLength));
+    }
+    annealed = normalizeSequence(annealed);
+    const boundStrand = primer.strand === -1 ? 1 : 0;
+    const meltingTemperature = Number.isFinite(primer.tmAnnealing)
+      ? Math.round(primer.tmAnnealing)
+      : undefined;
+    const siteAttributes = [
+      `location="${location}"`,
+      `boundStrand="${boundStrand}"`,
+      ...(annealed ? [`annealedBases="${escapeXmlAttribute(annealed)}"`] : []),
+      ...(meltingTemperature !== undefined ? [`meltingTemperature="${meltingTemperature}"`] : []),
+    ];
+    const components = annealed
+      ? `<Component hybridizedRange="${location}" bases="${escapeXmlAttribute(annealed)}"/>`
+      : '';
+    primers.push(
+      [
+        `<Primer recentID="${primerId}" name="${escapeXmlAttribute(primer.name)}" sequence="${escapeXmlAttribute(primer.sequence)}">`,
+        `<BindingSite ${siteAttributes.join(' ')}>${components}</BindingSite>`,
+        '</Primer>',
+      ].join(''),
+    );
+    primerId += 1;
+  }
+  const xml = [
+    '<?xml version="1.0"?>',
+    `<Primers nextValidID="${primerId}">`,
+    '<HybridizationParams minContinuousMatchLen="10" allowMismatch="1" minMeltingTemperature="40"/>',
+    ...primers,
+    '</Primers>',
+  ].join('');
+  return snapGenePacket(0x05, encodeUtf8(xml));
+}
+
+function buildSnapGenePropertiesPacket(doc: PlasmidDocument): Uint8Array | undefined {
+  if (!doc.linearEnds) return undefined;
+  const stickiness = (type: OverhangEnd['type']): number =>
+    type === '5-prime' ? 1 : type === '3-prime' ? -1 : 0;
+  const modification = (end: OverhangEnd): string =>
+    end.phosphorylated ? 'FivePrimePhosphorylated' : 'Unmodified';
+  const xml = [
+    '<AdditionalSequenceProperties>',
+    `<UpstreamStickiness>${stickiness(doc.linearEnds.left.type)}</UpstreamStickiness>`,
+    `<DownstreamStickiness>${stickiness(doc.linearEnds.right.type)}</DownstreamStickiness>`,
+    `<UpstreamModification>${modification(doc.linearEnds.left)}</UpstreamModification>`,
+    `<DownstreamModification>${modification(doc.linearEnds.right)}</DownstreamModification>`,
+    '</AdditionalSequenceProperties>',
+  ].join('');
+  return snapGenePacket(0x08, encodeUtf8(xml));
+}
+
+function buildSnapGeneHistoryPacket(doc: PlasmidDocument): Uint8Array | undefined {
+  const history = Array.isArray(doc.history) ? doc.history : [];
+  if (history.length === 0) return undefined;
+  const reversed = [...history].reverse();
+  const ids = new Map<CloningHistoryNode, number>();
+  reversed.forEach((node, index) => ids.set(node, reversed.length - 1 - index));
+  const circular = doc.topology === 'circular';
+  const sequenceLength = normalizeSequence(doc.sequence).length;
+  const buildNode = (node: CloningHistoryNode, depth: number): string => {
+    const id = ids.get(node) ?? 0;
+    const child = depth + 1 < reversed.length ? reversed[depth + 1] : undefined;
+    const operation = SNAP_GENE_OPERATIONS[node.operation] ?? 'replace';
+    const attributes = [
+      `name="${escapeXmlAttribute(doc.name)}"`,
+      'type="DNA"',
+      `seqLen="${sequenceLength}"`,
+      'strandedness="double"',
+      `ID="${id}"`,
+      `circular="${circular ? 1 : 0}"`,
+      ...(depth > 0 ? ['resurrectable="1"'] : []),
+      `operation="${operation}"`,
+      ...(node.timestamp ? [`timestamp="${escapeXmlAttribute(node.timestamp)}"`] : []),
+    ];
+    const parts: string[] = [`<Node ${attributes.join(' ')}>`];
+    const enzymes = node.enzymesUsed ?? [];
+    if (child || enzymes.length > 0) {
+      const summaryAttributes = ['manipulation="insert"'];
+      if (enzymes[0]) summaryAttributes.push(`name1="${escapeXmlAttribute(enzymes[0])}"`);
+      if (enzymes[1]) summaryAttributes.push(`name2="${escapeXmlAttribute(enzymes[1])}"`);
+      parts.push(`<InputSummary ${summaryAttributes.join(' ')}/>`);
+    }
+    for (const primerName of node.primersUsed ?? []) {
+      const primer = doc.primers.find((item) => item.name === primerName);
+      if (primer) {
+        parts.push(
+          `<Oligo name="${escapeXmlAttribute(primer.name)}" sequence="${escapeXmlAttribute(primer.sequence)}"/>`,
+        );
+      }
+    }
+    if (child) {
+      parts.push(buildNode(child, depth + 1));
+    }
+    parts.push('</Node>');
+    return parts.join('');
+  };
+  const xml = ['<HistoryTree>', buildNode(reversed[0], 0), '</HistoryTree>'].join('');
+  return snapGenePacket(0x07, encodeUtf8(xml));
+}
+
+/**
+ * Export a document as a SnapGene `.dna` binary file. The writer emits the
+ * cookie, DNA, features, primers, notes, additional-properties and history
+ * packets so that the sequence, annotations and cloning provenance survive a
+ * round trip through SnapGene or this module's parser.
+ */
+export function exportPlasmidToSnapGene(doc: PlasmidDocument): Uint8Array {
+  const sequence = normalizeSequence(doc.sequence);
+  const circular = doc.topology === 'circular';
+  const packets: Uint8Array[] = [
+    buildSnapGeneCookie(),
+    buildSnapGeneDnaPacket(sequence, circular, doc.methylationProfile),
+    buildSnapGeneNotesPacket(doc),
+    buildSnapGeneFeaturesPacket(doc, sequence.length),
+    buildSnapGenePrimersPacket(doc),
+  ];
+  const properties = buildSnapGenePropertiesPacket(doc);
+  if (properties) packets.push(properties);
+  const history = buildSnapGeneHistoryPacket(doc);
+  if (history) packets.push(history);
+  return concatBytes(packets);
+}
+
+/* -------------------------------------------------------------------------- */
+/* FASTQ sequencing reads                                                      */
+/* -------------------------------------------------------------------------- */
+
+function fastqSequenceIsValid(sequence: string): boolean {
+  return /^[ACGTUNRYSWKMBDHVacgtunryswkmbdhv]+$/.test(sequence);
+}
+
+/**
+ * Parse a FASTQ file (Phred+33 qualities). Multiple records and both
+ * four-line and wrapped records are accepted. Invalid records raise an Error.
+ */
+export function parseFastq(text: string): SequencingRead[] {
+  const source = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const lines = source.split('\n');
+  const reads: SequencingRead[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    while (index < lines.length && lines[index].trim() === '') index += 1;
+    if (index >= lines.length) break;
+
+    const header = lines[index].trim();
+    if (!header.startsWith('@')) {
+      throw new Error(`Invalid FASTQ format: record ${reads.length + 1} header must start with @`);
+    }
+    const name = header.slice(1).trim();
+    if (!name) {
+      throw new Error(`Invalid FASTQ format: record ${reads.length + 1} has an empty name`);
+    }
+    index += 1;
+
+    const sequenceParts: string[] = [];
+    while (index < lines.length && !lines[index].startsWith('+')) {
+      sequenceParts.push(lines[index].trim());
+      index += 1;
+    }
+    if (index >= lines.length) {
+      throw new Error(`Invalid FASTQ format: record "${name}" is missing the + separator`);
+    }
+    const sequence = sequenceParts.join('').replace(/\s+/g, '');
+    if (!sequence) {
+      throw new Error(`Invalid FASTQ format: record "${name}" has an empty sequence`);
+    }
+    if (!fastqSequenceIsValid(sequence)) {
+      throw new Error(
+        `Invalid FASTQ format: record "${name}" contains non-nucleotide characters`,
+      );
+    }
+    index += 1;
+
+    let qualityText = '';
+    while (index < lines.length && qualityText.length < sequence.length) {
+      qualityText += lines[index].trim();
+      index += 1;
+    }
+    if (qualityText.length !== sequence.length) {
+      throw new Error(
+        `Invalid FASTQ format: record "${name}" quality length ${qualityText.length} does not match sequence length ${sequence.length}`,
+      );
+    }
+    const qualities: number[] = [];
+    for (let position = 0; position < qualityText.length; position += 1) {
+      const code = qualityText.charCodeAt(position);
+      if (code < 33 || code > 126) {
+        throw new Error(
+          `Invalid FASTQ format: record "${name}" contains a quality character outside the Phred+33 range`,
+        );
+      }
+      qualities.push(code - 33);
+    }
+    reads.push({
+      id: generateId('read'),
+      name,
+      sequence: sequence.toUpperCase(),
+      qualities,
+    });
+  }
+
+  if (reads.length === 0) {
+    throw new Error('Invalid FASTQ format: no records found');
+  }
+  return reads;
+}
+
+function fastqToDocuments(text: string, fileName: string): PlasmidDocument[] {
+  return parseFastq(text).map((read) =>
+    normalizeParsedSequence(
+      {
+        name: read.name,
+        sequence: read.sequence,
+        circular: false,
+      },
+      { fileName },
+    ),
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Plain text, DNASTAR and Serial Cloner format support                       */
+/* -------------------------------------------------------------------------- */
+
+function extractPlainSequence(
+  text: string,
+): { sequence: string; header: string } | undefined {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  let best = '';
+  let bestHeader = '';
+  let current: string[] = [];
+  let currentHeader: string[] = [];
+  let headerLines: string[] = [];
+
+  const flush = (): void => {
+    const joined = current.join('');
+    if (joined.length > best.length) {
+      best = joined;
+      bestHeader = headerLines.join(' ').trim();
+    }
+    current = [];
+    currentHeader = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const letters = trimmed.replace(/[\s\d]/g, '');
+    if (letters.length > 0 && /^[ACGTUNRYSWKMBDHVacgtunryswkmbdhv]+$/.test(letters)) {
+      current.push(letters);
+    } else {
+      if (current.length > 0) {
+        headerLines = currentHeader;
+        flush();
+      }
+      if (trimmed && !/^\s*[#;]/.test(trimmed)) {
+        currentHeader.push(trimmed);
+      }
+    }
+  }
+  if (current.length > 0) {
+    headerLines = currentHeader;
+    flush();
+  }
+  if (best.length < 4) return undefined;
+  return { sequence: best.toUpperCase(), header: bestHeader };
+}
+
+/**
+ * Parse the plain-text sequence layout written by DNASTAR Lasergene.
+ * SeqMan/SeqBuilder files may carry a descriptive header and use a line
+ * containing only `^^` to mark the start of the sequence.
+ */
+function parseDnastarText(text: string, fileName: string): PlasmidDocument[] {
+  const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
+  const marker = lines.findIndex((line) => line.trim() === '^^');
+  const headerText = marker >= 0 ? lines.slice(0, marker).join('\n') : normalized;
+  const body = marker >= 0 ? lines.slice(marker + 1).join('\n') : normalized;
+  const extracted = extractPlainSequence(body);
+  if (!extracted) {
+    throw new Error(`Unable to parse DNASTAR sequence file: ${fileName}`);
+  }
+  const quotedName = /"([^"\n]+)"/.exec(headerText)?.[1];
+  const name = quotedName || setExtensionlessName(fileName);
+  const circular = /\bcircular\b/i.test(headerText);
+  return [
+    normalizeParsedSequence(
+      {
+        name,
+        sequence: extracted.sequence,
+        circular,
+        ...(headerText.trim() ? { description: headerText.trim() } : {}),
+      },
+      { fileName },
+    ),
+  ];
+}
+
+/*
+ * Xdna reader. The binary layout follows the public description used by
+ * Biopython's Bio.SeqIO.XdnaIO module (Biopython License Agreement /
+ * BSD 3-Clause License) and the format notes published by incenp.org.
+ */
+function readPascalString(
+  bytes: Uint8Array,
+  offset: number,
+): { value: string; next: number } {
+  if (offset >= bytes.byteLength) {
+    throw new Error('Invalid Xdna file: truncated Pascal string');
+  }
+  const length = bytes[offset];
+  const start = offset + 1;
+  const end = start + length;
+  if (end > bytes.byteLength) {
+    throw new Error('Invalid Xdna file: truncated Pascal string');
+  }
+  return { value: decodeAscii(bytes.subarray(start, end)), next: end };
+}
+
+function readXdnaOverhang(
+  bytes: Uint8Array,
+  offset: number,
+): { end: OverhangEnd; next: number } {
+  const text = readPascalString(bytes, offset);
+  const parsed = Number.parseInt(text.value.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed === 0) {
+    return {
+      end: { type: 'blunt', sequence: '', phosphorylated: false },
+      next: text.next,
+    };
+  }
+  const length = Math.abs(parsed);
+  const start = text.next;
+  const end = start + length;
+  if (end > bytes.byteLength) {
+    throw new Error('Invalid Xdna file: truncated overhang sequence');
+  }
+  return {
+    end: {
+      type: parsed > 0 ? '5-prime' : '3-prime',
+      sequence: decodeAscii(bytes.subarray(start, end)).toUpperCase(),
+      phosphorylated: false,
+    },
+    next: end,
+  };
+}
+
+function parseXdnaColor(value: string): string {
+  const [red, green, blue] = value
+    .split(',')
+    .map((part) => Number.parseInt(part.trim(), 10));
+  if (
+    Number.isFinite(red) &&
+    Number.isFinite(green) &&
+    Number.isFinite(blue)
+  ) {
+    return `#${[red, green, blue]
+      .map((component) => clamp(component, 0, 255).toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase()}`;
+  }
+  return '#6B7280';
+}
+
+function parseXdnaFeatureDescription(
+  description: string,
+): { note?: string; qualifiers: Record<string, string[]> } {
+  const qualifiers: Record<string, string[]> = {};
+  for (const rawLine of description.split(/\r\n|\r|\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const match = /^([^=]+)="([^"]*)"?$/.exec(line);
+    if (match) {
+      const key = match[1].trim();
+      if (key) {
+        if (!qualifiers[key]) qualifiers[key] = [];
+        qualifiers[key].push(match[2]);
+      }
+    } else if (!line.includes('"')) {
+      if (!qualifiers.note) qualifiers.note = [];
+      qualifiers.note.push(line);
+    }
+  }
+  return {
+    ...(qualifiers.note ? { note: qualifiers.note[0] } : {}),
+    qualifiers,
+  };
+}
+
+function parseXdnaBuffer(
+  buffer: ArrayBuffer | Uint8Array | string,
+  fileName: string,
+): PlasmidDocument {
+  const bytes = toUint8Array(buffer);
+  if (bytes.byteLength < 112) {
+    throw new Error('Invalid Xdna file: header is shorter than 112 bytes');
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const version = bytes[0];
+  if (version !== 0) {
+    throw new Error(`Unsupported Xdna version: ${version}`);
+  }
+  const sequenceType = bytes[1];
+  if (sequenceType < 1 || sequenceType > 4) {
+    throw new Error(`Invalid Xdna file: unknown sequence type ${sequenceType}`);
+  }
+  if (sequenceType === 4) {
+    throw new Error('Invalid Xdna file: protein Xdna documents are not DNA sequences');
+  }
+  const topology = bytes[2];
+  const sequenceLength = view.getUint32(28, false);
+  const commentLength = view.getUint32(96, false);
+  const sequenceStart = 112;
+  const sequenceEnd = sequenceStart + sequenceLength;
+  const commentEnd = sequenceEnd + commentLength;
+  if (commentEnd > bytes.byteLength) {
+    throw new Error('Invalid Xdna file: truncated sequence or comment section');
+  }
+  const sequence = normalizeSequence(decodeAscii(bytes.subarray(sequenceStart, sequenceEnd)));
+  const comment = decodeUtf8(bytes.subarray(sequenceEnd, commentEnd)).trim();
+  const nameFromComment = comment.split(/\s+/)[0] ?? '';
+
+  const features: TeselaGenFeature[] = [];
+  let linearEnds: { left: OverhangEnd; right: OverhangEnd } | undefined;
+  let offset = commentEnd;
+  if (offset < bytes.byteLength) {
+    offset += 1; // Annotation section marker.
+    const right = readXdnaOverhang(bytes, offset);
+    const left = readXdnaOverhang(bytes, right.next);
+    offset = left.next;
+    if (topology === 0) {
+      linearEnds = { left: left.end, right: right.end };
+    }
+    if (offset >= bytes.byteLength) {
+      throw new Error('Invalid Xdna file: truncated annotation section');
+    }
+    let featureCount = bytes[offset];
+    offset += 1;
+    while (featureCount > 0) {
+      featureCount -= 1;
+      const name = readPascalString(bytes, offset);
+      const description = readPascalString(bytes, name.next);
+      const type = readPascalString(bytes, description.next);
+      const start = readPascalString(bytes, type.next);
+      const end = readPascalString(bytes, start.next);
+      offset = end.next;
+      if (offset + 4 > bytes.byteLength) {
+        throw new Error('Invalid Xdna file: truncated feature flags');
+      }
+      const flags = bytes.subarray(offset, offset + 4);
+      offset += 4;
+      const color = readPascalString(bytes, offset);
+      offset = color.next;
+      const parsed = parseXdnaFeatureDescription(description.value);
+      const forward = flags[0] !== 0;
+      let startValue = Number.parseInt(start.value, 10);
+      let endValue = Number.parseInt(end.value, 10);
+      if (!Number.isFinite(startValue) || !Number.isFinite(endValue)) continue;
+      if (!forward) {
+        const swapped = startValue;
+        startValue = endValue;
+        endValue = swapped;
+      }
+      features.push({
+        name: name.value || type.value || 'Feature',
+        type: type.value || 'misc_feature',
+        start: Math.max(0, startValue - 1),
+        end: Math.max(0, endValue - 1),
+        strand: forward ? 1 : -1,
+        color: parseXdnaColor(color.value),
+        notes: parsed.qualifiers,
+      });
+    }
+  }
+
+  const document = normalizeParsedSequence(
+    {
+      name: nameFromComment || setExtensionlessName(fileName),
+      sequence,
+      circular: topology === 1,
+      ...(comment ? { description: comment } : {}),
+      features,
+    },
+    { fileName },
+  );
+  return linearEnds ? { ...document, linearEnds } : document;
+}
+
+function isXdnaMagic(content: ArrayBuffer | string): boolean {
+  if (typeof content === 'string') return false;
+  const bytes = new Uint8Array(content);
+  if (bytes.byteLength < 116) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const version = bytes[0];
+  const type = bytes[1];
+  const topology = bytes[2];
+  const length = view.getUint32(28, false);
+  const commentLength = view.getUint32(96, false);
+  return (
+    version === 0 &&
+    type >= 1 &&
+    type <= 4 &&
+    topology <= 1 &&
+    length > 0 &&
+    112 + length + commentLength <= bytes.byteLength
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* XML sequence formats                                                        */
+/* -------------------------------------------------------------------------- */
+
+function stripXmlNamespacePrefixes(xml: string): string {
+  return xml.replace(/<(\/?)([A-Za-z_][\w.-]*):/g, '<$1');
+}
+
+function parseSbolText(text: string, fileName: string): PlasmidDocument[] {
+  let root: XmlNode;
+  try {
+    root = parseXml(text);
+  } catch {
+    return [];
+  }
+  const components =
+    xmlLocalName(root.tag) === 'DnaComponent'
+      ? [root]
+      : xmlDescendantsLocal(root, 'DnaComponent');
+  if (components.length === 0) return [];
+  const documents: PlasmidDocument[] = [];
+  for (const component of components) {
+    const dnaSequence = xmlDescendantsLocal(component, 'DnaSequence')[0];
+    const nucleotides =
+      xmlChildTextLocal(dnaSequence, 'nucleotides') ??
+      xmlChildTextLocal(component, 'nucleotides') ??
+      xmlFirstTextLocal(component, 'elements');
+    if (!nucleotides) continue;
+    const name =
+      xmlChildTextLocal(component, 'name') ??
+      xmlChildTextLocal(component, 'displayId') ??
+      setExtensionlessName(fileName);
+    const features: TeselaGenFeature[] = [];
+    for (const annotation of xmlDescendantsLocal(component, 'SequenceAnnotation')) {
+      const start = Number.parseInt(
+        xmlChildTextLocal(annotation, 'bioStart') ??
+          annotation.attrs.bioStart ??
+          xmlChildTextLocal(annotation, 'start') ??
+          annotation.attrs.start ??
+          '',
+        10,
+      );
+      const end = Number.parseInt(
+        xmlChildTextLocal(annotation, 'bioEnd') ??
+          annotation.attrs.bioEnd ??
+          xmlChildTextLocal(annotation, 'end') ??
+          annotation.attrs.end ??
+          '',
+        10,
+      );
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+      const strandText = (
+        xmlChildTextLocal(annotation, 'strand') ??
+        annotation.attrs.strand ??
+        '+'
+      ).trim();
+      const notes: Record<string, string[]> = {};
+      for (const [key, value] of Object.entries(annotation.attrs)) {
+        if (/about$|resource$|label$/i.test(key) && value) notes.about = [value];
+      }
+      const label =
+        xmlChildTextLocal(annotation, 'name') ??
+        xmlChildTextLocal(annotation, 'displayId') ??
+        notes.about?.[0];
+      features.push({
+        name: label || 'SBOL feature',
+        type: 'misc_feature',
+        start: Math.max(0, start - 1),
+        end: Math.max(0, Math.max(start, end) - 1),
+        strand: strandText === '-' ? -1 : 1,
+        color: DEFAULT_FEATURE_COLORS.misc_feature,
+        ...(Object.keys(notes).length > 0 ? { notes } : {}),
+      });
+    }
+    documents.push(
+      normalizeParsedSequence(
+        {
+          name,
+          sequence: nucleotides,
+          circular: false,
+          features,
+        },
+        { fileName },
+      ),
+    );
+  }
+  return documents;
+}
+
+async function parseXmlSequenceText(
+  text: string,
+  fileName: string,
+  extension: string,
+): Promise<PlasmidDocument[]> {
+  if (/<geneious|geneiousDocument/i.test(text)) {
+    const results = (await geneiousXmlToJson(text, {})) as TeselaGenParseResult[];
+    return teselaGenResultsToDocuments(results, { fileName });
+  }
+  const sbolLike = /DnaComponent|<sbol|<rdf:RDF|<SBOL/i.test(text);
+  if (sbolLike || extension === 'sbol' || extension === 'rdf') {
+    const direct = parseSbolText(text, fileName);
+    if (direct.length > 0) return direct;
+    let results = (await sbolXmlToJson(text, {})) as TeselaGenParseResult[];
+    let documents = teselaGenResultsToDocuments(results, { fileName });
+    if (documents.length === 0) {
+      const stripped = stripXmlNamespacePrefixes(text);
+      results = (await sbolXmlToJson(stripped, {})) as TeselaGenParseResult[];
+      documents = teselaGenResultsToDocuments(results, { fileName });
+    }
+    if (documents.length > 0) return documents;
+  }
+  try {
+    const results = (await anyToJson(text, { fileName })) as TeselaGenParseResult[];
+    const documents = teselaGenResultsToDocuments(results, { fileName });
+    if (documents.length > 0) return documents;
+  } catch {
+    // Fall through to the descriptive error below.
+  }
+  throw new Error(`Unable to parse XML sequence file: ${fileName}`);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Protein files                                                               */
+/* -------------------------------------------------------------------------- */
+
+interface FlatFileFeature {
+  type: string;
+  location: string;
+  qualifiers: Record<string, string[]>;
+}
+
+interface FlatFileRecord {
+  locus: string;
+  declaredLength?: number;
+  molecule?: string;
+  definition?: string;
+  accession?: string;
+  features: FlatFileFeature[];
+  sequence: string;
+}
+
+const PROTEIN_COLORS: Record<string, string> = {
+  CDS: '#EF4444',
+  Region: '#8B5CF6',
+  domain: '#8B5CF6',
+  Domain: '#8B5CF6',
+  motif: '#10B981',
+  Motif: '#10B981',
+  signal_peptide: '#F59E0B',
+  transit_peptide: '#F59E0B',
+  chain: '#3B82F6',
+  propeptide: '#0EA5E9',
+  misc_feature: '#6B7280',
+};
+
+function splitTopLevelCommas(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === '(') depth += 1;
+    else if (char === ')') depth = Math.max(0, depth - 1);
+    else if (char === ',' && depth === 0) {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+interface LocationPart {
+  start: number;
+  end: number;
+  strand: 1 | -1;
+}
+
+function parseLocationParts(location: string, strand: 1 | -1 = 1): LocationPart[] {
+  const value = location.replace(/\s+/g, '');
+  const complement = /^complement\((.*)\)$/i.exec(value);
+  if (complement) {
+    return parseLocationParts(complement[1], strand === 1 ? -1 : 1);
+  }
+  const group = /^(?:join|order)\((.*)\)$/i.exec(value);
+  if (group) {
+    return splitTopLevelCommas(group[1]).flatMap((part) =>
+      parseLocationParts(part, strand),
+    );
+  }
+  const cleaned = value.replace(/^[<>]/, '').replace(/[<>]$/, '');
+  const range = /^(\d+)(?:\^(\d+)|\.\.(\d+))?$/.exec(cleaned);
+  if (!range) return [];
+  const startOneBased = Number(range[1]);
+  const endOneBased = Number(range[3] ?? range[2] ?? range[1]);
+  if (!Number.isFinite(startOneBased) || !Number.isFinite(endOneBased)) return [];
+  const start = Math.max(0, Math.min(startOneBased, endOneBased) - 1);
+  const end = Math.max(startOneBased, endOneBased);
+  return [{ start, end, strand }];
+}
+
+function collectFlatFileField(
+  lines: string[],
+  startIndex: number,
+  keyword: string,
+): { value: string; next: number } {
+  const first = lines[startIndex];
+  let value = first.slice(keyword.length).trim();
+  let index = startIndex + 1;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (/^\S/.test(line)) break;
+    const trimmed = line.trim();
+    if (!trimmed) break;
+    value += ` ${trimmed}`;
+    index += 1;
+  }
+  return { value: value.trim(), next: index };
+}
+
+function parseFlatFileRecords(text: string): FlatFileRecord[] {
+  const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const chunks = normalized
+    .split(/^\/\/\s*$/m)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0);
+  const records: FlatFileRecord[] = [];
+  for (const chunk of chunks) {
+    const lines = chunk.split('\n');
+    const locusLine = lines.find((line) => /^\s*LOCUS\s/i.test(line));
+    if (!locusLine) continue;
+    const locusMatch = /^\s*LOCUS\s+(\S+)(?:\s+(\d+)\s+(\S+))?/i.exec(locusLine);
+    const locus = locusMatch?.[1] ?? 'Protein';
+    const declaredLength = locusMatch?.[2] ? Number(locusMatch[2]) : undefined;
+    const molecule = locusMatch?.[3];
+    let definition: string | undefined;
+    let accession: string | undefined;
+    for (let index = 0; index < lines.length; index += 1) {
+      if (/^DEFINITION\s/i.test(lines[index])) {
+        definition = collectFlatFileField(lines, index, 'DEFINITION').value;
+      } else if (/^VERSION\s/i.test(lines[index])) {
+        accession = lines[index].slice(7).trim().split(/\s+/)[0];
+      } else if (/^ACCESSION\s/i.test(lines[index]) && !accession) {
+        accession = lines[index].slice(9).trim().split(/\s+/)[0];
+      }
+    }
+
+    const features: FlatFileFeature[] = [];
+    const featuresIndex = lines.findIndex((line) => /^FEATURES\s/i.test(line));
+    if (featuresIndex >= 0) {
+      let current: FlatFileFeature | undefined;
+      let currentQualifier: { key: string; values: string[] } | undefined;
+      let lastWasLocation = false;
+      let inQuotedValue = false;
+      let quotedBuffer = '';
+      for (let index = featuresIndex + 1; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (/^(ORIGIN|CONTIG|BASE COUNT|WGS|WGS_SCAFLD)\b/i.test(line.trim())) break;
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (inQuotedValue) {
+          quotedBuffer += ` ${trimmed}`;
+          if (trimmed.endsWith('"')) {
+            inQuotedValue = false;
+            const value = quotedBuffer.replace(/"\s*$/, '').replace(/^"/, '');
+            if (current && currentQualifier) {
+              currentQualifier.values.push(value);
+              current.qualifiers[currentQualifier.key] = currentQualifier.values;
+            }
+            currentQualifier = undefined;
+            quotedBuffer = '';
+          }
+          continue;
+        }
+        if (trimmed.startsWith('/')) {
+          const qualifier = /^\/([^\s=]+)(?:=(.*))?$/.exec(trimmed);
+          if (!qualifier || !current) continue;
+          const key = qualifier[1];
+          let value = (qualifier[2] ?? '').trim();
+          if (value.startsWith('"')) {
+            if (value.length > 1 && value.endsWith('"') && !value.endsWith('\\"')) {
+              value = value.slice(1, -1);
+              if (!current.qualifiers[key]) current.qualifiers[key] = [];
+              current.qualifiers[key].push(value);
+              currentQualifier = undefined;
+            } else {
+              quotedBuffer = value;
+              currentQualifier = { key, values: current.qualifiers[key] ?? [] };
+              inQuotedValue = true;
+            }
+          } else {
+            if (!current.qualifiers[key]) current.qualifiers[key] = [];
+            current.qualifiers[key].push(value.replace(/^"|"$/g, ''));
+            currentQualifier = undefined;
+          }
+          lastWasLocation = false;
+          continue;
+        }
+        const featureLine = /^ {5}(\S+)\s+(.+)$/.exec(line);
+        if (featureLine && !line.startsWith(' '.repeat(21))) {
+          current = {
+            type: featureLine[1],
+            location: featureLine[2].trim(),
+            qualifiers: {},
+          };
+          features.push(current);
+          lastWasLocation = true;
+          continue;
+        }
+        if (current && lastWasLocation && !trimmed.startsWith('/')) {
+          current.location += trimmed;
+          continue;
+        }
+        if (current && currentQualifier) {
+          currentQualifier.values.push(trimmed);
+          continue;
+        }
+      }
+      if (inQuotedValue && current && currentQualifier) {
+        current.qualifiers[currentQualifier.key] = currentQualifier.values;
+      }
+    }
+
+    const originIndex = lines.findIndex((line) => /^ORIGIN\b/i.test(line));
+    let sequence = '';
+    if (originIndex >= 0) {
+      for (let index = originIndex + 1; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (/^\/\//.test(line.trim())) break;
+        sequence += line.replace(/[^A-Za-z*]/g, '');
+      }
+    }
+    records.push({
+      locus,
+      declaredLength,
+      molecule,
+      ...(definition ? { definition } : {}),
+      ...(accession ? { accession } : {}),
+      features,
+      sequence: sequence.toUpperCase(),
+    });
+  }
+  return records;
+}
+
+function proteinFeatureName(
+  feature: FlatFileFeature,
+  fallbackType: string,
+): string {
+  for (const key of ['label', 'gene', 'product', 'region_name', 'note']) {
+    const value = feature.qualifiers[key]?.[0];
+    if (value) return value;
+  }
+  return fallbackType;
+}
+
+function proteinFeatureColor(feature: FlatFileFeature, type: string): string {
+  const fromQualifier = normalizeColor(feature.qualifiers.color?.[0], '');
+  if (fromQualifier) return fromQualifier;
+  const colorNote = feature.qualifiers.note?.join(' ');
+  const match = colorNote ? /color:\s*(#[0-9a-fA-F]{3,8})/.exec(colorNote) : undefined;
+  if (match) return normalizeColor(match[1], '#6B7280');
+  return PROTEIN_COLORS[type] ?? PROTEIN_COLORS[type.toLowerCase()] ?? '#6B7280';
+}
+
+function makeProteinFeature(
+  rawType: string,
+  location: string,
+  qualifiers: Record<string, string[]>,
+  fallbackName?: string,
+): ProteinFeature | undefined {
+  const parts = parseLocationParts(location);
+  if (parts.length === 0) return undefined;
+  const starts = parts.map((part) => part.start);
+  const ends = parts.map((part) => part.end);
+  const start = Math.min(...starts);
+  const end = Math.max(...ends);
+  const type = rawType || 'misc_feature';
+  const notes: Record<string, string[]> = {};
+  for (const [key, values] of Object.entries(qualifiers)) {
+    const cleaned = values.filter((value) => value !== undefined && value !== '');
+    if (cleaned.length > 0) notes[key] = cleaned;
+  }
+  if (parts.length > 1) {
+    const strand = parts.some((part) => part.strand === -1) ? -1 : 1;
+    const ordered = strand === -1 ? [...parts].reverse() : parts;
+    notes[SEGMENTS_PUBLIC_NOTE] = ordered.map((part) => `${part.start}-${part.end}`);
+  }
+  if (parts.some((part) => part.strand === -1)) notes.strand = ['-1'];
+  const feature: ProteinFeature = {
+    id: generateId('protein_feature'),
+    name: fallbackName || proteinFeatureName({ type, location, qualifiers }, type),
+    type,
+    start,
+    end,
+    color: proteinFeatureColor({ type, location, qualifiers }, type),
+    ...(Object.keys(notes).length > 0 ? { notes } : {}),
+  };
+  return feature;
+}
+
+function parseGenPeptText(text: string, fileName: string): ProteinDocument[] {
+  const records = parseFlatFileRecords(text);
+  if (records.length === 0) {
+    throw new Error(`Unable to parse protein flat file: ${fileName}`);
+  }
+  const documents: ProteinDocument[] = [];
+  const now = nowIso();
+  for (const record of records) {
+    const features: ProteinFeature[] = [];
+    for (const feature of record.features) {
+      const converted = makeProteinFeature(
+        feature.type,
+        feature.location,
+        feature.qualifiers,
+      );
+      if (converted) features.push(converted);
+    }
+    const sequence = record.sequence.replace(/[^A-Z*]/g, '');
+    documents.push({
+      id: generateId('protein'),
+      name: record.locus || record.accession || setExtensionlessName(fileName) || 'Protein',
+      sequence,
+      ...(record.definition ? { description: record.definition } : {}),
+      features,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  return documents;
+}
+
+function parseProteinFastaText(text: string, fileName: string): ProteinDocument[] {
+  const lines = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n');
+  const documents: ProteinDocument[] = [];
+  const now = nowIso();
+  let current: { name: string; description: string; chunks: string[] } | undefined;
+  const flush = (): void => {
+    if (!current) return;
+    const sequence = current.chunks.join('').replace(/[^A-Za-z*]/g, '').toUpperCase();
+    if (sequence.length > 0) {
+      documents.push({
+        id: generateId('protein'),
+        name: current.name || setExtensionlessName(fileName) || 'Protein',
+        sequence,
+        ...(current.description ? { description: current.description } : {}),
+        features: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    current = undefined;
+  };
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('>')) {
+      flush();
+      const header = trimmed.slice(1).trim();
+      const [name, ...rest] = header.split(/\s+/);
+      current = {
+        name: name || setExtensionlessName(fileName) || 'Protein',
+        description: rest.join(' '),
+        chunks: [],
+      };
+    } else if (current && trimmed) {
+      current.chunks.push(trimmed);
+    }
+  }
+  flush();
+  if (documents.length === 0) {
+    throw new Error(`Unable to parse protein FASTA file: ${fileName}`);
+  }
+  return documents;
+}
+
+function parseSnapGeneProteinFeatures(
+  xml: string,
+  sequenceLength: number,
+): ProteinFeature[] {
+  let root: XmlNode;
+  try {
+    root = parseXml(xml);
+  } catch {
+    return [];
+  }
+  const featureNodes = root.tag === 'Feature' ? [root] : xmlChildren(root, 'Feature');
+  const features: ProteinFeature[] = [];
+  for (const node of featureNodes) {
+    const notes: Record<string, string[]> = {};
+    for (const qualifier of xmlChildren(node, 'Q')) {
+      const key = qualifier.attrs.name;
+      if (!key || isInternalNoteKey(key) || key === SEGMENTS_PUBLIC_NOTE) continue;
+      const values = xmlValue(qualifier).map((value) => stripHtml(value));
+      if (values.length > 0) notes[key] = values;
+    }
+    const segments = xmlChildren(node, 'Segment')
+      .filter((segment) => segment.attrs.type !== 'gap')
+      .map((segment) => /^(-?\d+)-(-?\d+)$/.exec(segment.attrs.range ?? ''))
+      .filter((match): match is RegExpExecArray => Boolean(match))
+      .map((match) => ({
+        start: Math.max(0, Number(match[1]) - 1),
+        end: Math.min(sequenceLength, Number(match[2])),
+      }))
+      .filter((segment) => segment.start < segment.end);
+    if (segments.length === 0) continue;
+    const directionality = Number.parseInt(node.attrs.directionality ?? '1', 10);
+    const strand: 1 | -1 = directionality === 2 ? -1 : 1;
+    const ordered = strand === -1 ? [...segments].reverse() : segments;
+    if (segments.length > 1) {
+      notes[SEGMENTS_PUBLIC_NOTE] = ordered.map(
+        (segment) => `${segment.start}-${segment.end}`,
+      );
+    }
+    if (strand === -1) notes.strand = ['-1'];
+    let color = '';
+    for (const segment of xmlChildren(node, 'Segment')) {
+      if (segment.attrs.color) {
+        color = segment.attrs.color;
+        break;
+      }
+    }
+    const rawType = node.attrs.type?.trim() || 'misc_feature';
+    features.push({
+      id: generateId('protein_feature'),
+      name: node.attrs.name?.trim() || notes.label?.[0] || rawType,
+      type: rawType,
+      start: Math.min(...segments.map((segment) => segment.start)),
+      end: Math.max(...segments.map((segment) => segment.end)),
+      color: normalizeColor(
+        color || notes.color?.[0],
+        PROTEIN_COLORS[rawType] ?? '#6B7280',
+      ),
+      ...(Object.keys(notes).length > 0 ? { notes } : {}),
+    });
+  }
+  return features;
+}
+
+function parseSnapGeneProteinBuffer(
+  buffer: ArrayBuffer | Uint8Array | string,
+  fileName: string,
+): ProteinDocument[] {
+  const bytes = toUint8Array(buffer);
+  let packets: SnapGenePacket[];
+  try {
+    packets = readPackets(bytes);
+    validateSnapGeneCookie(packets);
+  } catch (error) {
+    throw new Error(
+      `Invalid SnapGene protein file: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const cookie = packets[0].data;
+  const sequenceType = new DataView(
+    cookie.buffer,
+    cookie.byteOffset,
+    cookie.byteLength,
+  ).getUint16(8, false);
+
+  let sequence = '';
+  for (const packet of packets) {
+    if (packet.type === 0x15) {
+      if (packet.data.byteLength === 0) continue;
+      sequence = normalizeProteinSequence(decodeAscii(packet.data.subarray(1)));
+      break;
+    }
+  }
+  if (!sequence && sequenceType !== 1 && sequenceType !== 7) {
+    const dnaPacket = packets.find((packet) => packet.type === 0x00);
+    if (dnaPacket && dnaPacket.data.byteLength > 1) {
+      sequence = normalizeProteinSequence(decodeAscii(dnaPacket.data.subarray(1)));
+    }
+  }
+  if (!sequence) {
+    if (sequenceType !== 2) {
+      throw new Error('Invalid protein file: the SnapGene cookie declares a DNA sequence');
+    }
+    throw new Error('Invalid SnapGene protein file: missing protein sequence packet');
+  }
+
+  let notes: SnapGeneNotes = {};
+  for (const packet of packets) {
+    if (packet.type === 0x06) notes = parseSnapGeneNotes(decodeUtf8(packet.data), notes);
+  }
+  const features: ProteinFeature[] = [];
+  for (const packet of packets) {
+    if (packet.type === 0x0a) {
+      features.push(...parseSnapGeneProteinFeatures(decodeUtf8(packet.data), sequence.length));
+    }
+  }
+  const now = nowIso();
+  return [
+    {
+      id: generateId('protein'),
+      name: notes.name || setExtensionlessName(fileName) || 'Protein',
+      sequence,
+      ...(notes.description ? { description: notes.description } : {}),
+      features,
+      createdAt: notes.createdAt ?? now,
+      updatedAt: notes.updatedAt ?? notes.createdAt ?? now,
+    },
+  ];
+}
+
+/**
+ * Parse a protein file. SnapGene `.prot`, GenPept/GenBank protein flat files
+ * and protein FASTA are supported. The returned documents use amino-acid
+ * coordinates in the global 0-based, half-open convention.
+ */
+export async function parseProteinFile(
+  fileName: string,
+  data: string | ArrayBuffer,
+): Promise<ProteinDocument[]> {
+  const baseName = fileName.split(/[\\/]/).pop() ?? fileName;
+  const extension = baseName.includes('.')
+    ? baseName.slice(baseName.lastIndexOf('.') + 1).toLowerCase()
+    : '';
+  const bytes = toUint8Array(data);
+  const hasSnapGeneMagic =
+    bytes.byteLength >= 13 &&
+    bytes[0] === 0x09 &&
+    decodeAscii(bytes.subarray(5, 13)) === 'SnapGene';
+
+  if (hasSnapGeneMagic) {
+    return parseSnapGeneProteinBuffer(bytes, fileName);
+  }
+
+  const text =
+    typeof data === 'string'
+      ? data.replace(/^\uFEFF/, '')
+      : decodeUtf8(bytes).replace(/^\uFEFF/, '');
+  const trimmed = text.trim();
+
+  if (/^LOCUS\s/i.test(trimmed)) {
+    const locusLine = /^LOCUS[^\n]*/i.exec(trimmed)?.[0] ?? '';
+    const isProteinLocus = /\b(aa|protein)\b/i.test(locusLine);
+    if (!isProteinLocus && extension !== 'gp' && extension !== 'genpept' && extension !== 'genep') {
+      throw new Error(`Not a protein flat file: ${fileName}`);
+    }
+    return parseGenPeptText(text, fileName);
+  }
+
+  if (trimmed.startsWith('>')) {
+    return parseProteinFastaText(text, fileName);
+  }
+
+  if (extension === 'prot') {
+    throw new Error(`Invalid SnapGene protein file: ${fileName}`);
+  }
+
+  if (/^[A-Za-z*.\s\d-]+$/.test(trimmed) && /[A-Za-z]/.test(trimmed)) {
+    const sequence = trimmed.replace(/[^A-Za-z*]/g, '').toUpperCase();
+    if (sequence.length > 0) {
+      const now = nowIso();
+      return [
+        {
+          id: generateId('protein'),
+          name: setExtensionlessName(fileName) || 'Protein',
+          sequence,
+          features: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      ];
+    }
+  }
+
+  throw new Error(`Unsupported protein file: ${fileName}`);
+}
+
+/**
+ * Decide whether a file should be routed to the protein importer. The
+ * extension, the SnapGene cookie sequence type, the GenBank LOCUS molecule
+ * type and the sequence alphabet are all considered.
+ */
+export function isProteinFile(fileName: string, data: string | ArrayBuffer): boolean {
+  const baseName = fileName.split(/[\\/]/).pop() ?? fileName;
+  const extension = baseName.includes('.')
+    ? baseName.slice(baseName.lastIndexOf('.') + 1).toLowerCase()
+    : '';
+  if (
+    extension === 'prot' ||
+    extension === 'gp' ||
+    extension === 'genpept' ||
+    extension === 'genep' ||
+    extension === 'faa' ||
+    extension === 'pep' ||
+    extension === 'protein' ||
+    extension === 'pro'
+  ) {
+    return true;
+  }
+  const bytes = toUint8Array(data);
+  if (
+    bytes.byteLength >= 13 &&
+    bytes[0] === 0x09 &&
+    decodeAscii(bytes.subarray(5, 13)) === 'SnapGene'
+  ) {
+    const cookie = bytes.subarray(5, 19);
+    if (cookie.byteLength >= 10) {
+      const sequenceType = new DataView(
+        cookie.buffer,
+        cookie.byteOffset,
+        cookie.byteLength,
+      ).getUint16(8, false);
+      return sequenceType === 2;
+    }
+    return false;
+  }
+  const text =
+    typeof data === 'string'
+      ? data.replace(/^\uFEFF/, '')
+      : decodeUtf8(bytes).replace(/^\uFEFF/, '');
+  const locus = /^\s*LOCUS[^\n]*/im.exec(text)?.[0];
+  if (locus) return /\b(aa|protein)\b/i.test(locus);
+  const sequence = text
+    .replace(/^>.*$/gm, '')
+    .replace(/[^A-Za-z*]/g, '')
+    .toUpperCase();
+  if (/[EFIJLOPQZX*]/.test(sequence)) return true;
+  if (sequence.length < 4) return false;
+  const nonDna = sequence.replace(/[ACGTUNRYSWKMBDHV]/g, '').length;
+  return sequence.length >= 20 && nonDna / sequence.length > 0.15;
+}
+
+function formatFastaSequence(sequence: string, width = 60): string {
+  const chunks: string[] = [];
+  for (let index = 0; index < sequence.length; index += width) {
+    chunks.push(sequence.slice(index, index + width));
+  }
+  return chunks.join('\n');
+}
+
+/** Export a protein document as FASTA. */
+export function exportProteinToFasta(protein: ProteinDocument): string {
+  const header = protein.description?.trim()
+    ? `>${protein.name} ${protein.description.replace(/\s+/g, ' ').trim()}`
+    : `>${protein.name}`;
+  const sequence = protein.sequence.replace(/[^A-Za-z*]/g, '').toUpperCase();
+  return `${header}\n${formatFastaSequence(sequence)}\n`;
+}
+
+const MONTHS = [
+  'JAN',
+  'FEB',
+  'MAR',
+  'APR',
+  'MAY',
+  'JUN',
+  'JUL',
+  'AUG',
+  'SEP',
+  'OCT',
+  'NOV',
+  'DEC',
+];
+
+function flatFileDate(iso: string): string {
+  const parsed = new Date(iso);
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${day}-${MONTHS[date.getUTCMonth()]}-${date.getUTCFullYear()}`;
+}
+
+function wrapFlatFileLine(prefix: string, value: string, width = 68): string[] {
+  const lines: string[] = [];
+  let remaining = value.replace(/\s+/g, ' ').trim();
+  if (!remaining) return lines;
+  while (remaining.length > width) {
+    let cut = remaining.lastIndexOf(' ', width);
+    if (cut <= 0) cut = width;
+    lines.push(prefix + remaining.slice(0, cut));
+    remaining = remaining.slice(cut).trimStart();
+  }
+  lines.push(prefix + remaining);
+  return lines;
+}
+
+function proteinFeatureLocation(feature: ProteinFeature): string {
+  const segments = parseSegmentNoteValues(feature.notes?.[SEGMENTS_PUBLIC_NOTE]);
+  if (segments.length === 0) segments.push({ start: feature.start, end: feature.end });
+  const strand = feature.notes?.strand?.[0] === '-1' ? -1 : 1;
+  const ordered = strand === -1 ? [...segments].reverse() : segments;
+  const locationText = ordered
+    .map((segment) => `${segment.start + 1}..${Math.max(segment.start + 1, segment.end)}`)
+    .join(',');
+  const joined = ordered.length > 1 ? `join(${locationText})` : locationText;
+  return strand === -1 ? `complement(${joined})` : joined;
+}
+
+/** Export a protein document as GenPept/GenBank protein flat file text. */
+export function exportProteinToGenPept(protein: ProteinDocument): string {
+  const sequence = protein.sequence.replace(/[^A-Za-z*]/g, '').toUpperCase();
+  const name = protein.name.replace(/\s+/g, '_').slice(0, 16) || 'Protein';
+  const lines: string[] = [
+    `LOCUS       ${name.padEnd(16)} ${String(sequence.length).padStart(7)} aa            linear   UNK ${flatFileDate(protein.updatedAt)}`,
+  ];
+  if (protein.description?.trim()) {
+    lines.push(...wrapFlatFileLine('DEFINITION  ', protein.description));
+  }
+  lines.push('FEATURES             Location/Qualifiers');
+  for (const feature of protein.features) {
+    const location = proteinFeatureLocation(feature);
+    const type = (feature.type || 'misc_feature').replace(/\s+/g, '_');
+    lines.push(`     ${type.padEnd(16)}${location}`);
+    lines.push(`                     /label="${feature.name.replace(/"/g, "'")}"`);
+    for (const [key, values] of Object.entries(feature.notes ?? {})) {
+      if (
+        isInternalNoteKey(key) ||
+        key === SEGMENTS_PUBLIC_NOTE ||
+        key === 'label' ||
+        key === 'strand'
+      ) {
+        continue;
+      }
+      for (const value of values) {
+        if (value === undefined || value === null || value === '') continue;
+        lines.push(`                     /${key}="${String(value).replace(/"/g, "'")}"`);
+      }
+    }
+    lines.push(`                     /note="color: ${feature.color}"`);
+  }
+  lines.push('ORIGIN');
+  for (let offset = 0; offset < sequence.length; offset += 60) {
+    const block = sequence.slice(offset, offset + 60);
+    const groups: string[] = [];
+    for (let index = 0; index < block.length; index += 10) {
+      groups.push(block.slice(index, index + 10).toLowerCase());
+    }
+    lines.push(`${String(offset + 1).padStart(9)} ${groups.join(' ')}`);
+  }
+  lines.push('//', '');
+  return lines.join('\n');
+}
+
+/* -------------------------------------------------------------------------- */
+/* NCBI E-utilities import                                                     */
+/* -------------------------------------------------------------------------- */
+
+const NCBI_MAX_SEQUENCE_LENGTH = 5_000_000;
+
+const PROTEIN_ACCESSION_PATTERNS: RegExp[] = [
+  /^(?:NP|XP|WP|YP|AP|ZP)_\d+(?:\.\d+)?$/i,
+  /^[A-Z]{3}\d{5}(?:\.\d+)?$/i,
+  /^[A-Z]{3}_\d{5,}(?:\.\d+)?$/i,
+];
+
+const DNA_ACCESSION_PATTERNS: RegExp[] = [
+  /^[A-Z]{1,2}_?\d{5,9}(?:\.\d+)?$/i,
+  /^(?:NZ|NC|NT|NW)_[A-Z]{2}_?\d{6,}(?:\.\d+)?$/i,
+  /^[A-Z]{4,6}\d{6,}(?:\.\d+)?$/i,
+];
+
+function accessionFromInput(input: string): { accession: string; hint?: 'nuccore' | 'protein' } | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  let candidate = raw;
+  let hint: 'nuccore' | 'protein' | undefined;
+
+  const urlMatch = /ncbi\.nlm\.nih\.gov\/(nuccore|nucleotide|protein|genbank|sviewer|nucest|nucgss)\/([^/?#\s]+)/i.exec(
+    raw,
+  );
+  if (urlMatch) {
+    hint = /protein/i.test(urlMatch[1]) ? 'protein' : 'nuccore';
+    candidate = decodeURIComponent(urlMatch[2]);
+  } else {
+    try {
+      const url = new URL(raw);
+      const id = url.searchParams.get('id') ?? url.searchParams.get('acc');
+      if (id) {
+        candidate = id;
+        if (/protein/i.test(url.pathname) || url.searchParams.get('db') === 'protein') {
+          hint = 'protein';
+        } else if (/nuccore|nucleotide/i.test(url.pathname) || url.searchParams.get('db') === 'nuccore') {
+          hint = 'nuccore';
+        }
+      } else {
+        const segments = url.pathname.split('/').filter(Boolean);
+        candidate = segments[segments.length - 1] ?? raw;
+        if (/protein/i.test(url.pathname)) hint = 'protein';
+      }
+    } catch {
+      // Not a URL; treat the input as a bare accession below.
+    }
+  }
+
+  candidate = candidate.split('|').filter(Boolean).pop() ?? candidate;
+  const queryId = /[?&](?:id|acc)=([^&#\s]+)/i.exec(raw)?.[1];
+  if (queryId && !/\d/.test(candidate)) {
+    candidate = decodeURIComponent(queryId);
+  }
+  if (!hint) {
+    if (/[?&]db=protein\b/i.test(raw) || /\/protein\//i.test(raw)) hint = 'protein';
+    else if (/[?&]db=nuccore\b/i.test(raw) || /\/nuccore\//i.test(raw)) hint = 'nuccore';
+  }
+  candidate = candidate
+    .replace(/[.,;]+$/, '')
+    .replace(/^accession[:#\s]*/i, '')
+    .trim();
+  if (!/^[A-Za-z0-9_.]+$/.test(candidate)) return null;
+  if (!/\d/.test(candidate)) return null;
+  const accession = candidate.toUpperCase();
+
+  if (hint === 'protein') return { accession, hint };
+  if (PROTEIN_ACCESSION_PATTERNS.some((pattern) => pattern.test(accession))) {
+    return { accession, hint: 'protein' };
+  }
+  if (DNA_ACCESSION_PATTERNS.some((pattern) => pattern.test(accession))) {
+    return { accession, hint: 'nuccore' };
+  }
+  return null;
+}
+
+/**
+ * Normalise an accession or an NCBI web URL into a bare accession and the
+ * database that should be queried.
+ */
+export function normalizeAccession(
+  input: string,
+): { accession: string; db: 'nuccore' | 'protein' } | null {
+  if (typeof input !== 'string') return null;
+  const parsed = accessionFromInput(input);
+  if (!parsed) return null;
+  const db = parsed.hint ?? 'nuccore';
+  return { accession: parsed.accession, db };
+}
+
+function ncbiFailureMessage(accession: string, status: number, body: string): string {
+  const compact = body.replace(/\s+/g, ' ').trim();
+  if (
+    status === 400 ||
+    status === 404 ||
+    /cannot get|not found|invalid accession|no items found|error reading/i.test(compact)
+  ) {
+    return `NCBI accession not found: ${accession}`;
+  }
+  return `NCBI request failed for ${accession} (HTTP ${status})${compact ? `: ${compact.slice(0, 200)}` : ''}`;
+}
+
+/**
+ * Fetch a nucleotide or protein record from NCBI using the EFetch endpoint.
+ * The response is parsed with this module's GenBank/protein parsers.
+ */
+export async function fetchFromNCBI(
+  accession: string,
+  opts: {
+    db?: 'nuccore' | 'protein';
+    fetchImpl?: typeof fetch;
+    apiKey?: string;
+  } = {},
+): Promise<PlasmidDocument | ProteinDocument> {
+  const normalized = normalizeAccession(accession);
+  if (!normalized) {
+    throw new Error(`Invalid NCBI accession: ${accession}`);
+  }
+  const db = opts.db ?? normalized.db;
+  const id = normalized.accession;
+  const fetchImpl =
+    opts.fetchImpl ??
+    (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : undefined);
+  if (!fetchImpl) {
+    throw new Error('NCBI import is unavailable: no fetch implementation was provided');
+  }
+
+  const parameters = new URLSearchParams({
+    db,
+    id,
+    rettype: db === 'protein' ? 'gp' : 'gbwithparts',
+    retmode: 'text',
+  });
+  if (opts.apiKey) parameters.set('api_key', opts.apiKey);
+  const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?${parameters.toString()}`;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      headers: { Accept: 'text/plain' },
+    });
+  } catch (error) {
+    throw new Error(
+      `NCBI network error while fetching ${id}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const status = typeof response.status === 'number' ? response.status : 200;
+  if (response.ok === false || status >= 400) {
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '';
+    }
+    throw new Error(ncbiFailureMessage(id, status, body));
+  }
+  let text = '';
+  try {
+    text = await response.text();
+  } catch (error) {
+    throw new Error(
+      `NCBI network error while reading ${id}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!text.trim()) {
+    throw new Error(`NCBI accession not found: ${id}`);
+  }
+  if (!/^\s*LOCUS\s/im.test(text)) {
+    const compact = text.replace(/\s+/g, ' ').trim();
+    if (/cannot get|not found|error|invalid|no items/i.test(compact)) {
+      throw new Error(`NCBI accession not found: ${id}`);
+    }
+    throw new Error(`NCBI returned an invalid record for ${id}: ${compact.slice(0, 200)}`);
+  }
+
+  const locusLine = /^\s*LOCUS[^\n]*/im.exec(text)?.[0] ?? '';
+  const declaredLength = Number(/\b(\d+)\s+(?:bp|aa)\b/i.exec(locusLine)?.[1] ?? '');
+  if (Number.isFinite(declaredLength) && declaredLength > NCBI_MAX_SEQUENCE_LENGTH) {
+    throw new Error(
+      `NCBI sequence ${id} exceeds the 5 Mb limit (${declaredLength} ${db === 'protein' ? 'aa' : 'bp'})`,
+    );
+  }
+
+  if (db === 'protein') {
+    const proteins = await parseProteinFile(`${id}.gp`, text);
+    const protein = proteins[0];
+    if (!protein) throw new Error(`NCBI accession not found: ${id}`);
+    if (protein.sequence.length > NCBI_MAX_SEQUENCE_LENGTH) {
+      throw new Error(
+        `NCBI sequence ${id} exceeds the 5 Mb limit (${protein.sequence.length} aa)`,
+      );
+    }
+    return protein;
+  }
+
+  const document = await parseGenBankString(text);
+  if (document.sequence.length > NCBI_MAX_SEQUENCE_LENGTH) {
+    throw new Error(
+      `NCBI sequence ${id} exceeds the 5 Mb limit (${document.sequence.length} bp)`,
+    );
+  }
+  return document;
+}
+
+
 
 /**
  * Enrich a parsed SnapGene document with the data carried by SnapGene's
@@ -2202,11 +4205,13 @@ export async function parseSnapGeneBuffer(
  * Parse a GenBank flat file (single record).
  */
 export async function parseGenBankString(gbkText: string): Promise<PlasmidDocument> {
-  const results = genbankToJson(gbkText.replace(/^\uFEFF/, ''), {}) as TeselaGenParseResult[];
+  const cleaned = gbkText.replace(/^\uFEFF/, '');
+  const results = genbankToJson(cleaned, {}) as TeselaGenParseResult[];
   const documents = teselaGenResultsToDocuments(results, { fileName: 'sequence.gb' });
   if (documents.length === 0) {
     throw new Error('Unable to parse GenBank data');
   }
+  applyRawGenBankSegmentNotes(documents, cleaned);
   return documents[0];
 }
 
@@ -2224,17 +4229,50 @@ export async function parseBioFile(
     ? baseName.slice(baseName.lastIndexOf('.') + 1).toLowerCase()
     : '';
 
+  if (extension === 'gz') {
+    throw new Error(
+      `Compressed .gz files are not supported: ${fileName}. Decompress the file before importing.`,
+    );
+  }
+
+  if (content instanceof ArrayBuffer && content.byteLength >= 2) {
+    const magic = new Uint8Array(content, 0, 2);
+    if (magic[0] === 0x1f && magic[1] === 0x8b) {
+      throw new Error(
+        `Compressed .gz files are not supported: ${fileName}. Decompress the file before importing.`,
+      );
+    }
+  }
+
   if (extension === 'dna' || extension === 'snapgene') {
     const buffer = toArrayBuffer(content);
     return [await parseSnapGeneBuffer(buffer, fileName)];
+  }
+
+  if (
+    extension === 'xdna' ||
+    extension === 'xdgn' ||
+    extension === 'xprt'
+  ) {
+    return [parseXdnaBuffer(content, fileName)];
   }
 
   if (content instanceof ArrayBuffer && isSnapGeneMagic(content)) {
     return [await parseSnapGeneBuffer(toArrayBuffer(content), fileName)];
   }
 
+  if (content instanceof ArrayBuffer && isXdnaMagic(content)) {
+    return [parseXdnaBuffer(content, fileName)];
+  }
+
   if (extension === 'ab1' || extension === 'scf') {
     throw new Error(`Unsupported binary sequencing format: .${extension}`);
+  }
+
+  if (extension === 'prot') {
+    throw new Error(
+      `Protein file ${fileName} must be imported with the protein parser (parseProteinFile).`,
+    );
   }
 
   const text =
@@ -2247,24 +4285,95 @@ export async function parseBioFile(
     return parseJsonDocuments(text, fileName);
   }
 
-  if (extension === 'fasta' || extension === 'fa' || extension === 'fas' || extension === 'fna' || extension === 'ffn') {
+  if (extension === 'fastq' || extension === 'fq') {
+    return fastqToDocuments(text, fileName);
+  }
+
+  if (
+    extension === 'fasta' ||
+    extension === 'fa' ||
+    extension === 'fas' ||
+    extension === 'fna' ||
+    extension === 'ffn'
+  ) {
     return parseFastaText(text, fileName);
   }
 
-  if (extension === 'gb' || extension === 'gbk' || extension === 'genbank' || extension === 'ape') {
+  if (
+    extension === 'gb' ||
+    extension === 'gbk' ||
+    extension === 'gbff' ||
+    extension === 'gbank' ||
+    extension === 'gbs' ||
+    extension === 'gbwithparts' ||
+    extension === 'gen' ||
+    extension === 'genbank' ||
+    extension === 'ape'
+  ) {
     return parseGenBankText(text, fileName);
+  }
+
+  if (extension === 'sbol' || extension === 'rdf' || extension === 'xml') {
+    return parseXmlSequenceText(text, fileName, extension);
+  }
+
+  if (extension === 'geneious') {
+    if (/<geneious|geneiousDocument/i.test(text)) {
+      return parseXmlSequenceText(text, fileName, extension);
+    }
+    if (looksLikeGenBankText(trimmed)) return parseGenBankText(text, fileName);
+    throw new Error(
+      `Geneious archive files are not supported directly: ${fileName}. Export as GenBank and import that file.`,
+    );
+  }
+
+  if (extension === 'cm5') {
+    if (looksLikeGenBankText(trimmed)) return parseGenBankText(text, fileName);
+    throw new Error(
+      `Clone Manager .cm5 files use a proprietary binary format that cannot be decoded: ${fileName}. Export the molecule as GenBank (.gb) or FASTA and import that instead.`,
+    );
+  }
+
+  if (extension === 'seq') {
+    if (looksLikeGenBankText(trimmed)) return parseGenBankText(text, fileName);
+    if (trimmed.startsWith('>')) return parseFastaText(text, fileName);
+    if (/seq:seq/i.test(text) && /jbei/i.test(text)) {
+      return parseXmlSequenceText(text, fileName, 'xml');
+    }
+    return parseDnastarText(text, fileName);
   }
 
   if (!extension && isSnapGeneMagic(text)) {
     return [await parseSnapGeneBuffer(toArrayBuffer(content), fileName)];
   }
 
+  if (!extension && isXdnaMagic(content)) {
+    return [parseXdnaBuffer(content, fileName)];
+  }
+
   if (!extension) {
     if (trimmed.startsWith('>')) return parseFastaText(text, fileName);
-    if (/^LOCUS\s/m.test(trimmed)) return parseGenBankText(text, fileName);
+    if (looksLikeGenBankText(trimmed)) return parseGenBankText(text, fileName);
     if (isSnapGeneMagic(text)) {
       return [await parseSnapGeneBuffer(toArrayBuffer(content), fileName)];
     }
+  }
+
+  if (looksLikeGenBankText(trimmed)) return parseGenBankText(text, fileName);
+  if (trimmed.startsWith('>')) return parseFastaText(text, fileName);
+
+  const plain = extractPlainSequence(text);
+  if (plain) {
+    return [
+      normalizeParsedSequence(
+        {
+          name: setExtensionlessName(fileName) || 'Untitled Sequence',
+          sequence: plain.sequence,
+          circular: /\bcircular\b/i.test(text.slice(0, 500)),
+        },
+        { fileName },
+      ),
+    ];
   }
 
   try {
@@ -2275,6 +4384,10 @@ export async function parseBioFile(
     // Fall through to a descriptive error.
   }
   throw new Error(`Unsupported or invalid sequence file: ${fileName}`);
+}
+
+function looksLikeGenBankText(text: string): boolean {
+  return /^\s*LOCUS\s/m.test(text);
 }
 
 function isSnapGeneMagic(content: ArrayBuffer | string): boolean {
@@ -2319,10 +4432,44 @@ function cleanFastaDescription(description: string | undefined): string | undefi
 }
 
 function parseGenBankText(text: string, fileName: string): PlasmidDocument[] {
-  const results = genbankToJson(text, {}) as TeselaGenParseResult[];
+  const cleaned = text.replace(/^\uFEFF/, '');
+  const results = genbankToJson(cleaned, {}) as TeselaGenParseResult[];
   const documents = teselaGenResultsToDocuments(results, { fileName });
   if (documents.length === 0) throw new Error(`Unable to parse GenBank file: ${fileName}`);
+  applyRawGenBankSegmentNotes(documents, cleaned);
   return documents;
+}
+
+function rawGenBankSegments(location: string): string[] | undefined {
+  const parts = parseLocationParts(location);
+  if (parts.length < 2) return undefined;
+  const strand = parts.some((part) => part.strand === -1) ? -1 : 1;
+  const ordered = strand === -1 ? [...parts].reverse() : parts;
+  return ordered.map((part) => `${part.start}-${part.end}`);
+}
+
+function applyRawGenBankSegmentNotes(
+  documents: PlasmidDocument[],
+  text: string,
+): void {
+  let records: FlatFileRecord[];
+  try {
+    records = parseFlatFileRecords(text);
+  } catch {
+    return;
+  }
+  if (records.length !== documents.length) return;
+  documents.forEach((document, recordIndex) => {
+    const record = records[recordIndex];
+    if (!record || record.features.length !== document.features.length) return;
+    document.features.forEach((feature, featureIndex) => {
+      const raw = record.features[featureIndex];
+      if (!raw) return;
+      const segments = rawGenBankSegments(raw.location);
+      if (!segments) return;
+      feature.notes = { ...(feature.notes ?? {}), segments };
+    });
+  });
 }
 
 function parseJsonDocuments(text: string, fileName: string): PlasmidDocument[] {

@@ -1,6 +1,11 @@
 import type { Primer, SequenceFeature, CutSite } from '../../../types/schema';
 import type { RangeSegment } from '../utils';
-import { featureSegments, mod } from '../utils';
+import { featureSegments, mod, splitRange } from '../utils';
+import {
+  buildFeatureSegmentPlan,
+  parseSegmentsNote,
+  segmentGapRanges,
+} from '../segments';
 
 export const CODON_TABLE: Record<string, string> = {
   TTT: 'F',
@@ -169,6 +174,24 @@ export function buildCdsCodons(
   length: number,
   circular: boolean,
 ): CodonInfo[] {
+  const declared = parseSegmentsNote(feature.notes);
+  if (declared && declared.length > 1) {
+    const spliced = extractSplicedFeature(sequence, feature, length, circular);
+    if (spliced.bases.length < 3) return [];
+    const offset = Math.max(0, (feature.codonStart ?? 1) - 1);
+    const codons: CodonInfo[] = [];
+    let index = 1;
+    for (let i = offset; i + 3 <= spliced.bases.length; i += 3) {
+      codons.push({
+        pos: spliced.positions[i] ?? feature.start,
+        aa: translateCodon(spliced.bases.slice(i, i + 3)),
+        index,
+        codon: spliced.bases.slice(i, i + 3).toUpperCase(),
+      });
+      index += 1;
+    }
+    return codons;
+  }
   const raw = extractRange(sequence, feature.start, feature.end, length, circular);
   if (raw.length < 3) return [];
   const coding = feature.strand === -1 ? reverseComplement(raw) : raw;
@@ -185,6 +208,55 @@ export function buildCdsCodons(
     index += 1;
   }
   return codons;
+}
+
+export interface SplicedFeatureBases {
+  /** Spliced coding sequence in 5' -> 3' order. */
+  bases: string;
+  /** Document coordinate of every spliced base. */
+  positions: number[];
+}
+
+/**
+ * Concatenate the declared segments of a feature in biological order. Minus
+ * strand features are reverse-complemented per segment; wrapped segments are
+ * resolved so the first base always follows the 5' end.
+ */
+export function extractSplicedFeature(
+  sequence: string,
+  feature: SequenceFeature,
+  length: number,
+  circular: boolean,
+): SplicedFeatureBases {
+  const declared = parseSegmentsNote(feature.notes) ?? [
+    { start: feature.start, end: feature.end },
+  ];
+  let bases = '';
+  const positions: number[] = [];
+  for (const segment of declared) {
+    const coords: number[] = [];
+    if (circular && length > 0) {
+      const span =
+        segment.start === segment.end
+          ? 0
+          : mod(segment.end - segment.start, length) || length;
+      for (let offset = 0; offset < span; offset += 1) {
+        coords.push(mod(segment.start + offset, length));
+      }
+    } else {
+      const start = Math.max(0, Math.min(length, Math.min(segment.start, segment.end)));
+      const end = Math.max(0, Math.min(length, Math.max(segment.start, segment.end)));
+      for (let offset = start; offset < end; offset += 1) coords.push(offset);
+    }
+    let segmentBases = coords.map((position) => sequence[position] ?? 'N').join('');
+    if (feature.strand === -1) {
+      segmentBases = reverseComplement(segmentBases);
+      coords.reverse();
+    }
+    bases += segmentBases;
+    positions.push(...coords);
+  }
+  return { bases, positions };
 }
 
 export interface TranslationCodon {
@@ -297,6 +369,10 @@ export function buildFeatureRowMap(
   const map: FeatureRowMap = new Map();
   if (bpPerRow <= 0 || length <= 0) return map;
   for (const feature of features) {
+    if (isMultiSegment(feature)) {
+      appendMultiSegmentRows(map, feature, bpPerRow, length, circular);
+      continue;
+    }
     const segments = featureSegments(feature, length, circular);
     const normalizedStart = circular
       ? mod(feature.start, length)
@@ -326,6 +402,94 @@ export function buildFeatureRowMap(
           isTrueStart: !fullCircle && clipped.start === normalizedStart,
           isTrueEnd: !fullCircle && trueEnd,
         };
+        const existing = map.get(row);
+        if (existing) existing.push(entry);
+        else map.set(row, [entry]);
+      }
+    }
+  }
+  return map;
+}
+
+function isMultiSegment(feature: SequenceFeature): boolean {
+  const declared = parseSegmentsNote(feature.notes);
+  return declared !== null && declared.length > 1;
+}
+
+function appendMultiSegmentRows(
+  map: FeatureRowMap,
+  feature: SequenceFeature,
+  bpPerRow: number,
+  length: number,
+  circular: boolean,
+): void {
+  const plan = buildFeatureSegmentPlan(feature, length, circular);
+  const lastIndex = plan.pieces.reduce(
+    (max, piece) => Math.max(max, piece.segmentIndex),
+    -1,
+  );
+  for (const piece of plan.pieces) {
+    if (piece.end <= piece.start) continue;
+    const firstRow = Math.floor(piece.start / bpPerRow);
+    const lastRow = Math.floor((piece.end - 1) / bpPerRow);
+    for (let row = firstRow; row <= lastRow; row += 1) {
+      const rowStart = row * bpPerRow;
+      const rowEnd = rowStart + bpPerRow;
+      const clipped = {
+        start: Math.max(piece.start, rowStart),
+        end: Math.min(piece.end, rowEnd),
+      };
+      if (clipped.end <= clipped.start) continue;
+      const entry: FeatureRowSegment = {
+        feature,
+        segment: clipped,
+        isTrueStart:
+          piece.segmentIndex === lastIndex &&
+          piece.isSegmentStart &&
+          clipped.start === piece.start,
+        isTrueEnd:
+          piece.segmentIndex === lastIndex &&
+          piece.isSegmentEnd &&
+          clipped.end === piece.end,
+      };
+      const existing = map.get(row);
+      if (existing) existing.push(entry);
+      else map.set(row, [entry]);
+    }
+  }
+}
+
+export interface FeatureGapRowEntry {
+  feature: SequenceFeature;
+  gap: RangeSegment;
+}
+
+export type FeatureGapRowMap = Map<number, FeatureGapRowEntry[]>;
+
+/** Intron-style connectors between the segments of multi-segment features. */
+export function buildFeatureGapRowMap(
+  features: SequenceFeature[],
+  bpPerRow: number,
+  length: number,
+  circular: boolean,
+): FeatureGapRowMap {
+  const map: FeatureGapRowMap = new Map();
+  if (bpPerRow <= 0 || length <= 0) return map;
+  for (const feature of features) {
+    if (!isMultiSegment(feature)) continue;
+    const plan = buildFeatureSegmentPlan(feature, length, circular);
+    for (const gap of segmentGapRanges(plan, length, circular)) {
+      const firstRow = Math.floor(gap.start / bpPerRow);
+      const lastRow = Math.floor((gap.end - 1) / bpPerRow);
+      for (let row = firstRow; row <= lastRow; row += 1) {
+        const rowStart = row * bpPerRow;
+        const rowEnd = rowStart + bpPerRow;
+        const clipped = {
+          start: Math.max(gap.start, rowStart),
+          end: Math.min(gap.end, rowEnd),
+        };
+        if (clipped.end <= clipped.start) continue;
+        const entry: FeatureGapRowEntry = { feature, gap: clipped };
         const existing = map.get(row);
         if (existing) existing.push(entry);
         else map.set(row, [entry]);

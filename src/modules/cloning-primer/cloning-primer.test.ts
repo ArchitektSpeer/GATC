@@ -11,8 +11,16 @@ import type {
 } from '../../types/schema';
 import {
   GATEWAY_ATT_SITES,
+  RECOMBINATION_SITES,
+  addATailing,
   bluntEnds,
   buildPrimer,
+  designLICPrimers,
+  findRecombinationSites,
+  simulateLIC,
+  simulateRecombinase,
+  simulateTACloning,
+  simulateTOPOCloning,
   calcCrossDimer,
   designGibsonPrimers,
   designGoldenGatePrimers,
@@ -950,3 +958,395 @@ describe('incompatible ligation ends', () => {
     expect(result.product).toBeNull();
   });
 });
+
+describe('TA, TOPO and LIC cloning', () => {
+  function taVector(length = 200): PlasmidDocument {
+    return linearFragment(
+      'pCR2.1',
+      'ACGT'.repeat(length / 4),
+      sticky('3-prime', 'T', 'Taq'),
+      sticky('3-prime', 'T', 'Taq'),
+      [feature('lacZ', 10, length - 10, 'CDS', 1)],
+    );
+  }
+
+  function aTailedInsert(strand: 1 | -1 = 1): PlasmidDocument {
+    return linearFragment(
+      'insert',
+      'GCTA'.repeat(25),
+      sticky('3-prime', 'A', 'Taq'),
+      sticky('3-prime', 'A', 'Taq'),
+      [feature('gene', 10, 70, 'CDS', strand)],
+    );
+  }
+
+  it('clones an A-tailed insert into a T-tailed vector and migrates features', () => {
+    const vector = taVector();
+    const insert = aTailedInsert();
+    const result = simulateTACloning(vector, insert);
+    expect(result.product).not.toBeNull();
+    expect(result.product?.length).toBe(vector.length + insert.length);
+    expect(result.product?.topology).toBe('circular');
+    expect(result.orientation).toBe('forward');
+    const gene = result.product?.features.find((item) => item.name === 'gene');
+    expect(gene?.start).toBe(vector.length + 10);
+    expect(gene?.end).toBe(vector.length + 70);
+    expect(result.product?.history.some((node) => node.operation === 'restriction_ligation')).toBe(true);
+    expect(result.product?.history.at(-1)?.description).toContain('TA cloning');
+  });
+
+  it('uses the insert CDS orientation when no orientation is requested', () => {
+    const vector = taVector();
+    const insert = aTailedInsert(-1);
+    const result = simulateTACloning(vector, insert);
+    expect(result.orientation).toBe('reverse');
+    expect(result.product?.sequence.slice(vector.length)).toBe(reverseComplement(insert.sequence));
+    const gene = result.product?.features.find((item) => item.name === 'gene');
+    expect(gene?.start).toBe(vector.length + (insert.length - 70));
+    expect(gene?.end).toBe(vector.length + (insert.length - 10));
+    expect(gene?.strand).toBe(1);
+  });
+
+  it('defaults to forward when the vector has no lacZ or promoter reference', () => {
+    const vector = linearFragment(
+      'plain_vector',
+      'ACGT'.repeat(50),
+      sticky('3-prime', 'T', 'Taq'),
+      sticky('3-prime', 'T', 'Taq'),
+    );
+    const result = simulateTACloning(vector, aTailedInsert(-1));
+    expect(result.orientation).toBe('forward');
+    expect(result.product?.sequence.slice(vector.length)).toBe(aTailedInsert().sequence);
+  });
+
+  it('adds 3-prime A overhangs without changing the PCR product length', () => {
+    const pcrProduct = linearFragment('blunt_pcr', 'GCTA'.repeat(25), blunt(), blunt());
+    const tailed = addATailing(pcrProduct);
+    expect(tailed.length).toBe(pcrProduct.length);
+    expect(tailed.sequence).toBe(pcrProduct.sequence);
+    expect(tailed.linearEnds?.left.type).toBe('3-prime');
+    expect(tailed.linearEnds?.left.sequence).toBe('A');
+    expect(tailed.linearEnds?.right.sequence).toBe('A');
+    const result = simulateTACloning(taVector(), tailed);
+    expect(result.product?.length).toBe(taVector().length + pcrProduct.length);
+  });
+
+  it('warns when the TA vector is circular', () => {
+    const vector = makeDocument({ name: 'circular_ta', sequence: 'ACGT'.repeat(50), topology: 'circular' });
+    const result = simulateTACloning(vector, aTailedInsert());
+    expect(result.product).toBeNull();
+    expect(result.warnings.some((warning) => warning.includes('linearize'))).toBe(true);
+  });
+
+  it('performs blunt TOPO cloning when both molecules have blunt ends', () => {
+    const vector = linearFragment('blunt_vector', 'ACGT'.repeat(50), blunt(), blunt());
+    const insert = linearFragment('blunt_insert', 'GCTA'.repeat(25), blunt(), blunt(), [
+      feature('gene', 5, 80, 'CDS', 1),
+    ]);
+    const result = simulateTOPOCloning(vector, insert, 'blunt');
+    expect(result.product).not.toBeNull();
+    expect(result.product?.length).toBe(vector.length + insert.length);
+    expect(result.product?.history.at(-1)?.description).toContain('TOPO blunt');
+  });
+
+  it('fixes the orientation of a directional TOPO insert', () => {
+    const vector = linearFragment(
+      'directional_vector',
+      'ACGT'.repeat(50),
+      sticky('5-prime', 'GTGG', 'TOPO'),
+      blunt(),
+    );
+    const insert = linearFragment(
+      'directional_insert',
+      'CACC' + 'GCTA'.repeat(24),
+      blunt(),
+      blunt(),
+      [feature('gene', 4, 64, 'CDS', 1)],
+    );
+    const result = simulateTOPOCloning(vector, insert, 'directional', { orientation: 'reverse' });
+    expect(result.product).not.toBeNull();
+    expect(result.orientation).toBe('forward');
+    expect(result.product?.length).toBe(vector.length + insert.length);
+    expect(result.product?.sequence.startsWith(vector.sequence + 'CACC')).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes('fixed'))).toBe(true);
+  });
+
+  it('rejects a directional TOPO insert without a CACC lead', () => {
+    const vector = linearFragment(
+      'directional_vector',
+      'ACGT'.repeat(50),
+      sticky('5-prime', 'GTGG', 'TOPO'),
+      blunt(),
+    );
+    const insert = linearFragment('no_cacc', 'GCTA'.repeat(25), blunt(), blunt());
+    const result = simulateTOPOCloning(vector, insert, 'directional');
+    expect(result.product).toBeNull();
+    expect(result.warnings.some((warning) => warning.includes('CACC'))).toBe(true);
+  });
+
+  it('anneals complementary LIC tails and rejects mismatched tails', () => {
+    const forwardTail = 'GACGACGACAAG';
+    const reverseTail = 'GAGGAGAAGCCCGGT';
+    const vector = linearFragment(
+      'pET_LIC',
+      'ACGT'.repeat(50),
+      { type: '5-prime', sequence: reverseComplement(reverseTail), phosphorylated: false },
+      { type: '5-prime', sequence: reverseComplement(forwardTail), phosphorylated: false },
+    );
+    const insert = linearFragment(
+      'lic_insert',
+      'GCTA'.repeat(25),
+      { type: '5-prime', sequence: forwardTail, phosphorylated: false },
+      { type: '5-prime', sequence: reverseTail, phosphorylated: false },
+      [feature('gene', 10, 70, 'CDS', 1)],
+    );
+    const result = simulateLIC(vector, insert);
+    expect(result.product).not.toBeNull();
+    expect(result.product?.length).toBe(vector.length + insert.length);
+    expect(result.orientation).toBe('forward');
+    expect(result.product?.features.find((item) => item.name === 'gene')?.start).toBe(vector.length + 10);
+    const mismatched = linearFragment(
+      'lic_mismatch',
+      'GCTA'.repeat(25),
+      { type: '5-prime', sequence: 'AAAAAAAAAAAA', phosphorylated: false },
+      { type: '5-prime', sequence: reverseTail, phosphorylated: false },
+    );
+    const failed = simulateLIC(vector, mismatched);
+    expect(failed.product).toBeNull();
+    expect(failed.warnings.some((warning) => warning.includes('not complementary'))).toBe(true);
+  });
+
+  it('detects the reverse LIC insert orientation', () => {
+    const forwardTail = 'GACGACGACAAG';
+    const reverseTail = 'GAGGAGAAGCCCGGT';
+    const vector = linearFragment(
+      'pET_LIC_reverse',
+      'ACGT'.repeat(50),
+      { type: '5-prime', sequence: reverseTail, phosphorylated: false },
+      { type: '5-prime', sequence: forwardTail, phosphorylated: false },
+    );
+    const insert = linearFragment(
+      'lic_reverse_insert',
+      'GCTA'.repeat(25),
+      { type: '5-prime', sequence: reverseTail, phosphorylated: false },
+      { type: '5-prime', sequence: forwardTail, phosphorylated: false },
+      [feature('gene', 10, 70, 'CDS', 1)],
+    );
+    const result = simulateLIC(vector, insert);
+    expect(result.product).not.toBeNull();
+    expect(result.orientation).toBe('reverse');
+    expect(result.product?.sequence.slice(vector.length)).toBe(reverseComplement(insert.sequence));
+    const gene = result.product?.features.find((item) => item.name === 'gene');
+    expect(gene?.start).toBe(vector.length + (insert.length - 70));
+    expect(gene?.end).toBe(vector.length + (insert.length - 10));
+    expect(gene?.strand).toBe(-1);
+  });
+
+  it('designs LIC primers with the pET Ek/LIC tails', () => {
+    const template = makeDocument({
+      name: 'lic_template',
+      sequence: 'ATGCGTACGTTAGCTAGCTAGGCTAACGTTAGCCGATCGTAGCTAGCATCGATGCTAGCTAGCTAGCAT',
+      topology: 'circular',
+    });
+    const pair = designLICPrimers(template, { start: 0, end: 60 });
+    expect(pair.forward.tailSequence).toBe('GACGACGACAAG');
+    expect(pair.reverse.tailSequence).toBe('GAGGAGAAGCCCGGT');
+    expect(pair.forward.sequence.startsWith('GACGACGACAAG')).toBe(true);
+    expect(pair.reverse.sequence.startsWith('GAGGAGAAGCCCGGT')).toBe(true);
+    expect(pair.forward.bindingStart).toBe(0);
+    expect(pair.reverse.bindingEnd).toBe(60);
+    const custom = designLICPrimers(template, { start: 0, end: 60 }, {
+      forward: 'TTTTTTTTTTTT',
+      reverse: 'GGGGGGGGGGGG',
+    });
+    expect(custom.forward.tailSequence).toBe('TTTTTTTTTTTT');
+    expect(custom.reverse.tailSequence).toBe('GGGGGGGGGGGG');
+  });
+});
+
+describe('site-specific recombination', () => {
+  const loxP = RECOMBINATION_SITES.loxP;
+  const lox2272 = RECOMBINATION_SITES.lox2272;
+
+  function circularWithSites(
+    name: string,
+    leftFlank: string,
+    first: string,
+    middle: string,
+    second: string,
+    rightFlank: string,
+    features: SequenceFeature[] = [],
+  ): PlasmidDocument {
+    return makeDocument({
+      name,
+      sequence: leftFlank + first + middle + second + rightFlank,
+      topology: 'circular',
+      features,
+    });
+  }
+
+  it('finds loxP sites on both strands of a circular molecule', () => {
+    const doc = circularWithSites(
+      'sites',
+      'ACGT'.repeat(5),
+      loxP,
+      'GCTA'.repeat(10),
+      reverseComplement(loxP),
+      'ACGT'.repeat(5),
+    );
+    const sites = findRecombinationSites(doc);
+    expect(sites.filter((site) => site.site === 'loxP')).toHaveLength(2);
+    expect(sites.map((site) => site.strand).sort()).toEqual([-1, 1]);
+  });
+
+  it('excises between direct loxP sites and preserves the length relationship', () => {
+    const doc = circularWithSites(
+      'floxed',
+      'ACGT'.repeat(5),
+      loxP,
+      'GCTA'.repeat(25),
+      loxP,
+      'TTGC'.repeat(5),
+      [feature('payload', 20 + loxP.length + 16, 20 + loxP.length + 76)],
+    );
+    const result = simulateRecombinase([doc], 'Cre');
+    expect(result.products).toHaveLength(2);
+    expect(result.products.reduce((sum, product) => sum + product.length, 0)).toBe(doc.length + loxP.length);
+    const circle = result.products.find((product) => product.topology === 'circular' && product.length === 100 + loxP.length);
+    expect(circle).toBeDefined();
+    const payload = circle?.features.find((item) => item.name === 'payload');
+    expect(payload?.start).toBe(16);
+    expect(payload?.end).toBe(76);
+    expect(result.events.some((event) => event.includes('excision'))).toBe(true);
+    expect(result.products.every((product) => product.history.some((node) => node.operation === 'manual_edit'))).toBe(true);
+  });
+
+  it('inverts the interval between opposing loxP sites', () => {
+    const doc = circularWithSites(
+      'invertible',
+      'ACGT'.repeat(5),
+      loxP,
+      'GCTA'.repeat(25),
+      reverseComplement(loxP),
+      'TTGC'.repeat(5),
+      [feature('payload', 20 + loxP.length + 16, 20 + loxP.length + 76)],
+    );
+    const result = simulateRecombinase([doc], 'Cre');
+    expect(result.products).toHaveLength(1);
+    const product = result.products[0];
+    const start = 20 + loxP.length;
+    const end = start + 100;
+    expect(product.length).toBe(doc.length);
+    expect(product.sequence).toBe(
+      doc.sequence.slice(0, start) +
+        reverseComplement(doc.sequence.slice(start, end)) +
+        doc.sequence.slice(end),
+    );
+    const payload = product.features.find((item) => item.name === 'payload');
+    expect(payload?.start).toBe(start + (100 - 76));
+    expect(payload?.end).toBe(start + (100 - 16));
+    expect(payload?.strand).toBe(-1);
+    expect(result.events.some((event) => event.includes('inversion'))).toBe(true);
+  });
+
+  it('reports origin-spanning sites with wrapped coordinates and still excises them', () => {
+    const sequence =
+      loxP.slice(10) +
+      'GCTA'.repeat(25) +
+      loxP +
+      'TTGC'.repeat(5) +
+      loxP.slice(0, 10);
+    const doc = makeDocument({ name: 'wrapped_sites', sequence, topology: 'circular' });
+    const sites = findRecombinationSites(doc).filter((site) => site.site === 'loxP');
+    expect(sites.some((site) => site.start > site.end)).toBe(true);
+    const result = simulateRecombinase([doc], 'Cre');
+    expect(result.products).toHaveLength(2);
+    expect(result.products.reduce((sum, product) => sum + product.length, 0)).toBe(doc.length + loxP.length);
+  });
+
+  it('does not recombine loxP with lox2272', () => {
+    const doc = circularWithSites(
+      'mixed',
+      'ACGT'.repeat(5),
+      loxP,
+      'GCTA'.repeat(25),
+      lox2272,
+      'TTGC'.repeat(5),
+    );
+    const result = simulateRecombinase([doc], 'Cre');
+    expect(result.events).toHaveLength(0);
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0].sequence).toBe(doc.sequence);
+  });
+
+  it('forms a cointegrate from two molecules with one loxP site each', () => {
+    const first = circularWithSites('first', 'ACGT'.repeat(10), loxP, 'GCTA'.repeat(20), '', '');
+    const second = circularWithSites('second', 'TTGC'.repeat(12), loxP, 'CGAT'.repeat(18), '', '');
+    const result = simulateRecombinase([first, second], 'Cre');
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0].length).toBe(first.length + second.length);
+    expect(result.products[0].topology).toBe('circular');
+    expect(result.events.some((event) => event.includes('integration'))).toBe(true);
+    const shifted = result.products[0].features.filter((item) => item.name === 'loxP');
+    expect(shifted.length).toBeGreaterThanOrEqual(2);
+    expect(result.products[0].history.some((node) => node.operation === 'manual_edit')).toBe(true);
+  });
+
+  it('generates loxP and lox72 after lox66 and lox71 integration', () => {
+    const first = circularWithSites('lox66_doc', 'ACGT'.repeat(10), RECOMBINATION_SITES.lox66, 'GCTA'.repeat(20), '', '');
+    const second = circularWithSites('lox71_doc', 'TTGC'.repeat(12), RECOMBINATION_SITES.lox71, 'CGAT'.repeat(18), '', '');
+    const result = simulateRecombinase([first, second], 'Cre');
+    expect(result.products).toHaveLength(1);
+    const product = result.products[0];
+    expect(product.sequence).toContain(RECOMBINATION_SITES.loxP);
+    expect(product.sequence).toContain('TACCGTTCGTATAATGTATGCTATACGAACGGTA');
+    expect(product.features.some((item) => item.name === 'loxP')).toBe(true);
+    expect(product.features.some((item) => item.name === 'lox72')).toBe(true);
+    expect(result.events.some((event) => event.includes('lox72'))).toBe(true);
+  });
+
+  it('recognizes lox66 and lox71 written in the opposite strand orientation', () => {
+    const gcatLox66 = 'ATAACTTCGTATAGCATACATTATACGAACGGTA';
+    const gcatLox71 = 'TACCGTTCGTATAGCATACATTATACGAAGTTAT';
+    const first = circularWithSites('gcat66_doc', 'ACGT'.repeat(10), gcatLox66, 'GCTA'.repeat(20), '', '');
+    const second = circularWithSites('gcat71_doc', 'TTGC'.repeat(12), gcatLox71, 'CGAT'.repeat(18), '', '');
+    const result = simulateRecombinase([first, second], 'Cre');
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0].sequence).toContain(RECOMBINATION_SITES.loxP);
+    expect(result.products[0].sequence).toContain('TACCGTTCGTATAATGTATGCTATACGAACGGTA');
+    expect(result.events.some((event) => event.includes('lox72'))).toBe(true);
+  });
+
+  it('excises between direct FRT sites with Flp', () => {
+    const frt = RECOMBINATION_SITES.FRT as string;
+    const doc = circularWithSites('frt_flanked', 'ACGT'.repeat(5), frt, 'GCTA'.repeat(25), frt, 'TTGC'.repeat(5));
+    const result = simulateRecombinase([doc], 'Flp');
+    expect(result.products).toHaveLength(2);
+    expect(result.products.reduce((sum, product) => sum + product.length, 0)).toBe(doc.length + frt.length);
+  });
+
+  it('recognizes the full 48 bp FRT site without double counting the minimal core', () => {
+    const fullFrt = 'GAAGTTCCTATTCCGAAGTTCCTATTCTCTAGAAAGTATAGGAACTTC';
+    const doc = circularWithSites('full_frt', 'ACGT'.repeat(5), fullFrt, 'GCTA'.repeat(25), fullFrt, 'TTGC'.repeat(5));
+    const sites = findRecombinationSites(doc).filter((site) => site.site === 'FRT');
+    expect(sites).toHaveLength(2);
+    expect(sites[0].end - sites[0].start).toBe(fullFrt.length);
+    const result = simulateRecombinase([doc], 'Flp');
+    expect(result.products).toHaveLength(2);
+    expect(result.products.reduce((sum, product) => sum + product.length, 0)).toBe(doc.length + fullFrt.length);
+  });
+});
+
+describe('PCR at the ends of a linear template', () => {
+  it('does not report mismatches for a reverse primer ending at the 3-prime terminus', () => {
+    const sequence = 'ATGGTGAGCAAGGGCGAGGAGGATAACATGGCCATCATCAAGGAGTTCATGCGCTTCAAGGTGCACATGGAGGGCTCCGTGAACGGCCACGAGTTCGAGATCGAGGGCGAGGGCGAGGGCCGCCCCTACGAGGGCACCCAGACCGCCAAGCTGAAGGTGACCAAGGGTGGCCCCCTGCCCTTCGCCTGGGACATCCTGTCCCCTCAGTTCATGTACGGCTCCAAGGCCTACGTGAAGCACCCCGCCGACATCCCCGACTACTTGAAGCTGTCCTTCCCCGAGGGCTTCAAGTGGGAGCGCGTGATGAACTTCGAGGACGGCGGCGTGGTGACCGTGACCCAGGACTCCTCCCTGCAGGACGGCGAGTTCATCTACAAGGTGAAGCTGCGCGGCACCAACTTCCCCTCCGACGGCCCCGTAATGCAGAAGAAGACCATGGGCTGGGAGGCCTCCTCCGAGCGGATGTACCCCGAGGACGGCGCCCTGAAGGGCGAGATCAAGCAGAGGCTGAAGCTGAAGGACGGCGGCCACTACGACGCTGAGGTCAAGACCACCTACAAGGCCAAGAAGCCCGTGCAGCTGCCCGGCGCCTACAACGTCAACATCAAGTTGGACATCACCTCCCACAACGAGGACTACACCATCGTGGAACAGTACGAACGCGCCGAGGGCCGCCACTCCACCGGCGGCATGGACGAGCTGTACAAGTAA';
+    const doc = makeDocument({ name: 'mCherry', sequence, topology: 'linear' });
+    const pair = designPrimerPair(doc, { start: 0, end: sequence.length }, { enzymeSiteForward: 'BamHI', enzymeSiteReverse: 'NotI', leaderBases: 'GCG' });
+    expect(pair.reverse.bindingEnd).toBe(sequence.length);
+    const result = simulatePCR(doc, pair.forward, pair.reverse);
+    expect(result.warnings.some((w) => w.includes('differs from the template'))).toBe(false);
+    expect(result.product?.length).toBe(pair.forward.tailSequence.length + sequence.length + pair.reverse.tailSequence.length);
+    expect(result.product?.sequence.startsWith(pair.forward.sequence)).toBe(true);
+  });
+});
+

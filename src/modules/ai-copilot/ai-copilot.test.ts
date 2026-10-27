@@ -12,6 +12,7 @@ import type {
 import { CopilotSidebar } from './CopilotSidebar';
 import {
   AI_CONFIG_STORAGE_KEY,
+  LEGACY_AI_CONFIG_STORAGE_KEY,
   PROVIDER_DEFAULTS,
   QUICK_PROMPTS,
   buildPlasmidContextPrompt,
@@ -307,11 +308,11 @@ describe('parseAssistantReply', () => {
     const reply = [
       '建议先做双酶切鉴定。',
       '',
-      '<opensnapgene_action>',
+      '<gatc_action>',
       '{"type":"RUN_DIGESTION","payload":{"enzymeNames":["EcoRI","BamHI"]}}',
-      '</opensnapgene_action>',
+      '</gatc_action>',
       '',
-      '<opensnapgene_action>[{"type":"HIGHLIGHT_RANGE","payload":{"start":100,"end":200,"reason":"疑似移码"}},{"type":"ADD_FEATURES","payload":{"features":[{"name":"test","type":"misc_feature","start":10,"end":50,"strand":1,"color":"#123456"}]}}]</opensnapgene_action>',
+      '<gatc_action>[{"type":"HIGHLIGHT_RANGE","payload":{"start":100,"end":200,"reason":"疑似移码"}},{"type":"ADD_FEATURES","payload":{"features":[{"name":"test","type":"misc_feature","start":10,"end":50,"strand":1,"color":"#123456"}]}}]</gatc_action>',
       '',
       '请确认后执行。',
     ].join('\n');
@@ -324,15 +325,39 @@ describe('parseAssistantReply', () => {
       'ADD_FEATURES',
     ]);
     expect(parsed.content).toBe('建议先做双酶切鉴定。\n\n请确认后执行。');
+    expect(parsed.content).not.toContain('gatc_action');
     expect(parsed.content).not.toContain('opensnapgene_action');
     expect(parsed.content).not.toContain('RUN_DIGESTION');
+  });
+
+  it('still parses legacy opensnapgene_action blocks from previous conversations', () => {
+    const reply = [
+      '旧版回复。',
+      '<opensnapgene_action>{"type":"RUN_DIGESTION","payload":{"enzymeNames":["SmaI"]}}</opensnapgene_action>',
+      '请确认。',
+    ].join('\n');
+
+    const parsed = parseAssistantReply(reply);
+    expect(parsed.actions).toEqual([
+      { type: 'RUN_DIGESTION', payload: { enzymeNames: ['SmaI'] } },
+    ]);
+    expect(parsed.content).toBe('旧版回复。\n\n请确认。');
+    expect(parsed.content).not.toContain('opensnapgene_action');
+  });
+
+  it('handles an unclosed legacy action block by truncating display text', () => {
+    const parsed = parseAssistantReply(
+      '建议如下。\n<opensnapgene_action>{"type":"HIGHLIGHT_RANGE","payload":{"start":1,"end":2,"reason":"x"}}',
+    );
+    expect(parsed.actions).toEqual([]);
+    expect(parsed.content).toBe('建议如下。');
   });
 
   it('ignores unknown action types and malformed JSON blocks', () => {
     const reply = [
       '文字内容。',
-      '<opensnapgene_action>{"type":"DELETE_PLASMID","payload":{}}</opensnapgene_action>',
-      '<opensnapgene_action>{not valid json}</opensnapgene_action>',
+      '<gatc_action>{"type":"DELETE_PLASMID","payload":{}}</gatc_action>',
+      '<gatc_action>{not valid json}</gatc_action>',
     ].join('\n');
 
     const parsed = parseAssistantReply(reply);
@@ -341,7 +366,7 @@ describe('parseAssistantReply', () => {
   });
 
   it('handles fenced action blocks and empty replies', () => {
-    const reply = ['```json', '<opensnapgene_action>{"type":"HIGHLIGHT_RANGE","payload":{"start":1,"end":2,"reason":"x"}}</opensnapgene_action>', '```'].join('\n');
+    const reply = ['```json', '<gatc_action>{"type":"HIGHLIGHT_RANGE","payload":{"start":1,"end":2,"reason":"x"}}</gatc_action>', '```'].join('\n');
     const parsed = parseAssistantReply(reply);
     expect(parsed.actions).toHaveLength(1);
     expect(parsed.content).toBe('');
@@ -350,7 +375,7 @@ describe('parseAssistantReply', () => {
 
   it('parses an actions wrapper object', () => {
     const reply =
-      '<opensnapgene_action>{"actions":[{"type":"RUN_DIGESTION","payload":{"enzymeNames":["PstI"]}}]}</opensnapgene_action>';
+      '<gatc_action>{"actions":[{"type":"RUN_DIGESTION","payload":{"enzymeNames":["PstI"]}}]}</gatc_action>';
     const parsed = parseAssistantReply(reply);
     expect(parsed.actions).toEqual([
       { type: 'RUN_DIGESTION', payload: { enzymeNames: ['PstI'] } },
@@ -359,10 +384,10 @@ describe('parseAssistantReply', () => {
 
   it('parses multiple top-level JSON objects inside one action block', () => {
     const reply = [
-      '<opensnapgene_action>',
+      '<gatc_action>',
       '{"type":"RUN_DIGESTION","payload":{"enzymeNames":["EcoRI"]}}',
       '{"type":"HIGHLIGHT_RANGE","payload":{"start":10,"end":20,"reason":"check"}}',
-      '</opensnapgene_action>',
+      '</gatc_action>',
     ].join('\n');
     const parsed = parseAssistantReply(reply);
     expect(parsed.actions.map((action) => action.type)).toEqual([
@@ -505,8 +530,11 @@ describe('validateAction', () => {
 describe('buildSystemPrompt and quick prompts', () => {
   it('documents the action protocol and every action type', () => {
     const prompt = buildSystemPrompt();
-    expect(prompt).toContain('<opensnapgene_action>');
-    expect(prompt).toContain('</opensnapgene_action>');
+    expect(prompt).toContain('GATC');
+    expect(prompt).not.toContain('OpenSnapGene');
+    expect(prompt).toContain('<gatc_action>');
+    expect(prompt).toContain('</gatc_action>');
+    expect(prompt).not.toContain('opensnapgene_action');
     expect(prompt).toContain('DESIGN_PRIMERS');
     expect(prompt).toContain('ADD_FEATURES');
     expect(prompt).toContain('RUN_DIGESTION');
@@ -768,6 +796,79 @@ describe('AI config persistence', () => {
     clearAIConfig();
     expect(loadAIConfig()).toBeNull();
     expect(store.has(AI_CONFIG_STORAGE_KEY)).toBe(false);
+  });
+
+  it('migrates a configuration stored under the legacy key', () => {
+    const store = new Map<string, string>();
+    const storage = {
+      get length() {
+        return store.size;
+      },
+      clear: () => store.clear(),
+      getItem: (key: string) => store.get(key) ?? null,
+      key: (index: number) => Array.from(store.keys())[index] ?? null,
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    } as Storage;
+    vi.stubGlobal('localStorage', storage);
+
+    store.set(LEGACY_AI_CONFIG_STORAGE_KEY, JSON.stringify(baseConfig));
+    expect(loadAIConfig()).toEqual(baseConfig);
+    expect(store.has(AI_CONFIG_STORAGE_KEY)).toBe(true);
+    expect(store.has(LEGACY_AI_CONFIG_STORAGE_KEY)).toBe(false);
+
+    clearAIConfig();
+    expect(store.size).toBe(0);
+  });
+
+  it('clears both the current and legacy configuration keys', () => {
+    const store = new Map<string, string>([
+      [AI_CONFIG_STORAGE_KEY, JSON.stringify(baseConfig)],
+      [LEGACY_AI_CONFIG_STORAGE_KEY, JSON.stringify(baseConfig)],
+    ]);
+    const storage = {
+      get length() {
+        return store.size;
+      },
+      clear: () => store.clear(),
+      getItem: (key: string) => store.get(key) ?? null,
+      key: (index: number) => Array.from(store.keys())[index] ?? null,
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    } as Storage;
+    vi.stubGlobal('localStorage', storage);
+
+    clearAIConfig();
+    expect(store.has(AI_CONFIG_STORAGE_KEY)).toBe(false);
+    expect(store.has(LEGACY_AI_CONFIG_STORAGE_KEY)).toBe(false);
+  });
+
+  it('prefers the current key over a stale legacy entry', () => {
+    const store = new Map<string, string>([
+      [AI_CONFIG_STORAGE_KEY, JSON.stringify({ ...baseConfig, model: 'new-model' })],
+      [LEGACY_AI_CONFIG_STORAGE_KEY, JSON.stringify({ ...baseConfig, model: 'old-model' })],
+    ]);
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    } as unknown as Storage;
+    vi.stubGlobal('localStorage', storage);
+
+    expect(loadAIConfig()).toEqual({ ...baseConfig, model: 'new-model' });
+    expect(store.has(LEGACY_AI_CONFIG_STORAGE_KEY)).toBe(true);
   });
 
   it('returns null when storage is unavailable or content is malformed', () => {

@@ -647,7 +647,7 @@ describe('virtual agarose gel', () => {
       })),
       params
     );
-    expect(lanes).toHaveLength(5);
+    expect(lanes).toHaveLength(Object.keys(DNA_LADDERS).length);
     lanes.forEach((lane, index) => {
       const names = Object.keys(DNA_LADDERS);
       const definition = DNA_LADDERS[names[index] as keyof typeof DNA_LADDERS];
@@ -675,5 +675,37 @@ describe('virtual agarose gel', () => {
       { agarosePercent: 1 }
     );
     expect(lanes[0].bands[0].fragmentDoc?.name).toBe('Fragment');
+  });
+});
+
+describe('expanded commercial DNA ladders', () => {
+  const names = Object.keys(DNA_LADDERS) as Array<keyof typeof DNA_LADDERS>;
+
+  it('offers at least 25 ladders and keeps the original five names', () => {
+    expect(names.length).toBeGreaterThanOrEqual(25);
+    for (const original of [
+      'NEB 1kb Plus',
+      'NEB 1kb',
+      'NEB 100bp',
+      'Takara DL2000',
+      'Takara DL5000'
+    ] as const) {
+      expect(names).toContain(original);
+    }
+  });
+
+  it('orders every ladder by fragment size and uses positive band masses', () => {
+    for (const name of names) {
+      const bands = DNA_LADDERS[name];
+      expect(bands.length).toBeGreaterThan(0);
+      expect(bands.some(band => band.highlighted)).toBe(true);
+      expect(bands[0].sizeBp).toBeGreaterThan(0);
+      for (let index = 0; index < bands.length; index += 1) {
+        expect(bands[index].massNg).toBeGreaterThan(0);
+        if (index > 0) {
+          expect(bands[index].sizeBp).toBeGreaterThan(bands[index - 1].sizeBp);
+        }
+      }
+    }
   });
 });

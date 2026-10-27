@@ -7,18 +7,27 @@ import type {
 } from '../../types/schema';
 import {
   COMMERCIAL_ENZYMES,
+  CODON_USAGE,
+  ENZYME_DATABASE,
+  ENZYME_SETS,
   FEATURE_LIBRARY,
   autoAnnotateFeatures,
+  backTranslate,
   calcGcPercent,
+  codonAdaptationIndex,
+  filterEnzymes,
   findAllORFs,
   findCutSites,
+  findIsoschizomers,
   getEnzymeByName,
   mutatePlasmidSequence,
   reverseComplement,
   reverseComplementPlasmid,
   rotateCircularOrigin,
+  searchMotif,
   translateDna,
 } from './index';
+import type { CodonUsageOrganism } from './index';
 
 function makeDoc(
   sequence: string,
@@ -782,5 +791,255 @@ describe('annotation of real vector records', () => {
     expect(names.some((name) => /KanR|NeoR/i.test(name))).toBe(true);
     expect(names.some((name) => /f1 ori/i.test(name))).toBe(true);
     expect(names.some((name) => /SV40 ori/i.test(name))).toBe(true);
+  });
+});
+
+function makeRandomSequence(length: number, seed: number): string {
+  const alphabet = 'ACGT';
+  let state = seed >>> 0;
+  let sequence = '';
+  for (let index = 0; index < length; index += 1) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    sequence += alphabet[(state >>> 24) & 3];
+  }
+  return sequence;
+}
+
+describe('expanded restriction enzyme catalogue', () => {
+  it('contains the full database and a commercial catalogue of at least 550 enzymes', () => {
+    expect(ENZYME_DATABASE.length).toBeGreaterThanOrEqual(1500);
+    expect(COMMERCIAL_ENZYMES.length).toBeGreaterThanOrEqual(550);
+
+    const names = COMMERCIAL_ENZYMES.map((enzyme) => enzyme.name.toLowerCase());
+    expect(new Set(names).size).toBe(names.length);
+    for (const enzyme of COMMERCIAL_ENZYMES) {
+      expect(enzyme.recognitionSeq).toMatch(/^[ACGTURYSWKMBDHVN]+$/);
+      expect(enzyme.suppliers?.length ?? 0).toBeGreaterThan(0);
+      expect(enzyme.methylationSensitivity).toBeDefined();
+    }
+  });
+
+  it('resolves REBASE aliases case-insensitively', () => {
+    expect(getEnzymeByName('asp718i')?.recognitionSeq).toBe('GGTACC');
+    expect(getEnzymeByName('BME18I')?.recognitionSeq).toBe('GGWCC');
+    expect(getEnzymeByName('paqci')?.isTypeIIS).toBe(true);
+    expect(getEnzymeByName('not-an-enzyme')).toBeUndefined();
+  });
+
+  it('reports isoschizomers and neoschizomers from the shared recognition site', () => {
+    const kpnI = getEnzymeByName('KpnI');
+    expect(kpnI).toBeDefined();
+    const kpnResult = findIsoschizomers(kpnI!);
+    expect(
+      kpnResult.neoschizomers.some((enzyme) => enzyme.name === 'Acc65I'),
+    ).toBe(true);
+
+    const acc65I = getEnzymeByName('Acc65I');
+    expect(acc65I).toBeDefined();
+    const accResult = findIsoschizomers(acc65I!);
+    expect(accResult.isoschizomers.length).toBeGreaterThan(0);
+    expect(
+      accResult.isoschizomers.every(
+        (enzyme) =>
+          enzyme.cutIndexTop === acc65I!.cutIndexTop &&
+          enzyme.cutIndexBottom === acc65I!.cutIndexBottom,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps every preset enzyme set resolvable and filters by metadata', () => {
+    expect(ENZYME_SETS.length).toBeGreaterThanOrEqual(8);
+    for (const set of ENZYME_SETS) {
+      expect(set.enzymeNames.length).toBeGreaterThan(0);
+      for (const name of set.enzymeNames) {
+        expect(getEnzymeByName(name), `${set.id}: ${name}`).toBeDefined();
+      }
+    }
+
+    const typeIIS = filterEnzymes(COMMERCIAL_ENZYMES, { typeIIS: true });
+    expect(typeIIS.length).toBeGreaterThan(0);
+    expect(typeIIS.every((enzyme) => enzyme.isTypeIIS === true)).toBe(true);
+
+    const blunt = filterEnzymes(COMMERCIAL_ENZYMES, { overhang: ['blunt'] });
+    expect(blunt.length).toBeGreaterThan(0);
+    expect(
+      blunt.every((enzyme) => enzyme.cutIndexTop === enzyme.cutIndexBottom),
+    ).toBe(true);
+
+    const nebSix = filterEnzymes(COMMERCIAL_ENZYMES, {
+      minSiteLength: 6,
+      maxSiteLength: 8,
+      supplier: 'NEB',
+      nameQuery: 'i',
+    });
+    expect(nebSix.length).toBeGreaterThan(0);
+    expect(
+      filterEnzymes(COMMERCIAL_ENZYMES, { supplier: 'Thermo' }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('scans a 100 kb circular plasmid with the full commercial catalogue quickly', () => {
+    const doc = makeDoc(makeRandomSequence(100000, 424242), 'circular');
+    for (let warmup = 0; warmup < 2; warmup += 1) {
+      findCutSites(doc, COMMERCIAL_ENZYMES);
+    }
+    const samples: number[] = [];
+    let siteCount = 0;
+    for (let run = 0; run < 5; run += 1) {
+      const start = performance.now();
+      const sites = findCutSites(doc, COMMERCIAL_ENZYMES);
+      samples.push(performance.now() - start);
+      siteCount = sites.length;
+    }
+    expect(siteCount).toBeGreaterThan(0);
+    expect(Math.min(...samples)).toBeLessThan(400);
+  });
+});
+
+describe('IUPAC motif search', () => {
+  it('finds a hit spanning the circular origin', () => {
+    const sequence = `${'TTC'}${'C'.repeat(44)}GAA`;
+    const hits = searchMotif(makeDoc(sequence, 'circular'), 'GAATTC');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      start: 47,
+      end: 3,
+      strand: 1,
+      mismatches: 0,
+      matched: 'GAATTC',
+    });
+  });
+
+  it('finds negative-strand hits and returns positive-strand coordinates', () => {
+    const recognition = 'GGTCTC';
+    const sequence = `${'C'.repeat(20)}${reverseComplement(recognition)}${'C'.repeat(20)}`;
+    const hits = searchMotif(makeDoc(sequence, 'linear'), recognition);
+    const minus = hits.find((hit) => hit.strand === -1);
+    expect(minus).toBeDefined();
+    expect(minus!.start).toBe(20);
+    expect(minus!.end).toBe(26);
+    expect(minus!.matched).toBe(recognition);
+    expect(minus!.mismatches).toBe(0);
+  });
+
+  it('maps a negative-strand hit across the circular origin', () => {
+    const sequence = `${'ACC'}${'C'.repeat(44)}GAG`;
+    const hits = searchMotif(makeDoc(sequence, 'circular'), 'GGTCTC');
+    const minus = hits.find((hit) => hit.strand === -1);
+    expect(minus).toBeDefined();
+    expect(minus!.start).toBe(47);
+    expect(minus!.end).toBe(3);
+    expect(minus!.matched).toBe('GGTCTC');
+  });
+
+  it('allows Hamming mismatches and respects the mismatch limit', () => {
+    const sequence = `${'C'.repeat(10)}GAAATC${'C'.repeat(20)}`;
+    const doc = makeDoc(sequence, 'linear');
+    expect(searchMotif(doc, 'GAATTC')).toHaveLength(0);
+    const tolerant = searchMotif(doc, 'GAATTC', { maxMismatches: 1 });
+    expect(tolerant).toHaveLength(1);
+    expect(tolerant[0].mismatches).toBe(1);
+    expect(tolerant[0].start).toBe(10);
+    expect(tolerant[0].matched).toBe('GAAATC');
+  });
+
+  it('searches all six reading frames for protein patterns', () => {
+    const sequence = `CCCATGGCTACT${'C'.repeat(12)}`;
+    const doc = makeDoc(sequence, 'linear');
+    const hits = searchMotif(doc, 'MAT', { protein: true, bothStrands: false });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]).toMatchObject({
+      start: 3,
+      end: 12,
+      strand: 1,
+      mismatches: 0,
+      matched: 'MAT',
+    });
+
+    const wildcard = searchMotif(doc, 'MXT', { protein: true, bothStrands: false });
+    expect(wildcard.some((hit) => hit.matched === 'MAT')).toBe(true);
+
+    const minusDoc = makeDoc(reverseComplement('ATGGCTTAA'), 'linear');
+    const minus = searchMotif(minusDoc, 'MA', { protein: true }).find(
+      (hit) => hit.strand === -1,
+    );
+    expect(minus).toBeDefined();
+    expect(minus!.start).toBe(3);
+    expect(minus!.end).toBe(9);
+    expect(minus!.matched).toBe('MA');
+  });
+
+  it('scans a 100 kb sequence for a 20 bp motif with two mismatches quickly', () => {
+    const doc = makeDoc(makeRandomSequence(100000, 98765), 'circular');
+    const start = performance.now();
+    const hits = searchMotif(doc, 'GATCGATCGATCGATCGATC', { maxMismatches: 2 });
+    const elapsed = performance.now() - start;
+    expect(Array.isArray(hits)).toBe(true);
+    expect(elapsed).toBeLessThan(200);
+  });
+});
+
+describe('reverse translation and codon usage', () => {
+  const protein = 'MKTIIALSYIFCLVFADYKDDDDK';
+  const organisms: CodonUsageOrganism[] = [
+    'E. coli',
+    'S. cerevisiae',
+    'H. sapiens',
+    'M. musculus',
+    'P. pastoris',
+    'D. melanogaster',
+    'A. thaliana',
+    'CHO',
+  ];
+
+  it('provides 64 codon frequencies for every supported organism', () => {
+    for (const organism of organisms) {
+      expect(Object.keys(CODON_USAGE[organism])).toHaveLength(64);
+      for (const frequency of Object.values(CODON_USAGE[organism])) {
+        expect(frequency).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('round-trips proteins with the most-frequent and weighted strategies', () => {
+    for (const organism of organisms) {
+      const common = backTranslate(protein, organism);
+      expect(common).toHaveLength(protein.length * 3);
+      expect(translateDna(common)).toBe(protein);
+
+      const weightedA = backTranslate(protein, organism, {
+        strategy: 'weighted',
+        seed: 12345,
+      });
+      const weightedB = backTranslate(protein, organism, {
+        strategy: 'weighted',
+        seed: 12345,
+      });
+      expect(weightedA).toBe(weightedB);
+      expect(translateDna(weightedA)).toBe(protein);
+    }
+  });
+
+  it('removes forbidden recognition sites with synonymous codons', () => {
+    const avoidSites = ['GAATTC', 'GGTCTC', 'AAGCTT'];
+    for (const organism of organisms) {
+      const dna = backTranslate(protein, organism, { avoidSites });
+      expect(translateDna(dna)).toBe(protein);
+      for (const site of avoidSites) {
+        expect(dna.includes(site), `${organism} ${site}`).toBe(false);
+        expect(dna.includes(reverseComplement(site)), `${organism} ${site} rc`).toBe(
+          false,
+        );
+      }
+    }
+  });
+
+  it('computes a codon adaptation index between zero and one', () => {
+    for (const organism of organisms) {
+      const dna = backTranslate(protein, organism);
+      const cai = codonAdaptationIndex(dna, organism);
+      expect(cai).toBeGreaterThan(0);
+      expect(cai).toBeLessThanOrEqual(1);
+    }
   });
 });

@@ -1,10 +1,10 @@
 // Cross-module workflows assembled from module primitives. Modules never call
 // each other directly; this layer pipes data between them through schema types.
-import type { AIToolAction, CloningHistoryNode, CutSite, PlasmidDocument, Primer, SequenceFeature } from '../types/schema';
-import { COMMERCIAL_ENZYMES, getEnzymeByName } from '../modules/seq-engine';
+import type { AIToolAction, CloningHistoryNode, CutSite, PlasmidDocument, Primer, RestrictionEnzyme, SequenceFeature } from '../types/schema';
+import { COMMERCIAL_ENZYMES, ENZYME_SETS, getEnzymeByName } from '../modules/seq-engine';
 import type { GelSampleInput } from '../modules/alignment-gel';
 import { callBio } from './bio-client';
-import { selectActiveDoc, useWorkbench, type WizardKind } from './store';
+import { ALL_COMMERCIAL_SET, selectActiveDoc, useWorkbench, type WizardKind } from './store';
 
 export const uid = (prefix = 'id') => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 
@@ -26,8 +26,34 @@ export function allEnzymeNames(): string[] {
   return COMMERCIAL_ENZYMES.map((e) => e.name).sort((a, b) => a.localeCompare(b));
 }
 
+/** Enzymes in the currently selected enzyme set (preset, custom, or all commercial). */
+export function activeEnzymes(): RestrictionEnzyme[] {
+  const { enzymeSetId, customEnzymeSets } = useWorkbench.getState();
+  if (enzymeSetId === ALL_COMMERCIAL_SET) return COMMERCIAL_ENZYMES;
+  const set = [...ENZYME_SETS, ...customEnzymeSets].find((x) => x.id === enzymeSetId);
+  return set ? resolveEnzymes(set.enzymeNames).enzymes : COMMERCIAL_ENZYMES;
+}
+
+export function newDocument(name: string, sequence: string, topology: PlasmidDocument['topology'], description?: string): PlasmidDocument {
+  const now = new Date().toISOString();
+  const seq = sequence.toUpperCase();
+  return {
+    id: uid('doc'),
+    name,
+    sequence: seq,
+    topology,
+    length: seq.length,
+    createdAt: now,
+    updatedAt: now,
+    description,
+    features: [],
+    primers: [],
+    history: [historyNode('manual_edit', description ?? `新建 ${name}`)],
+  };
+}
+
 export async function refreshCutSites(doc: PlasmidDocument): Promise<CutSite[]> {
-  const sites = await callBio('findCutSites', doc);
+  const sites = await callBio('findCutSites', doc, activeEnzymes());
   useWorkbench.getState().setCutSites(doc.id, sites);
   return sites;
 }
@@ -98,7 +124,7 @@ export function openProduct(product: PlasmidDocument | null, warnings: string[] 
   st.notify(`已生成 ${product.name} (${product.length} bp)${warnings.length ? '；' + warnings.join('；') : ''}`);
 }
 
-const methodToWizard: Partial<Record<CloningHistoryNode['operation'], WizardKind>> = {
+export const methodToWizard: Partial<Record<CloningHistoryNode['operation'], WizardKind>> = {
   restriction_ligation: 'restriction',
   gibson_assembly: 'gibson',
   golden_gate: 'golden_gate',

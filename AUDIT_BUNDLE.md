@@ -1,6 +1,6 @@
-# OpenSnapGene 跨模块审计包（AUDIT_BUNDLE）
+# GATC 跨模块审计包（AUDIT_BUNDLE）
 
-> 生成时间：2026-10-26T20:50:40.473Z
+> 生成时间：2026-10-27T01:15:31.517Z
 > 用途：连同第 1 节的审阅提示词一起发给外部审阅模型，做最终的代码与生信算法审计。
 
 ## 1. 审阅提示词
@@ -31,58 +31,105 @@
 | 项 | 结果 |
 |---|---|
 | `tsc --noEmit` | 0 error ✅ |
-| `vitest run` | Test Files 8 passed (8) Tests 179 passed (179) |
+| `vitest run` | Test Files 15 passed (15) Tests 369 passed (369) |
 | 模块间交叉引用 | 无 ✅ |
 
 ## 3. 模块规模与公开接口
 
 | 模块 | 文件 | 行数 | 测试文件 |
 |---|---|---|---|
-| io-adapter | 2 | 2876 | 1 |
-| seq-engine | 4 | 2754 | 1 |
-| cloning-primer | 7 | 5658 | 1 |
-| alignment-gel | 7 | 2628 | 1 |
-| canvas-ui | 18 | 6677 | 2 |
-| ai-copilot | 3 | 3407 | 1 |
-| app（集成层） | 11 | 2391 | 1 |
+| io-adapter | 2 | 5772 | 1 |
+| seq-engine | 10 | 6292 | 2 |
+| cloning-primer | 11 | 9382 | 2 |
+| alignment-gel | 14 | 6852 | 3 |
+| canvas-ui | 35 | 13161 | 5 |
+| ai-copilot | 3 | 3528 | 1 |
+| app（集成层） | 17 | 4458 | 1 |
 
 ### io-adapter
 
 ```text
-index.ts:2107  export function enrichSnapGeneBinary(
-index.ts:2161  export async function parseSnapGeneBuffer(
-index.ts:2204  export async function parseGenBankString(gbkText: string): Promise<PlasmidDocument> {
-index.ts:2218  export async function parseBioFile(
-index.ts:2423  export function exportPlasmidToGenBank(doc: PlasmidDocument): string {
-index.ts:2449  export function exportPlasmidToFasta(doc: PlasmidDocument): string {
-index.ts:2469  export function exportPlasmidToSnapGeneJson(doc: PlasmidDocument): string {
+index.ts:108  export interface ProteinFeature {
+index.ts:119  export interface ProteinDocument {
+index.ts:130  export interface SequencingRead {
+index.ts:2658  export function exportPlasmidToSnapGene(doc: PlasmidDocument): Uint8Array {
+index.ts:2687  export function parseFastq(text: string): SequencingRead[] {
+index.ts:3670  export async function parseProteinFile(
+index.ts:3736  export function isProteinFile(fileName: string, data: string | ArrayBuffer): boolean {
+index.ts:3795  export function exportProteinToFasta(protein: ProteinDocument): string {
+index.ts:3852  export function exportProteinToGenPept(protein: ProteinDocument): string {
+index.ts:3978  export function normalizeAccession(
+index.ts:4004  export async function fetchFromNCBI(
+index.ts:4110  export function enrichSnapGeneBinary(
+index.ts:4164  export async function parseSnapGeneBuffer(
+index.ts:4207  export async function parseGenBankString(gbkText: string): Promise<PlasmidDocument> {
+index.ts:4223  export async function parseBioFile(
+index.ts:4570  export function exportPlasmidToGenBank(doc: PlasmidDocument): string {
+index.ts:4596  export function exportPlasmidToFasta(doc: PlasmidDocument): string {
+index.ts:4616  export function exportPlasmidToSnapGeneJson(doc: PlasmidDocument): string {
 ```
 
 ### seq-engine
 
 ```text
-enzymes.ts:197  export const COMMERCIAL_ENZYMES: RestrictionEnzyme[] = [
-enzymes.ts:206  export function getEnzymeByName(name: string): RestrictionEnzyme | undefined {
-feature-library.ts:3  export interface FeatureLibraryEntry {
-feature-library.ts:16  export const FEATURE_LIBRARY: FeatureLibraryEntry[] = [
-index.ts:24  export { COMMERCIAL_ENZYMES, getEnzymeByName };
-index.ts:25  export { FEATURE_LIBRARY };
-index.ts:26  export type { FeatureLibraryEntry };
-index.ts:28  export type SequenceEdit =
-index.ts:96  export function calcGcPercent(seq: string): number {
-index.ts:101  export function reverseComplement(seq: string): string {
-index.ts:107  export function translateDna(seq: string): string {
-index.ts:288  export function findCutSites(
-index.ts:485  export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
-index.ts:851  export function mutatePlasmidSequence(
-index.ts:1028  export function reverseComplementPlasmid(doc: PlasmidDocument): PlasmidDocument {
-index.ts:1105  export function rotateCircularOrigin(
-index.ts:1540  export function autoAnnotateFeatures(
+codon-usage.ts:1  export type CodonUsageOrganism =
+codon-usage.ts:181  export const CODON_USAGE: Record<CodonUsageOrganism, Record<string, number>> =
+codon-usage.ts:465  export function backTranslate(
+codon-usage.ts:505  export function codonAdaptationIndex(
+digest-buffer.ts:6  export type NebBufferName = 'r1.1' | 'r2.1' | 'r3.1' | 'rCutSmart';
+digest-buffer.ts:8  export interface EnzymeDigestCondition {
+digest-buffer.ts:16  export const ENZYME_DIGEST_CONDITIONS: Record<string, EnzymeDigestCondition> = {
+digest-buffer.ts:360  export function recommendDoubleDigestBuffer(
+digest-buffer.ts:493  export interface DoubleDigestRecommendation {
+enzyme-catalog.ts:3  export const ENZYME_SUPPLIER_CATALOG: Record<string, string[]> = {
+enzymes.ts:220  export const ENZYME_DATABASE: RestrictionEnzyme[] = buildDatabase();
+enzymes.ts:473  export const COMMERCIAL_ENZYMES: RestrictionEnzyme[] = buildCommercialEnzymes();
+enzymes.ts:490  export function getEnzymeByName(name: string): RestrictionEnzyme | undefined {
+enzymes.ts:507  export function findIsoschizomers(
+enzymes.ts:540  export interface EnzymeSet {
+enzymes.ts:628  export const ENZYME_SETS: EnzymeSet[] = [
+enzymes.ts:679  export function filterEnzymes(
+feature-library-extra.ts:8  export interface FeatureLibraryExtraEntry {
+feature-library-extra.ts:15  export const FEATURE_LIBRARY_EXTRA: FeatureLibraryExtraEntry[] = [
+feature-library.ts:4  export interface FeatureLibraryEntry {
+feature-library.ts:85  export const FEATURE_LIBRARY: FeatureLibraryEntry[] = [
+index.ts:24  export {
+index.ts:32  export type { EnzymeSet } from './enzymes';
+index.ts:33  export { searchMotif } from './motif-search';
+index.ts:34  export type { MotifHit } from './motif-search';
+index.ts:35  export {
+index.ts:40  export type { CodonUsageOrganism } from './codon-usage';
+index.ts:41  export { FEATURE_LIBRARY };
+index.ts:42  export type { FeatureLibraryEntry };
+index.ts:43  export { FEATURE_LIBRARY_EXTRA } from './feature-library-extra';
+index.ts:44  export type { FeatureLibraryExtraEntry } from './feature-library-extra';
+index.ts:45  export {
+index.ts:49  export type {
+index.ts:55  export type SequenceEdit =
+index.ts:154  export function calcGcPercent(seq: string): number {
+index.ts:159  export function reverseComplement(seq: string): string {
+index.ts:165  export function translateDna(seq: string): string {
+index.ts:426  export function findCutSites(
+index.ts:697  export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
+index.ts:1063  export function mutatePlasmidSequence(
+index.ts:1240  export function reverseComplementPlasmid(doc: PlasmidDocument): PlasmidDocument {
+index.ts:1317  export function rotateCircularOrigin(
+index.ts:2052  export function autoAnnotateFeatures(
+motif-search.ts:3  export interface MotifHit {
+motif-search.ts:294  export function searchMotif(
 ```
 
 ### cloning-primer
 
 ```text
+assembly.ts:30  export interface CloningProductResult {
+assembly.ts:36  export const LIC_DEFAULT_TAILS = {
+assembly.ts:239  export function addATailing(pcrProduct: PlasmidDocument): PlasmidDocument {
+assembly.ts:260  export function simulateTACloning(
+assembly.ts:279  export function simulateGCCloning(
+assembly.ts:322  export function simulateTOPOCloning(
+assembly.ts:441  export function simulateLIC(
+assembly.ts:514  export function designLICPrimers(
 cloning.ts:140  export function simulateDigestion(doc: PlasmidDocument, cutSites: CutSite[]): PlasmidDocument[] {
 cloning.ts:214  export function bluntEnds(
 cloning.ts:389  export function simulateLigation(
@@ -90,21 +137,24 @@ cloning.ts:635  export function simulateGibsonAssembly(
 cloning.ts:806  export function designGibsonPrimers(
 cloning.ts:1067  export function simulateGoldenGateAssembly(
 cloning.ts:1173  export function designGoldenGatePrimers(
-cloning.ts:1211  export const GATEWAY_ATT_SITES = {
-cloning.ts:1356  export function simulateGatewayBP(
-cloning.ts:1427  export function simulateGatewayLR(
-cloning.ts:1613  export function simulatePCR(
-cloning.ts:1834  export function simulateOverlapExtensionPCR(
-cloning.ts:1864  export function digestAndReligate(
-cloning.ts:1874  export function pcrProductLength(
-cloning.ts:1884  export function gibsonProductLength(fragments: PlasmidDocument[], options?: { minOverlap?: number; maxOverlap?: number; circular?: boolean }): number {
-cloning.ts:1889  export function mutationProduct(
-cloning.ts:1907  export function defaultEnzymeList(): RestrictionEnzyme[] {
-cloning.ts:1911  export function restrictionEnzymePanel(): RestrictionEnzyme[] {
-cloning.ts:1915  export function isGoldenGateEnzyme(enzyme: RestrictionEnzyme): boolean {
-cloning.ts:1919  export function primerPairOptions(options?: PrimerDesignOptions): PrimerDesignOptions {
-cloning.ts:1923  export function designPrimerPairForFeature(
-cloning.ts:1931  export function gcOf(sequence: string): number {
+cloning.ts:1223  export const GATEWAY_ATT_SITES = {
+cloning.ts:1411  export function simulateGatewayBP(
+cloning.ts:1482  export function simulateGatewayLR(
+cloning.ts:1848  export function simulateMultiSiteGatewayLR(
+cloning.ts:2081  export function simulatePCR(
+cloning.ts:2302  export function simulateOverlapExtensionPCR(
+cloning.ts:2332  export function digestAndReligate(
+cloning.ts:2342  export function pcrProductLength(
+cloning.ts:2352  export function gibsonProductLength(fragments: PlasmidDocument[], options?: { minOverlap?: number; maxOverlap?: number; circular?: boolean }): number {
+cloning.ts:2357  export function mutationProduct(
+cloning.ts:2375  export function defaultEnzymeList(): RestrictionEnzyme[] {
+cloning.ts:2379  export function restrictionEnzymePanel(): RestrictionEnzyme[] {
+cloning.ts:2383  export function isGoldenGateEnzyme(enzyme: RestrictionEnzyme): boolean {
+cloning.ts:2387  export function primerPairOptions(options?: PrimerDesignOptions): PrimerDesignOptions {
+cloning.ts:2391  export function designPrimerPairForFeature(
+cloning.ts:2399  export function gcOf(sequence: string): number {
+cloning.ts:2403  export * from './assembly';
+cloning.ts:2404  export * from './recombination';
 enzymes.ts:11  export interface EnzymeDefinition extends RestrictionEnzyme {
 enzymes.ts:15  export function makeEnzyme(
 enzymes.ts:34  export const COMMON_ENZYMES: RestrictionEnzyme[] = [
@@ -124,27 +174,42 @@ enzymes.ts:337  export function isTypeIIS(enzyme: RestrictionEnzyme): boolean {
 enzymes.ts:341  export const NEB_LEADER_BASES: Record<string, string> = {
 enzymes.ts:363  export function recommendedLeader(enzymeName: string): string {
 enzymes.ts:367  export function enzymeRecognitionForTail(
+fragment-assembly.ts:27  export type HomologyAssemblyKit = 'Gibson' | 'NEBuilder HiFi' | 'In-Fusion';
+fragment-assembly.ts:109  export function designHomologyAssemblyPrimers(
+fragment-assembly.ts:662  export function simulateInsertFragment(
 index.ts:1  export type {
 index.ts:5  export {
 index.ts:17  export type {
-index.ts:22  export {
-index.ts:28  export type {
-index.ts:34  export {
-index.ts:51  export {
-index.ts:66  export type {
-index.ts:71  export {
-primer.ts:42  export interface PrimerDesignOptions {
-primer.ts:54  export function buildPrimer(
-primer.ts:175  export function designPrimerPair(
-primer.ts:311  export interface MutationSpec {
-primer.ts:318  export interface SilentSiteSuggestion {
-primer.ts:591  export function designMutagenesisPrimers(
-primer.ts:754  export function primerEnzymeTail(
-primer.ts:765  export function silentSitePanel(): RestrictionEnzyme[] {
-primer.ts:769  export function cloneFeatureList(features: SequenceFeature[]): SequenceFeature[] {
-primer.ts:773  export function shiftedFeatureList(features: SequenceFeature[], offset: number): SequenceFeature[] {
-primer.ts:777  export function mutationSpecLength(doc: PlasmidDocument, mutation: MutationSpec): number {
-primer.ts:781  export function mutatedDocumentCopy(doc: PlasmidDocument): PlasmidDocument {
+index.ts:23  export {
+index.ts:30  export type {
+index.ts:36  export {
+index.ts:53  export {
+index.ts:69  export type {
+index.ts:72  export {
+index.ts:82  export type { HomologyAssemblyKit } from './fragment-assembly';
+index.ts:83  export {
+index.ts:88  export type { RecombinationSite } from './recombination';
+index.ts:89  export {
+index.ts:95  export type {
+index.ts:100  export {
+primer.ts:43  export interface PrimerDesignOptions {
+primer.ts:55  export function buildPrimer(
+primer.ts:176  export function designPrimerPair(
+primer.ts:312  export interface MutationSpec {
+primer.ts:319  export interface SilentSiteSuggestion {
+primer.ts:592  export function designMutagenesisPrimers(
+primer.ts:755  export function primerEnzymeTail(
+primer.ts:766  export function silentSitePanel(): RestrictionEnzyme[] {
+primer.ts:770  export function cloneFeatureList(features: SequenceFeature[]): SequenceFeature[] {
+primer.ts:774  export function shiftedFeatureList(features: SequenceFeature[], offset: number): SequenceFeature[] {
+primer.ts:778  export function mutationSpecLength(doc: PlasmidDocument, mutation: MutationSpec): number {
+primer.ts:782  export function mutatedDocumentCopy(doc: PlasmidDocument): PlasmidDocument {
+primer.ts:786  export interface PrimerBindingHit {
+primer.ts:806  export function findPrimerBindingSites(
+recombination.ts:25  export type RecombinationSite =
+recombination.ts:35  export const RECOMBINATION_SITES: Record<RecombinationSite, string> = {
+recombination.ts:98  export function findRecombinationSites(doc: PlasmidDocument): LocatedSite[] {
+recombination.ts:559  export function simulateRecombinase(
 thermo.ts:19  export interface ReactionConditions {
 thermo.ts:26  export const DEFAULT_REACTION_CONDITIONS: Required<ReactionConditions> = {
 thermo.ts:43  export const SANTA_LUCIA_1998: Record<string, NearestNeighborStep> = {
@@ -222,14 +287,20 @@ abif.ts:669  export function detectSecondaryPeaks(trace: SangerTraceData, ratio 
 alignment.ts:5  export interface GotohScoring {
 alignment.ts:20  export function gotohLocalAlign(
 alignment.ts:567  export async function alignTraceToPlasmid(
+coverage.ts:4  export interface CoverageCall {
+coverage.ts:10  export interface CoverageDiscrepancy {
+coverage.ts:16  export type CoverageStatus =
+coverage.ts:23  export interface CoverageSummary {
+coverage.ts:31  export interface CoverageOptions {
+coverage.ts:108  export function summarizeTraceCoverage(
 gel.ts:3  export type LadderName =
-gel.ts:10  export type GelConformation = 'linear' | 'supercoiled' | 'nicked';
-gel.ts:12  export interface LadderBand {
-gel.ts:18  export const DNA_LADDERS: Record<LadderName, LadderBand[]> = {
-gel.ts:89  export interface GelSampleInput {
-gel.ts:101  export interface GelRunParams {
-gel.ts:129  export function computeMigration(apparentBp: number, params: GelRunParams): number {
-gel.ts:178  export function simulateVirtualGel(samples: GelSampleInput[], params: GelRunParams): VirtualGelLane[] {
+gel.ts:41  export type GelConformation = 'linear' | 'supercoiled' | 'nicked';
+gel.ts:43  export interface LadderBand {
+gel.ts:49  export const DNA_LADDERS: Record<LadderName, LadderBand[]> = {
+gel.ts:587  export interface GelSampleInput {
+gel.ts:599  export interface GelRunParams {
+gel.ts:627  export function computeMigration(apparentBp: number, params: GelRunParams): number {
+gel.ts:676  export function simulateVirtualGel(samples: GelSampleInput[], params: GelRunParams): VirtualGelLane[] {
 genetics.ts:26  export function translateCodon(codon: string): string {
 genetics.ts:31  export function complementBase(base: string): string {
 genetics.ts:35  export function reverseComplement(sequence: string): string {
@@ -239,10 +310,44 @@ index.ts:1  export {
 index.ts:6  export type { SecondaryPeakCall } from './abif';
 index.ts:8  export {
 index.ts:12  export type { GotohScoring } from './alignment';
-index.ts:14  export {
-index.ts:19  export type {
-index.ts:27  export { createSyntheticTrace } from './synthetic';
-index.ts:28  export type { SyntheticTraceOptions } from './synthetic';
+index.ts:14  export { pairwiseAlign } from './pairwise';
+index.ts:15  export type { PairwiseMode, PairwiseOptions, PairwiseResult } from './pairwise';
+index.ts:17  export { multipleSequenceAlignment } from './msa';
+index.ts:18  export type { MsaInput, MsaOptions, MsaResult, MsaRow } from './msa';
+index.ts:20  export type { SequenceType } from './scoring';
+index.ts:22  export {
+index.ts:27  export type {
+index.ts:35  export { createSyntheticTrace } from './synthetic';
+index.ts:36  export type { SyntheticTraceOptions } from './synthetic';
+index.ts:38  export { summarizeTraceCoverage } from './coverage';
+index.ts:39  export type {
+index.ts:47  export { alignReadsToReference, readsToTraces } from './reads';
+index.ts:48  export type {
+msa.ts:12  export interface MsaInput {
+msa.ts:18  export interface MsaRow {
+msa.ts:24  export interface MsaResult {
+msa.ts:33  export interface MsaOptions {
+msa.ts:898  export function multipleSequenceAlignment(
+pairwise.ts:9  export type PairwiseMode = 'global' | 'local' | 'semiglobal';
+pairwise.ts:11  export interface PairwiseOptions {
+pairwise.ts:20  export interface PairwiseResult {
+pairwise.ts:623  export function pairwiseAlign(
+reads.ts:4  export interface SequencingRead {
+reads.ts:11  export interface ReadMismatch {
+reads.ts:17  export interface ReadAlignment {
+reads.ts:27  export interface ReadAlignmentOptions {
+reads.ts:527  export function alignReadsToReference(
+reads.ts:630  export function readsToTraces(reads: SequencingRead[]): SangerTraceData[] {
+scoring.ts:1  export type SequenceType = 'dna' | 'protein';
+scoring.ts:3  export const DNA_ALPHABET = 'ACGTN';
+scoring.ts:4  export const PROTEIN_ALPHABET = 'ARNDCQEGHILKMFPSTWYVBZX*';
+scoring.ts:72  export function alphabetSize(type: SequenceType): number {
+scoring.ts:76  export function residueCode(base: string, type: SequenceType): number {
+scoring.ts:81  export function encodeResidues(sequence: string, type: SequenceType): Uint8Array {
+scoring.ts:89  export interface SubstitutionScoring {
+scoring.ts:94  export function buildSubstitutionTable(
+scoring.ts:116  export function detectSequenceType(sequences: string[], explicit?: SequenceType): SequenceType {
+scoring.ts:134  export function normalizeSequence(sequence: string): string {
 synthetic.ts:5  export interface SyntheticTraceOptions {
 synthetic.ts:42  export function createSyntheticTrace(
 ```
@@ -250,30 +355,110 @@ synthetic.ts:42  export function createSyntheticTrace(
 ### canvas-ui
 
 ```text
-CircularPlasmidMap.tsx:69  export interface CircularPlasmidMapProps {
-CircularPlasmidMap.tsx:99  export function CircularPlasmidMap({
+CircularPlasmidMap.tsx:86  export interface CircularPlasmidMapProps {
+CircularPlasmidMap.tsx:120  export function CircularPlasmidMap({
 CloningHistoryTree.tsx:13  export interface CloningHistoryTreeProps {
 CloningHistoryTree.tsx:29  export function CloningHistoryTree({
-LinearSequenceEditor.tsx:31  export interface LinearSequenceEditorProps {
-LinearSequenceEditor.tsx:97  export function LinearSequenceEditor({
-SangerAlignmentViewer.tsx:17  export interface SangerAlignmentViewerProps {
-SangerAlignmentViewer.tsx:320  export function SangerAlignmentViewer({
+LinearPlasmidMap.tsx:44  export interface LinearPlasmidMapProps {
+LinearPlasmidMap.tsx:89  export function LinearPlasmidMap({
+LinearSequenceEditor.tsx:32  export interface LinearSequenceEditorProps {
+LinearSequenceEditor.tsx:98  export function LinearSequenceEditor({
+MapDisplayOptionsPanel.tsx:9  export interface MapDisplayOptionsPanelProps {
+MapDisplayOptionsPanel.tsx:60  export function MapDisplayOptionsPanel({
+MultipleAlignmentViewer.tsx:23  export interface MsaViewRow {
+MultipleAlignmentViewer.tsx:29  export interface MultipleAlignmentViewerProps {
+MultipleAlignmentViewer.tsx:78  export function MultipleAlignmentViewer({
+ProteinSequenceView.tsx:21  export type { ProteinDocument, ProteinFeature } from './layout/proteinLayout';
+ProteinSequenceView.tsx:23  export interface ProteinSelection {
+ProteinSequenceView.tsx:28  export interface ProteinSequenceViewProps {
+ProteinSequenceView.tsx:69  export function ProteinSequenceView({
+SangerAlignmentViewer.tsx:24  export interface SangerAlignmentViewerProps {
+SangerAlignmentViewer.tsx:329  export function SangerAlignmentViewer({
 SeqVizView.tsx:6  export interface SeqVizViewProps {
 SeqVizView.tsx:14  export function SeqVizView({
 VirtualGelSimulator.tsx:16  export interface VirtualGelSimulatorProps {
 VirtualGelSimulator.tsx:49  export function VirtualGelSimulator({
+exportPdf.ts:14  export type { PdfExportOptions, PdfPageLayout } from './pdfPage';
+exportPdf.ts:15  export {
+exportPdf.ts:67  export async function exportSvgToPdf(
+exportSvg.ts:24  export function triggerDownload(blob: Blob, fileName: string): void {
 exportSvg.ts:36  export function exportSvgToPublicationFile(
 exportSvg.ts:46  export async function exportSvgToPng(
 index.tsx:1  export { CircularPlasmidMap } from './CircularPlasmidMap';
-index.tsx:2  export { LinearSequenceEditor } from './LinearSequenceEditor';
-index.tsx:3  export { SangerAlignmentViewer } from './SangerAlignmentViewer';
-index.tsx:4  export { VirtualGelSimulator } from './VirtualGelSimulator';
-index.tsx:5  export { CloningHistoryTree } from './CloningHistoryTree';
-index.tsx:6  export { SeqVizView } from './SeqVizView';
-index.tsx:8  export { exportSvgToPublicationFile, exportSvgToPng } from './exportSvg';
-index.tsx:10  export type {
-index.tsx:19  export type { VizTheme } from './theme';
-index.tsx:20  export { THEMES, getTheme, FEATURE_PALETTE, OPERATION_LABEL } from './theme';
+index.tsx:2  export { LinearPlasmidMap } from './LinearPlasmidMap';
+index.tsx:3  export { MapDisplayOptionsPanel } from './MapDisplayOptionsPanel';
+index.tsx:4  export { ProteinSequenceView } from './ProteinSequenceView';
+index.tsx:5  export { LinearSequenceEditor } from './LinearSequenceEditor';
+index.tsx:6  export { SangerAlignmentViewer } from './SangerAlignmentViewer';
+index.tsx:7  export { VirtualGelSimulator } from './VirtualGelSimulator';
+index.tsx:8  export { CloningHistoryTree } from './CloningHistoryTree';
+index.tsx:9  export { SeqVizView } from './SeqVizView';
+index.tsx:10  export { MultipleAlignmentViewer } from './MultipleAlignmentViewer';
+index.tsx:12  export { exportSvgToPublicationFile, exportSvgToPng } from './exportSvg';
+index.tsx:13  export { exportSvgToPdf } from './exportPdf';
+index.tsx:14  export {
+index.tsx:20  export {
+index.tsx:37  export {
+index.tsx:47  export {
+index.tsx:55  export {
+index.tsx:64  export {
+index.tsx:71  export {
+index.tsx:85  export {
+index.tsx:90  export {
+index.tsx:99  export { printSequenceText, printSvg } from './print';
+index.tsx:101  export type {
+index.tsx:114  export type {
+index.tsx:118  export type { ProteinDocument, ProteinFeature } from './ProteinSequenceView';
+index.tsx:119  export type {
+index.tsx:123  export type {
+index.tsx:129  export type {
+index.tsx:141  export type {
+index.tsx:146  export type {
+index.tsx:152  export type {
+index.tsx:157  export type {
+index.tsx:163  export type { PdfExportOptions, PdfPageLayout, PdfPageSize } from './pdfPage';
+index.tsx:164  export type { IndexRange, MsaColorScheme } from './layout/msaLayout';
+index.tsx:166  export type { VizTheme } from './theme';
+index.tsx:167  export { THEMES, getTheme, FEATURE_PALETTE, OPERATION_LABEL } from './theme';
+mapDisplayOptions.ts:10  export interface MapDisplayOptions {
+mapDisplayOptions.ts:30  export interface ResolvedMapDisplayOptions {
+mapDisplayOptions.ts:47  export const MIN_LABEL_FONT_SIZE = 7;
+mapDisplayOptions.ts:48  export const MAX_LABEL_FONT_SIZE = 20;
+mapDisplayOptions.ts:50  export const DEFAULT_MAP_DISPLAY_OPTIONS: ResolvedMapDisplayOptions = {
+mapDisplayOptions.ts:78  export function resolveMapDisplayOptions(
+mapDisplayOptions.ts:110  export function isFeatureVisible(
+mapDisplayOptions.ts:118  export function filterVisibleFeatures(
+mapDisplayOptions.ts:129  export function resolvePrimerVisibility(
+pdfPage.ts:8  export type PdfPageSize = 'a4' | 'letter' | 'fit';
+pdfPage.ts:10  export interface PdfExportOptions {
+pdfPage.ts:16  export interface PdfPageLayout {
+pdfPage.ts:31  export const PDF_PAGE_SIZES: Record<'a4' | 'letter', { width: number; height: number }> = {
+pdfPage.ts:36  export const PDF_PAGE_MARGIN = 24;
+pdfPage.ts:37  export const PDF_TITLE_HEIGHT = 32;
+pdfPage.ts:38  export const PDF_MIN_PAGE_SIZE = 1;
+pdfPage.ts:56  export function computePdfPageLayout(
+print.ts:72  export function printSvg(
+print.ts:86  export function printSequenceText(
+printHtml.ts:11  export interface PrintHtmlOptions {
+printHtml.ts:16  export interface SequencePrintOptions {
+printHtml.ts:23  export interface SequencePrintLine {
+printHtml.ts:36  export interface FeaturePrintRow {
+printHtml.ts:48  export function escapeHtml(value: string): string {
+printHtml.ts:58  export function formatGroupedBases(bases: string, groupSize = GROUP_SIZE): string {
+printHtml.ts:68  export function buildSequencePrintLines(
+printHtml.ts:106  export function buildFeaturePrintRows(doc: PlasmidDocument): FeaturePrintRow[] {
+printHtml.ts:152  export function buildPrintDocument(
+printHtml.ts:172  export function buildSvgPrintHtml(
+printHtml.ts:208  export function buildSequencePrintHtml(
+segments.ts:19  export function parseSegmentsNote(
+segments.ts:38  export function isMultiSegmentFeature(feature: SequenceFeature): boolean {
+segments.ts:43  export interface FeaturePiece extends RangeSegment {
+segments.ts:52  export interface FeatureSegmentPlan {
+segments.ts:84  export function buildFeatureSegmentPlan(
+segments.ts:182  export interface FeatureTrackEntry {
+segments.ts:187  export interface SegmentTrackAssignment {
+segments.ts:197  export function assignSegmentTracks(
+segments.ts:256  export function segmentGapRanges(
 theme.ts:1  export type VizTheme = 'light' | 'dark' | 'publication';
 theme.ts:3  export interface VizThemeTokens {
 theme.ts:50  export const THEMES: Record<VizTheme, VizThemeTokens> = {
@@ -282,13 +467,17 @@ theme.ts:180  export function baseColor(base: string, theme: VizThemeTokens): st
 theme.ts:196  export const OPERATION_LABEL: Record<string, string> = {
 theme.ts:210  export const OPERATION_TINT: Record<string, string> = {
 theme.ts:224  export const FEATURE_PALETTE = [
-types.ts:13  export type { VizTheme };
-types.ts:15  export interface CircularPlasmidMapProps {
-types.ts:27  export interface LinearSequenceEditorProps {
-types.ts:45  export interface SangerAlignmentViewerProps {
-types.ts:52  export interface VirtualGelSimulatorProps {
-types.ts:66  export interface CloningHistoryTreeProps {
-types.ts:73  export interface SeqVizViewProps {
+types.ts:16  export type { VizTheme };
+types.ts:18  export interface CircularPlasmidMapProps {
+types.ts:32  export interface LinearPlasmidMapProps {
+types.ts:45  export interface MapDisplayOptionsPanelProps {
+types.ts:51  export interface ProteinSelection {
+types.ts:56  export interface ProteinSequenceViewProps {
+types.ts:65  export interface LinearSequenceEditorProps {
+types.ts:83  export interface SangerAlignmentViewerProps {
+types.ts:92  export interface VirtualGelSimulatorProps {
+types.ts:106  export interface CloningHistoryTreeProps {
+types.ts:113  export interface SeqVizViewProps {
 utils.ts:3  export interface Point {
 utils.ts:8  export interface RangeSegment {
 utils.ts:13  export function mod(value: number, length: number): number {
@@ -330,17 +519,18 @@ utils.ts:495  export function contrastText(hex: string): string {
 ```text
 CopilotSidebar.tsx:46  export interface CopilotSidebarProps {
 CopilotSidebar.tsx:161  export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
-index.ts:16  export const AI_CONFIG_STORAGE_KEY = 'opensnapgene_ai_config';
-index.ts:18  export const PROVIDER_DEFAULTS: Record<AIProviderType, { baseUrl: string; model: string }> = {
-index.ts:41  export const QUICK_PROMPTS: Array<{ id: string; icon: string; label: string; prompt: string }> = [
-index.ts:447  export function buildPlasmidContextPrompt(
-index.ts:615  export function buildSystemPrompt(): string {
-index.ts:739  export function parseAssistantReply(text: string): { content: string; actions: AIToolAction[] } {
-index.ts:893  export function validateAction(
-index.ts:1555  export async function streamChat(
-index.ts:1609  export function loadAIConfig(): AIConfig | null {
-index.ts:1640  export function saveAIConfig(config: AIConfig): void {
-index.ts:1677  export function clearAIConfig(): void {
+index.ts:16  export const AI_CONFIG_STORAGE_KEY = 'gatc_ai_config';
+index.ts:17  export const LEGACY_AI_CONFIG_STORAGE_KEY = 'opensnapgene_ai_config';
+index.ts:19  export const PROVIDER_DEFAULTS: Record<AIProviderType, { baseUrl: string; model: string }> = {
+index.ts:42  export const QUICK_PROMPTS: Array<{ id: string; icon: string; label: string; prompt: string }> = [
+index.ts:448  export function buildPlasmidContextPrompt(
+index.ts:616  export function buildSystemPrompt(): string {
+index.ts:740  export function parseAssistantReply(text: string): { content: string; actions: AIToolAction[] } {
+index.ts:895  export function validateAction(
+index.ts:1557  export async function streamChat(
+index.ts:1611  export function loadAIConfig(): AIConfig | null {
+index.ts:1659  export function saveAIConfig(config: AIConfig): void {
+index.ts:1696  export function clearAIConfig(): void {
 ```
 
 ## 4. 全局数据契约 `src/types/schema.ts`
@@ -577,7 +767,7 @@ export interface AIChatMessage {
 ### 环状跨零点酶切扫描 + 甲基化阻断（seq-engine） — `findCutSites`
 
 ```typescript
-// src/modules/seq-engine/index.ts:288
+// src/modules/seq-engine/index.ts:426
 export function findCutSites(
   doc: PlasmidDocument,
   enzymes: RestrictionEnzyme[] = COMMERCIAL_ENZYMES,
@@ -604,6 +794,10 @@ export function findCutSites(
     return true;
   });
   if (selected.length === 0) return [];
+  // Generating sites in enzyme-name order lets a stable counting sort below
+  // reproduce the historical position/name/strand ordering without comparing
+  // every pair of cut sites.
+  selected.sort((left, right) => left.name.localeCompare(right.name));
 
   let maximumRecognitionLength = 0;
   for (const enzyme of selected) {
@@ -615,86 +809,161 @@ export function findCutSites(
   const scanSequence = circular
     ? sequence + sequence.slice(0, maximumRecognitionLength)
     : sequence;
+  const encodedScan = encodeSequence(scanSequence);
   const masks = buildMethylationMasks(
     sequence,
     circular,
     doc.methylationProfile,
   );
 
+  // Isoschizomers and commercial aliases share recognition sequences, so the
+  // scan is performed once per unique motif and reused by every enzyme.
+  const patternCache = new Map<string, number[]>();
+  const patterns = new Set<string>();
+  for (const enzyme of selected) {
+    const recognition = enzyme.recognitionSeq.toUpperCase();
+    patterns.add(recognition);
+    if (!isPalindromic(recognition)) {
+      patterns.add(reverseComplement(recognition));
+    }
+  }
+
+  // Motifs with a small IUPAC expansion share one Aho-Corasick pass. Highly
+  // degenerate motifs fall back to the bit-parallel matcher.
+  const automaton = new AnnotationAutomaton();
+  const expandedPatterns: string[] = [];
+  const entryPatterns: number[] = [];
+  const fallbackPatterns: string[] = [];
+  for (const pattern of patterns) {
+    const variants = expandIupacPattern(pattern, 64);
+    if (!variants) {
+      fallbackPatterns.push(pattern);
+      continue;
+    }
+    const patternIndex = expandedPatterns.length;
+    expandedPatterns.push(pattern);
+    for (const variant of variants) {
+      entryPatterns.push(patternIndex);
+      automaton.add(variant, {
+        libraryIndex: patternIndex,
+        strand: 1,
+        kind: 'full',
+        offset: 0,
+      });
+    }
+  }
+
+  if (expandedPatterns.length > 0) {
+    automaton.build();
+    const buckets = expandedPatterns.map(() => [] as number[]);
+    for (const match of automaton.search(scanSequence)) {
+      buckets[entryPatterns[match.entryIndex]].push(match.start);
+    }
+    for (let index = 0; index < expandedPatterns.length; index += 1) {
+      patternCache.set(
+        expandedPatterns[index],
+        buckets[index].filter((position) => position < length),
+      );
+    }
+  }
+
+  for (const pattern of fallbackPatterns) {
+    patternCache.set(
+      pattern,
+      findPatternPositions(scanSequence, pattern, encodedScan).filter(
+        (position) => position < length,
+      ),
+    );
+  }
+
+  const positionsFor = (pattern: string): number[] =>
+    patternCache.get(pattern) ?? [];
+
   const allSites: CutSite[] = [];
 
   for (const enzyme of selected) {
     const recognition = enzyme.recognitionSeq.toUpperCase();
     const recognitionLength = recognition.length;
-    const hits: Array<{ position: number; strand: Strand }> = [];
+    const enzymeIsDpnI = enzyme.name.toUpperCase() === 'DPNI';
+    const sensitivity = enzyme.methylationSensitivity;
+    const hasBlockingMethylation =
+      enzymeIsDpnI ||
+      (sensitivity !== undefined &&
+        ((sensitivity.dam === 'blocked' && masks.profile.dam) ||
+          (sensitivity.dcm === 'blocked' && masks.profile.dcm) ||
+          (sensitivity.cpg === 'blocked' && masks.profile.cpg)));
+    const firstSiteIndex = allSites.length;
 
-    for (const position of findPatternPositions(scanSequence, recognition)) {
-      if (position < length) hits.push({ position, strand: 1 });
-    }
-
-    if (!isPalindromic(recognition)) {
-      const reverseRecognition = reverseComplement(recognition);
-      for (const position of findPatternPositions(scanSequence, reverseRecognition)) {
-        if (position < length) hits.push({ position, strand: -1 });
-      }
-    }
-
-    const seen = new Set<string>();
-    const enzymeSites: CutSite[] = [];
-
-    for (const hit of hits) {
-      const identity = `${hit.position}:${hit.strand}`;
-      if (seen.has(identity)) continue;
-      seen.add(identity);
-
+    const addPosition = (position: number, strand: Strand): void => {
       const rawTop =
-        hit.strand === 1
-          ? hit.position + enzyme.cutIndexTop
-          : hit.position + recognitionLength - enzyme.cutIndexBottom;
+        strand === 1
+          ? position + enzyme.cutIndexTop
+          : position + recognitionLength - enzyme.cutIndexBottom;
       const rawBottom =
-        hit.strand === 1
-          ? hit.position + enzyme.cutIndexBottom
-          : hit.position + recognitionLength - enzyme.cutIndexTop;
+        strand === 1
+          ? position + enzyme.cutIndexBottom
+          : position + recognitionLength - enzyme.cutIndexTop;
 
       if (
         !circular &&
         (rawTop < 0 || rawTop > length || rawBottom < 0 || rawBottom > length)
       ) {
-        continue;
+        return;
       }
 
-      const cutPositionTop = circular ? mod(rawTop, length) : rawTop;
-      const cutPositionBottom = circular ? mod(rawBottom, length) : rawBottom;
-      const overhang = calculateOverhang(sequence, circular, rawTop, rawBottom);
-      const blocked = isMethylationBlocked(
+      const difference = rawBottom - rawTop;
+      const overhangType: CutSite['overhangType'] =
+        difference === 0 ? 'blunt' : difference > 0 ? '5-prime' : '3-prime';
+      const overhangSeq =
+        difference === 0
+          ? ''
+          : extractSegment(
+              sequence,
+              circular,
+              Math.min(rawTop, rawBottom),
+              Math.abs(difference),
+            );
+      allSites.push({
+        id: `${enzyme.name}:${position}:${strand}`,
         enzyme,
-        hit.position,
-        recognitionLength,
-        rawTop,
-        rawBottom,
-        masks,
-        length,
-        circular,
-      );
-
-      enzymeSites.push({
-        id: `${enzyme.name}:${hit.position}:${hit.strand}`,
-        enzyme,
-        position: hit.position,
-        strand: hit.strand,
-        cutPositionTop,
-        cutPositionBottom,
-        overhangType: overhang.type,
-        overhangSeq: overhang.sequence,
-        isMethylationBlocked: blocked,
+        position,
+        strand,
+        cutPositionTop: circular ? mod(rawTop, length) : rawTop,
+        cutPositionBottom: circular ? mod(rawBottom, length) : rawBottom,
+        overhangType,
+        overhangSeq,
+        isMethylationBlocked: hasBlockingMethylation
+          ? isMethylationBlocked(
+              enzyme,
+              enzymeIsDpnI,
+              position,
+              recognitionLength,
+              rawTop,
+              rawBottom,
+              masks,
+              length,
+              circular,
+            )
+          : false,
         totalCutsInPlasmid: 0,
       });
+    };
+
+    for (const position of positionsFor(recognition)) {
+      addPosition(position, 1);
     }
 
-    for (const site of enzymeSites) {
-      site.totalCutsInPlasmid = enzymeSites.length;
+    if (!isPalindromic(recognition)) {
+      const reverseRecognition = reverseComplement(recognition);
+      for (const position of positionsFor(reverseRecognition)) {
+        addPosition(position, -1);
+      }
     }
-    allSites.push(...enzymeSites);
+
+    const enzymeCutCount = allSites.length - firstSiteIndex;
+    for (let index = firstSiteIndex; index < allSites.length; index += 1) {
+      allSites[index].totalCutsInPlasmid = enzymeCutCount;
+    }
   }
 
   let result = allSites;
@@ -705,19 +974,14 @@ export function findCutSites(
     result = result.filter((site) => !site.isMethylationBlocked);
   }
 
-  return result.sort(
-    (left, right) =>
-      left.position - right.position ||
-      left.enzyme.name.localeCompare(right.enzyme.name) ||
-      left.strand - right.strand,
-  );
+  return orderCutSites(result, length);
 }
 ```
 
 ### 环状 ORF 扫描 — `findAllORFs`
 
 ```typescript
-// src/modules/seq-engine/index.ts:485
+// src/modules/seq-engine/index.ts:697
 export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
   const sequence = normalizeSequence(doc.sequence);
   const length = sequence.length;
@@ -815,7 +1079,7 @@ export function findAllORFs(doc: PlasmidDocument, minAaLength = 75): ORF[] {
 ### 序列编辑与特征坐标联动 — `mutatePlasmidSequence`
 
 ```typescript
-// src/modules/seq-engine/index.ts:851
+// src/modules/seq-engine/index.ts:1063
 export function mutatePlasmidSequence(
   doc: PlasmidDocument,
   edit: SequenceEdit,
@@ -972,7 +1236,7 @@ export function mutatePlasmidSequence(
 ### 重设环状原点 — `rotateCircularOrigin`
 
 ```typescript
-// src/modules/seq-engine/index.ts:1105
+// src/modules/seq-engine/index.ts:1317
 export function rotateCircularOrigin(
   doc: PlasmidDocument,
   newZeroIndex: number,
@@ -1390,12 +1654,29 @@ export async function alignTraceToPlasmid(
 ### BYOK 密钥读取 — `loadAIConfig`
 
 ```typescript
-// src/modules/ai-copilot/index.ts:1609
+// src/modules/ai-copilot/index.ts:1611
 export function loadAIConfig(): AIConfig | null {
   try {
     const storage = globalThis.localStorage;
     if (!storage) return null;
-    const raw = storage.getItem(AI_CONFIG_STORAGE_KEY);
+
+    let raw = storage.getItem(AI_CONFIG_STORAGE_KEY);
+    if (!raw) {
+      const legacyRaw = storage.getItem(LEGACY_AI_CONFIG_STORAGE_KEY);
+      if (legacyRaw) {
+        raw = legacyRaw;
+        try {
+          storage.setItem(AI_CONFIG_STORAGE_KEY, legacyRaw);
+        } catch {
+          // Reading the legacy entry still succeeds even if migration fails.
+        }
+        try {
+          storage.removeItem(LEGACY_AI_CONFIG_STORAGE_KEY);
+        } catch {
+          // Leaving the legacy entry behind is harmless; it is ignored once the new key exists.
+        }
+      }
+    }
     if (!raw) return null;
 
     const parsed: unknown = JSON.parse(raw);
@@ -1426,7 +1707,7 @@ export function loadAIConfig(): AIConfig | null {
 ### BYOK 密钥保存 — `saveAIConfig`
 
 ```typescript
-// src/modules/ai-copilot/index.ts:1640
+// src/modules/ai-copilot/index.ts:1659
 export function saveAIConfig(config: AIConfig): void {
   if (!config || !isProviderType(config.provider)) {
     throw new Error('Invalid AI provider.');
@@ -1468,7 +1749,7 @@ export function saveAIConfig(config: AIConfig): void {
 ### AI 动作 Schema 与坐标边界校验 — `validateAction`
 
 ```typescript
-// src/modules/ai-copilot/index.ts:893
+// src/modules/ai-copilot/index.ts:895
 export function validateAction(
   action: unknown,
   doc: PlasmidDocument,
@@ -1478,7 +1759,7 @@ export function validateAction(
 ### 浏览器直连流式请求 — `streamChat`
 
 ```typescript
-// src/modules/ai-copilot/index.ts:1555
+// src/modules/ai-copilot/index.ts:1557
 export async function streamChat(
   config: AIConfig,
   messages: AIChatMessage[],
@@ -1598,7 +1879,7 @@ export function callBio<K extends BioFn>(
 ```
 
 ```typescript
-// src/app/actions.ts:113
+// src/app/actions.ts:139
 export async function applyAIAction(action: AIToolAction): Promise<void> {
   const st = useWorkbench.getState();
   const doc = selectActiveDoc(st);
@@ -1654,122 +1935,164 @@ export async function applyAIAction(action: AIToolAction): Promise<void> {
 ```json
 {
   "url": "http://localhost:4173/",
-  "passed": 19,
-  "total": 19,
+  "passed": 26,
+  "total": 26,
   "results": [
     {
       "name": "加载示例 pUC19 / pEGFP-N1",
       "ok": true,
-      "ms": 373,
+      "ms": 419,
       "detail": "tabs visible"
     },
     {
       "name": "Web Worker 计算酶切位点",
       "ok": true,
-      "ms": 327,
-      "detail": "21 cut sites"
+      "ms": 749,
+      "detail": "94 cut sites"
     },
     {
       "name": "环形图谱视图",
       "ok": true,
-      "ms": 264,
+      "ms": 237,
       "detail": ""
     },
     {
       "name": "线性序列视图",
       "ok": true,
-      "ms": 190,
+      "ms": 203,
       "detail": ""
     },
     {
       "name": "酶列表 + 过滤（单切点）",
       "ok": true,
-      "ms": 187,
-      "detail": "21 unique cutters"
+      "ms": 325,
+      "detail": "94 unique cutters"
     },
     {
       "name": "酶切 EcoRI+HindIII 并跑胶",
       "ok": true,
-      "ms": 1096,
+      "ms": 1151,
       "detail": "EcoRI+HindIII：2 个片段 (51, 2635 bp)"
     },
     {
       "name": "特征 / 引物 / ORF 面板",
       "ok": true,
-      "ms": 979,
+      "ms": 999,
       "detail": "ORF (4)"
     },
     {
       "name": "切换到 pEGFP-N1 并 Sanger 比对",
       "ok": true,
-      "ms": 2987,
+      "ms": 2941,
       "detail": "Missense (T64N in egfp)"
     },
     {
       "name": "历史树",
       "ok": true,
-      "ms": 119,
+      "ms": 117,
       "detail": ""
     },
     {
       "name": "Cmd+K 命令面板快速酶切",
       "ok": true,
-      "ms": 243,
+      "ms": 217,
       "detail": "BamHI+NotI：2 个片段 (741, 3992 bp)"
     },
     {
       "name": "克隆向导：引物设计",
       "ok": true,
-      "ms": 641,
+      "ms": 748,
       "detail": "PCR 产物 600 bp"
     },
     {
       "name": "克隆向导：PCR 产物生成",
       "ok": true,
-      "ms": 244,
+      "ms": 335,
       "detail": "已生成 pEGFP-N1_PCR_600bp (600 bp)"
     },
     {
       "name": "克隆向导：酶切连接（EcoRI 自连）",
       "ok": true,
-      "ms": 536,
+      "ms": 630,
       "detail": "已生成 pUC19_religated (2686 bp)；Ligation junction 1 scar sequence: CCAGTGAATTCG."
     },
     {
       "name": "克隆向导：定点突变",
       "ok": true,
-      "ms": 1269,
+      "ms": 1297,
       "detail": "primers + silent-site suggestions"
     },
     {
       "name": "AI 导师抽屉（BYOK 设置）",
       "ok": true,
-      "ms": 766,
+      "ms": 786,
       "detail": ""
     },
     {
       "name": "撤销/重做",
       "ok": true,
-      "ms": 75,
+      "ms": 64,
       "detail": ""
     },
     {
       "name": "深色主题",
       "ok": true,
-      "ms": 629,
+      "ms": 670,
       "detail": ""
     },
     {
       "name": "打开真实 SnapGene .dna（含引物与历史树）",
       "ok": true,
-      "ms": 856,
+      "ms": 942,
       "detail": "已打开 pIB2-SEC13-mEGFP"
     },
     {
       "name": "导出 GenBank",
       "ok": true,
-      "ms": 73,
+      "ms": 76,
       "detail": "pIB2-SEC13-mEGFP.gbk"
+    },
+    {
+      "name": "导出 SnapGene .dna 并重新打开",
+      "ok": true,
+      "ms": 182,
+      "detail": "5445 bytes, reopened"
+    },
+    {
+      "name": "导出图谱 PDF（矢量）",
+      "ok": true,
+      "ms": 233,
+      "detail": "16104 bytes"
+    },
+    {
+      "name": "查找序列（Ctrl+F, IUPAC）",
+      "ok": true,
+      "ms": 1066,
+      "detail": "BamHI 第 1 / 1 个命中; GRATYC 第 1 / 2 个命中"
+    },
+    {
+      "name": "添加 / 编辑特征（可撤销）",
+      "ok": true,
+      "ms": 520,
+      "detail": "13 → 14 → undo 13"
+    },
+    {
+      "name": "酶集切换（预设 / 全部市售）",
+      "ok": true,
+      "ms": 1395,
+      "detail": "9 sets; 全部市售酶 (550): 94 rows; Common 6+ base cutters (57): 18 rows"
+    },
+    {
+      "name": "多序列比对",
+      "ok": true,
+      "ms": 979,
+      "detail": "3 条序列 · 4,759 列 · 490 ms · 同一性矩阵 (%)"
+    },
+    {
+      "name": "反向翻译 / 密码子优化",
+      "ok": true,
+      "ms": 324,
+      "detail": "717 bp · CAI 1.000 · GC 39.5%"
     }
   ],
   "consoleErrors": []

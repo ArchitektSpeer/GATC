@@ -7,6 +7,9 @@ import {
   mutatePlasmidSequence,
   reverseComplementPlasmid,
   rotateCircularOrigin,
+  searchMotif,
+  backTranslate,
+  recommendDoubleDigestBuffer,
 } from '../modules/seq-engine';
 import {
   evaluateOligoThermodynamics,
@@ -23,11 +26,28 @@ import {
   simulateGatewayLR,
   simulatePCR,
   simulateOverlapExtensionPCR,
+  addATailing,
+  simulateTACloning,
+  simulateTOPOCloning,
+  simulateLIC,
+  designLICPrimers,
+  findRecombinationSites,
+  simulateRecombinase,
+  simulateMultiSiteGatewayLR,
+  simulateGCCloning,
+  designHomologyAssemblyPrimers,
+  simulateInsertFragment,
+  findPrimerBindingSites,
 } from '../modules/cloning-primer';
 import {
   parseAb1Trace,
   alignTraceToPlasmid,
   simulateVirtualGel,
+  multipleSequenceAlignment,
+  pairwiseAlign,
+  summarizeTraceCoverage,
+  alignReadsToReference,
+  readsToTraces,
 } from '../modules/alignment-gel';
 
 export const bioApi = {
@@ -54,6 +74,26 @@ export const bioApi = {
   parseAb1Trace,
   alignTraceToPlasmid,
   simulateVirtualGel,
+  searchMotif,
+  backTranslate,
+  addATailing,
+  simulateTACloning,
+  simulateTOPOCloning,
+  simulateLIC,
+  designLICPrimers,
+  findRecombinationSites,
+  simulateRecombinase,
+  multipleSequenceAlignment,
+  pairwiseAlign,
+  simulateMultiSiteGatewayLR,
+  simulateGCCloning,
+  designHomologyAssemblyPrimers,
+  simulateInsertFragment,
+  findPrimerBindingSites,
+  summarizeTraceCoverage,
+  alignReadsToReference,
+  readsToTraces,
+  recommendDoubleDigestBuffer,
 };
 
 export type BioApi = typeof bioApi;

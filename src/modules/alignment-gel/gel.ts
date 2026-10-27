@@ -5,7 +5,38 @@ export type LadderName =
   | 'NEB 1kb'
   | 'NEB 100bp'
   | 'Takara DL2000'
-  | 'Takara DL5000';
+  | 'Takara DL5000'
+  | 'NEB 2-Log'
+  | 'NEB 50bp'
+  | 'NEB Low Molecular Weight'
+  | 'NEB PCR Marker'
+  | 'Thermo GeneRuler 1 kb'
+  | 'Thermo GeneRuler 100 bp'
+  | 'Thermo GeneRuler 100 bp Plus'
+  | 'Thermo GeneRuler 1 kb Plus'
+  | 'Thermo GeneRuler DNA Ladder Mix'
+  | 'Thermo GeneRuler High Range'
+  | 'Thermo GeneRuler Low Range'
+  | 'Thermo GeneRuler 50 bp'
+  | "Thermo O'GeneRuler 100 bp Plus"
+  | "Thermo O'GeneRuler 1 kb Plus"
+  | 'Thermo FastRuler Low Range'
+  | 'Thermo FastRuler Middle Range'
+  | 'Thermo FastRuler High Range'
+  | 'Invitrogen 1 kb Plus'
+  | 'Invitrogen 100 bp'
+  | 'Invitrogen 1 kb'
+  | 'Invitrogen Low DNA Mass'
+  | 'Promega 100 bp'
+  | 'Promega 1 kb'
+  | 'Promega BenchTop 100 bp'
+  | 'Promega BenchTop 1 kb'
+  | 'Promega Lambda/HindIII'
+  | 'λ/HindIII'
+  | 'Thermo Lambda/EcoRI+HindIII'
+  | 'Takara DL15000'
+  | 'Takara DL10000'
+  | 'Takara 1 kb DNA Ladder';
 
 export type GelConformation = 'linear' | 'supercoiled' | 'nicked';
 
@@ -83,6 +114,473 @@ export const DNA_LADDERS: Record<LadderName, LadderBand[]> = {
     { sizeBp: 3000, massNg: 66, highlighted: true },
     { sizeBp: 4000, massNg: 62 },
     { sizeBp: 5000, massNg: 68 }
+  ],
+  'NEB 2-Log': [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 28 },
+    { sizeBp: 600, massNg: 30 },
+    { sizeBp: 700, massNg: 32 },
+    { sizeBp: 800, massNg: 34 },
+    { sizeBp: 900, massNg: 36 },
+    { sizeBp: 1000, massNg: 48, highlighted: true },
+    { sizeBp: 1200, massNg: 38 },
+    { sizeBp: 1500, massNg: 42 },
+    { sizeBp: 2000, massNg: 46 },
+    { sizeBp: 3000, massNg: 58, highlighted: true },
+    { sizeBp: 4000, massNg: 50 },
+    { sizeBp: 5000, massNg: 54 },
+    { sizeBp: 6000, massNg: 58 },
+    { sizeBp: 8000, massNg: 62 },
+    { sizeBp: 10000, massNg: 68 }
+  ],
+  'NEB 50bp': [
+    { sizeBp: 50, massNg: 20 },
+    { sizeBp: 100, massNg: 22 },
+    { sizeBp: 150, massNg: 24 },
+    { sizeBp: 200, massNg: 26 },
+    { sizeBp: 250, massNg: 28 },
+    { sizeBp: 300, massNg: 30 },
+    { sizeBp: 350, massNg: 32 },
+    { sizeBp: 400, massNg: 34 },
+    { sizeBp: 450, massNg: 36 },
+    { sizeBp: 500, massNg: 48, highlighted: true },
+    { sizeBp: 550, massNg: 38 },
+    { sizeBp: 600, massNg: 40 },
+    { sizeBp: 650, massNg: 42 },
+    { sizeBp: 700, massNg: 44 },
+    { sizeBp: 750, massNg: 46 },
+    { sizeBp: 800, massNg: 48 },
+    { sizeBp: 850, massNg: 50 },
+    { sizeBp: 900, massNg: 52 },
+    { sizeBp: 950, massNg: 54 },
+    { sizeBp: 1000, massNg: 62 },
+    { sizeBp: 1250, massNg: 58 },
+    { sizeBp: 1500, massNg: 60 }
+  ],
+  'NEB Low Molecular Weight': [
+    { sizeBp: 25, massNg: 16 },
+    { sizeBp: 50, massNg: 18 },
+    { sizeBp: 75, massNg: 20 },
+    { sizeBp: 100, massNg: 34, highlighted: true },
+    { sizeBp: 125, massNg: 24 },
+    { sizeBp: 150, massNg: 26 },
+    { sizeBp: 175, massNg: 28 },
+    { sizeBp: 200, massNg: 30 },
+    { sizeBp: 225, massNg: 32 },
+    { sizeBp: 250, massNg: 34 },
+    { sizeBp: 275, massNg: 36 },
+    { sizeBp: 300, massNg: 38 },
+    { sizeBp: 325, massNg: 40 },
+    { sizeBp: 350, massNg: 42 },
+    { sizeBp: 375, massNg: 44 },
+    { sizeBp: 400, massNg: 46 },
+    { sizeBp: 425, massNg: 48 },
+    { sizeBp: 450, massNg: 50 },
+    { sizeBp: 475, massNg: 52 },
+    { sizeBp: 500, massNg: 60, highlighted: true }
+  ],
+  'NEB PCR Marker': [
+    { sizeBp: 50, massNg: 20 },
+    { sizeBp: 150, massNg: 24 },
+    { sizeBp: 300, massNg: 28 },
+    { sizeBp: 500, massNg: 44, highlighted: true },
+    { sizeBp: 766, massNg: 34 },
+    { sizeBp: 1000, massNg: 52, highlighted: true },
+    { sizeBp: 1500, massNg: 40 }
+  ],
+  'Thermo GeneRuler 1 kb': [
+    { sizeBp: 250, massNg: 20 },
+    { sizeBp: 500, massNg: 28 },
+    { sizeBp: 750, massNg: 32 },
+    { sizeBp: 1000, massNg: 52, highlighted: true },
+    { sizeBp: 1500, massNg: 36 },
+    { sizeBp: 2000, massNg: 40 },
+    { sizeBp: 2500, massNg: 44 },
+    { sizeBp: 3000, massNg: 52, highlighted: true },
+    { sizeBp: 4000, massNg: 46 },
+    { sizeBp: 5000, massNg: 50 },
+    { sizeBp: 6000, massNg: 54 },
+    { sizeBp: 8000, massNg: 58 },
+    { sizeBp: 10000, massNg: 64 }
+  ],
+  'Thermo GeneRuler 100 bp': [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 48, highlighted: true },
+    { sizeBp: 600, massNg: 30 },
+    { sizeBp: 700, massNg: 32 },
+    { sizeBp: 800, massNg: 34 },
+    { sizeBp: 900, massNg: 36 },
+    { sizeBp: 1000, massNg: 50, highlighted: true },
+    { sizeBp: 1200, massNg: 40 },
+    { sizeBp: 1500, massNg: 44 },
+    { sizeBp: 2000, massNg: 48 },
+    { sizeBp: 2500, massNg: 52 },
+    { sizeBp: 3000, massNg: 60 }
+  ],
+  'Thermo GeneRuler 100 bp Plus': [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 46, highlighted: true },
+    { sizeBp: 600, massNg: 30 },
+    { sizeBp: 700, massNg: 32 },
+    { sizeBp: 800, massNg: 34 },
+    { sizeBp: 900, massNg: 36 },
+    { sizeBp: 1000, massNg: 52, highlighted: true },
+    { sizeBp: 1200, massNg: 40 },
+    { sizeBp: 1500, massNg: 44 },
+    { sizeBp: 2000, massNg: 48 },
+    { sizeBp: 2500, massNg: 52 },
+    { sizeBp: 3000, massNg: 62 }
+  ],
+  'Thermo GeneRuler 1 kb Plus': [
+    { sizeBp: 75, massNg: 16 },
+    { sizeBp: 200, massNg: 18 },
+    { sizeBp: 300, massNg: 20 },
+    { sizeBp: 400, massNg: 22 },
+    { sizeBp: 500, massNg: 24 },
+    { sizeBp: 600, massNg: 26 },
+    { sizeBp: 700, massNg: 28 },
+    { sizeBp: 800, massNg: 30 },
+    { sizeBp: 900, massNg: 32 },
+    { sizeBp: 1000, massNg: 54, highlighted: true },
+    { sizeBp: 1200, massNg: 36 },
+    { sizeBp: 1500, massNg: 40 },
+    { sizeBp: 2000, massNg: 44 },
+    { sizeBp: 3000, massNg: 56, highlighted: true },
+    { sizeBp: 4000, massNg: 48 },
+    { sizeBp: 5000, massNg: 52 },
+    { sizeBp: 6000, massNg: 56 },
+    { sizeBp: 8000, massNg: 60 },
+    { sizeBp: 10000, massNg: 66 },
+    { sizeBp: 15000, massNg: 70 },
+    { sizeBp: 20000, massNg: 74 }
+  ],
+  'Thermo GeneRuler DNA Ladder Mix': [
+    { sizeBp: 100, massNg: 18 },
+    { sizeBp: 200, massNg: 20 },
+    { sizeBp: 300, massNg: 22 },
+    { sizeBp: 400, massNg: 24 },
+    { sizeBp: 500, massNg: 26 },
+    { sizeBp: 600, massNg: 28 },
+    { sizeBp: 700, massNg: 30 },
+    { sizeBp: 800, massNg: 32 },
+    { sizeBp: 900, massNg: 34 },
+    { sizeBp: 1000, massNg: 56, highlighted: true },
+    { sizeBp: 1200, massNg: 38 },
+    { sizeBp: 1500, massNg: 42 },
+    { sizeBp: 2000, massNg: 46 },
+    { sizeBp: 2500, massNg: 50 },
+    { sizeBp: 3000, massNg: 58, highlighted: true },
+    { sizeBp: 4000, massNg: 52 },
+    { sizeBp: 5000, massNg: 56 },
+    { sizeBp: 6000, massNg: 60 },
+    { sizeBp: 8000, massNg: 64 },
+    { sizeBp: 10000, massNg: 68 }
+  ],
+  'Thermo GeneRuler High Range': [
+    { sizeBp: 1000, massNg: 30 },
+    { sizeBp: 2000, massNg: 34 },
+    { sizeBp: 3000, massNg: 54, highlighted: true },
+    { sizeBp: 4000, massNg: 40 },
+    { sizeBp: 5000, massNg: 44 },
+    { sizeBp: 6000, massNg: 48 },
+    { sizeBp: 8000, massNg: 52 },
+    { sizeBp: 10000, massNg: 60, highlighted: true },
+    { sizeBp: 12000, massNg: 56 },
+    { sizeBp: 15000, massNg: 60 },
+    { sizeBp: 20000, massNg: 64 }
+  ],
+  'Thermo GeneRuler Low Range': [
+    { sizeBp: 25, massNg: 16 },
+    { sizeBp: 50, massNg: 18 },
+    { sizeBp: 75, massNg: 20 },
+    { sizeBp: 100, massNg: 40, highlighted: true },
+    { sizeBp: 125, massNg: 24 },
+    { sizeBp: 150, massNg: 26 },
+    { sizeBp: 175, massNg: 28 },
+    { sizeBp: 200, massNg: 30 },
+    { sizeBp: 225, massNg: 32 },
+    { sizeBp: 250, massNg: 34 },
+    { sizeBp: 275, massNg: 36 },
+    { sizeBp: 300, massNg: 46, highlighted: true },
+    { sizeBp: 350, massNg: 40 },
+    { sizeBp: 400, massNg: 42 },
+    { sizeBp: 500, massNg: 46 }
+  ],
+  'Thermo GeneRuler 50 bp': [
+    { sizeBp: 50, massNg: 18 },
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 150, massNg: 22 },
+    { sizeBp: 200, massNg: 24 },
+    { sizeBp: 250, massNg: 26 },
+    { sizeBp: 300, massNg: 28 },
+    { sizeBp: 350, massNg: 30 },
+    { sizeBp: 400, massNg: 32 },
+    { sizeBp: 450, massNg: 34 },
+    { sizeBp: 500, massNg: 46, highlighted: true },
+    { sizeBp: 550, massNg: 36 },
+    { sizeBp: 600, massNg: 38 },
+    { sizeBp: 650, massNg: 40 },
+    { sizeBp: 700, massNg: 42 },
+    { sizeBp: 750, massNg: 44 },
+    { sizeBp: 800, massNg: 46 },
+    { sizeBp: 850, massNg: 48 },
+    { sizeBp: 900, massNg: 50 },
+    { sizeBp: 950, massNg: 52 },
+    { sizeBp: 1000, massNg: 58 },
+    { sizeBp: 1250, massNg: 54 },
+    { sizeBp: 1500, massNg: 56 }
+  ],
+  "Thermo O'GeneRuler 100 bp Plus": [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 46, highlighted: true },
+    { sizeBp: 600, massNg: 30 },
+    { sizeBp: 700, massNg: 32 },
+    { sizeBp: 800, massNg: 34 },
+    { sizeBp: 900, massNg: 36 },
+    { sizeBp: 1000, massNg: 52, highlighted: true },
+    { sizeBp: 1200, massNg: 40 },
+    { sizeBp: 1500, massNg: 44 },
+    { sizeBp: 2000, massNg: 48 },
+    { sizeBp: 2500, massNg: 52 },
+    { sizeBp: 3000, massNg: 62 }
+  ],
+  "Thermo O'GeneRuler 1 kb Plus": [
+    { sizeBp: 75, massNg: 16 },
+    { sizeBp: 200, massNg: 18 },
+    { sizeBp: 300, massNg: 20 },
+    { sizeBp: 400, massNg: 22 },
+    { sizeBp: 500, massNg: 24 },
+    { sizeBp: 600, massNg: 26 },
+    { sizeBp: 700, massNg: 28 },
+    { sizeBp: 800, massNg: 30 },
+    { sizeBp: 900, massNg: 32 },
+    { sizeBp: 1000, massNg: 54, highlighted: true },
+    { sizeBp: 1200, massNg: 36 },
+    { sizeBp: 1500, massNg: 40 },
+    { sizeBp: 2000, massNg: 44 },
+    { sizeBp: 3000, massNg: 56, highlighted: true },
+    { sizeBp: 4000, massNg: 48 },
+    { sizeBp: 5000, massNg: 52 },
+    { sizeBp: 6000, massNg: 56 },
+    { sizeBp: 8000, massNg: 60 },
+    { sizeBp: 10000, massNg: 66 },
+    { sizeBp: 15000, massNg: 70 },
+    { sizeBp: 20000, massNg: 74 }
+  ],
+  'Thermo FastRuler Low Range': [
+    { sizeBp: 50, massNg: 20 },
+    { sizeBp: 100, massNg: 22 },
+    { sizeBp: 150, massNg: 24 },
+    { sizeBp: 200, massNg: 26 },
+    { sizeBp: 300, massNg: 28 },
+    { sizeBp: 400, massNg: 30 },
+    { sizeBp: 500, massNg: 44, highlighted: true }
+  ],
+  'Thermo FastRuler Middle Range': [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 44, highlighted: true },
+    { sizeBp: 750, massNg: 30 },
+    { sizeBp: 1000, massNg: 50, highlighted: true },
+    { sizeBp: 1500, massNg: 36 },
+    { sizeBp: 2000, massNg: 40 }
+  ],
+  'Thermo FastRuler High Range': [
+    { sizeBp: 1000, massNg: 28 },
+    { sizeBp: 1500, massNg: 32 },
+    { sizeBp: 2000, massNg: 36 },
+    { sizeBp: 2500, massNg: 40 },
+    { sizeBp: 3000, massNg: 54, highlighted: true },
+    { sizeBp: 4000, massNg: 44 },
+    { sizeBp: 5000, massNg: 48 },
+    { sizeBp: 6000, massNg: 52 },
+    { sizeBp: 8000, massNg: 56 },
+    { sizeBp: 10000, massNg: 60 }
+  ],
+  'Invitrogen 1 kb Plus': [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 28 },
+    { sizeBp: 650, massNg: 30 },
+    { sizeBp: 850, massNg: 32 },
+    { sizeBp: 1000, massNg: 54, highlighted: true },
+    { sizeBp: 1650, massNg: 38 },
+    { sizeBp: 2000, massNg: 42 },
+    { sizeBp: 3000, massNg: 60, highlighted: true },
+    { sizeBp: 4000, massNg: 46 },
+    { sizeBp: 5000, massNg: 50 },
+    { sizeBp: 6000, massNg: 54 },
+    { sizeBp: 8000, massNg: 58 },
+    { sizeBp: 10000, massNg: 64 }
+  ],
+  'Invitrogen 100 bp': [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 46, highlighted: true },
+    { sizeBp: 600, massNg: 30 },
+    { sizeBp: 700, massNg: 32 },
+    { sizeBp: 800, massNg: 34 },
+    { sizeBp: 900, massNg: 36 },
+    { sizeBp: 1000, massNg: 52, highlighted: true },
+    { sizeBp: 1200, massNg: 40 },
+    { sizeBp: 1500, massNg: 44 },
+    { sizeBp: 2000, massNg: 48 },
+    { sizeBp: 2500, massNg: 52 },
+    { sizeBp: 3000, massNg: 58 }
+  ],
+  'Invitrogen 1 kb': [
+    { sizeBp: 500, massNg: 26 },
+    { sizeBp: 1000, massNg: 48, highlighted: true },
+    { sizeBp: 1500, massNg: 34 },
+    { sizeBp: 2000, massNg: 38 },
+    { sizeBp: 2500, massNg: 42 },
+    { sizeBp: 3000, massNg: 52, highlighted: true },
+    { sizeBp: 4000, massNg: 46 },
+    { sizeBp: 5000, massNg: 50 },
+    { sizeBp: 6000, massNg: 54 },
+    { sizeBp: 8000, massNg: 58 },
+    { sizeBp: 10000, massNg: 64 }
+  ],
+  'Invitrogen Low DNA Mass': [
+    { sizeBp: 100, massNg: 10 },
+    { sizeBp: 200, massNg: 20 },
+    { sizeBp: 400, massNg: 40 },
+    { sizeBp: 800, massNg: 60 },
+    { sizeBp: 1200, massNg: 80 },
+    { sizeBp: 2000, massNg: 100, highlighted: true }
+  ],
+  'Promega 100 bp': [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 46, highlighted: true },
+    { sizeBp: 600, massNg: 30 },
+    { sizeBp: 700, massNg: 32 },
+    { sizeBp: 800, massNg: 34 },
+    { sizeBp: 900, massNg: 36 },
+    { sizeBp: 1000, massNg: 50, highlighted: true },
+    { sizeBp: 1500, massNg: 42 }
+  ],
+  'Promega 1 kb': [
+    { sizeBp: 1000, massNg: 50, highlighted: true },
+    { sizeBp: 2000, massNg: 38 },
+    { sizeBp: 3000, massNg: 56, highlighted: true },
+    { sizeBp: 4000, massNg: 46 },
+    { sizeBp: 5000, massNg: 50 },
+    { sizeBp: 6000, massNg: 54 },
+    { sizeBp: 8000, massNg: 60 },
+    { sizeBp: 10000, massNg: 66 }
+  ],
+  'Promega BenchTop 100 bp': [
+    { sizeBp: 100, massNg: 20 },
+    { sizeBp: 200, massNg: 22 },
+    { sizeBp: 300, massNg: 24 },
+    { sizeBp: 400, massNg: 26 },
+    { sizeBp: 500, massNg: 46, highlighted: true },
+    { sizeBp: 600, massNg: 30 },
+    { sizeBp: 700, massNg: 32 },
+    { sizeBp: 800, massNg: 34 },
+    { sizeBp: 900, massNg: 36 },
+    { sizeBp: 1000, massNg: 54, highlighted: true },
+    { sizeBp: 1200, massNg: 40 },
+    { sizeBp: 1500, massNg: 44 },
+    { sizeBp: 2000, massNg: 48 },
+    { sizeBp: 3000, massNg: 58 }
+  ],
+  'Promega BenchTop 1 kb': [
+    { sizeBp: 500, massNg: 26 },
+    { sizeBp: 1000, massNg: 50, highlighted: true },
+    { sizeBp: 1500, massNg: 34 },
+    { sizeBp: 2000, massNg: 38 },
+    { sizeBp: 2500, massNg: 42 },
+    { sizeBp: 3000, massNg: 56, highlighted: true },
+    { sizeBp: 4000, massNg: 46 },
+    { sizeBp: 5000, massNg: 50 },
+    { sizeBp: 6000, massNg: 54 },
+    { sizeBp: 8000, massNg: 60 },
+    { sizeBp: 10000, massNg: 66 }
+  ],
+  'Promega Lambda/HindIII': [
+    { sizeBp: 125, massNg: 18 },
+    { sizeBp: 564, massNg: 24 },
+    { sizeBp: 2027, massNg: 38 },
+    { sizeBp: 2322, massNg: 40 },
+    { sizeBp: 4361, massNg: 54, highlighted: true },
+    { sizeBp: 6557, massNg: 58 },
+    { sizeBp: 9416, massNg: 64 },
+    { sizeBp: 23130, massNg: 74, highlighted: true }
+  ],
+  'λ/HindIII': [
+    { sizeBp: 125, massNg: 18 },
+    { sizeBp: 564, massNg: 24 },
+    { sizeBp: 2027, massNg: 38 },
+    { sizeBp: 2322, massNg: 40 },
+    { sizeBp: 4361, massNg: 54, highlighted: true },
+    { sizeBp: 6557, massNg: 58 },
+    { sizeBp: 9416, massNg: 64 },
+    { sizeBp: 23130, massNg: 74, highlighted: true }
+  ],
+  'Thermo Lambda/EcoRI+HindIII': [
+    { sizeBp: 125, massNg: 16 },
+    { sizeBp: 564, massNg: 20 },
+    { sizeBp: 831, massNg: 22 },
+    { sizeBp: 947, massNg: 24 },
+    { sizeBp: 1375, massNg: 26 },
+    { sizeBp: 1584, massNg: 28 },
+    { sizeBp: 1904, massNg: 30 },
+    { sizeBp: 2027, massNg: 42, highlighted: true },
+    { sizeBp: 3530, massNg: 36 },
+    { sizeBp: 4268, massNg: 40 },
+    { sizeBp: 4973, massNg: 50, highlighted: true },
+    { sizeBp: 5148, massNg: 52 },
+    { sizeBp: 21226, massNg: 70 }
+  ],
+  'Takara DL15000': [
+    { sizeBp: 1000, massNg: 30 },
+    { sizeBp: 2500, massNg: 40 },
+    { sizeBp: 5000, massNg: 56, highlighted: true },
+    { sizeBp: 7500, massNg: 50 },
+    { sizeBp: 10000, massNg: 62 },
+    { sizeBp: 15000, massNg: 70, highlighted: true }
+  ],
+  'Takara DL10000': [
+    { sizeBp: 1000, massNg: 30 },
+    { sizeBp: 2000, massNg: 36 },
+    { sizeBp: 3000, massNg: 54, highlighted: true },
+    { sizeBp: 4000, massNg: 42 },
+    { sizeBp: 5000, massNg: 46 },
+    { sizeBp: 6000, massNg: 50 },
+    { sizeBp: 8000, massNg: 58 },
+    { sizeBp: 10000, massNg: 66, highlighted: true }
+  ],
+  'Takara 1 kb DNA Ladder': [
+    { sizeBp: 1000, massNg: 30 },
+    { sizeBp: 2000, massNg: 36 },
+    { sizeBp: 3000, massNg: 56, highlighted: true },
+    { sizeBp: 4000, massNg: 42 },
+    { sizeBp: 5000, massNg: 46 },
+    { sizeBp: 6000, massNg: 50 },
+    { sizeBp: 8000, massNg: 58 },
+    { sizeBp: 10000, massNg: 66 }
   ]
 };
 

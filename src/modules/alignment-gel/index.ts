@@ -11,6 +11,14 @@ export {
 } from './alignment';
 export type { GotohScoring } from './alignment';
 
+export { pairwiseAlign } from './pairwise';
+export type { PairwiseMode, PairwiseOptions, PairwiseResult } from './pairwise';
+
+export { multipleSequenceAlignment } from './msa';
+export type { MsaInput, MsaOptions, MsaResult, MsaRow } from './msa';
+
+export type { SequenceType } from './scoring';
+
 export {
   DNA_LADDERS,
   computeMigration,
@@ -26,3 +34,20 @@ export type {
 
 export { createSyntheticTrace } from './synthetic';
 export type { SyntheticTraceOptions } from './synthetic';
+
+export { summarizeTraceCoverage } from './coverage';
+export type {
+  CoverageCall,
+  CoverageDiscrepancy,
+  CoverageOptions,
+  CoverageStatus,
+  CoverageSummary
+} from './coverage';
+
+export { alignReadsToReference, readsToTraces } from './reads';
+export type {
+  ReadAlignment,
+  ReadAlignmentOptions,
+  ReadMismatch,
+  SequencingRead
+} from './reads';

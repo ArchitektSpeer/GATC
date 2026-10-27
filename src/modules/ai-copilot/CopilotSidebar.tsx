@@ -876,7 +876,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                   <code className="mx-1 rounded bg-slate-800 px-1 py-0.5 text-slate-300">
                     streamGenerateContent?alt=sse
                   </code>
-                  端点。不会经过 OpenSnapGene 或任何第三方服务器。
+                  端点。不会经过 GATC 或任何第三方服务器。
                 </p>
                 <p className="mt-1.5">请勿在共享电脑上保存生产环境密钥。可随时一键清除本机配置。</p>
               </div>

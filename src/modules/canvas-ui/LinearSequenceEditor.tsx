@@ -20,6 +20,7 @@ import {
 import {
   AMINO_ACID_NAME,
   buildCutRowMap,
+  buildFeatureGapRowMap,
   buildFeatureRowMap,
   buildPrimerRowMap,
   buildTranslationCodons,
@@ -172,6 +173,10 @@ export function LinearSequenceEditor({
 
   const featureRowMap = useMemo(
     () => buildFeatureRowMap(doc.features, bpPerRow, length, circular),
+    [doc.features, bpPerRow, length, circular],
+  );
+  const featureGapRowMap = useMemo(
+    () => buildFeatureGapRowMap(doc.features, bpPerRow, length, circular),
     [doc.features, bpPerRow, length, circular],
   );
   const cutRowMap = useMemo(
@@ -575,6 +580,7 @@ export function LinearSequenceEditor({
               const rowStart = row * bpPerRow;
               const rowEnd = Math.min(length, rowStart + bpPerRow);
               const rowFeatures = featureRowMap.get(row) ?? [];
+              const rowFeatureGaps = featureGapRowMap.get(row) ?? [];
               const rowCuts = cutRowMap.get(row) ?? [];
               const rowPrimers = primerRowMap.get(row) ?? [];
               const rowCodons = translationRowMap.get(row) ?? [];
@@ -911,6 +917,41 @@ export function LinearSequenceEditor({
                       })}
                     </g>
                   ) : null}
+
+                  <g pointerEvents="none">
+                    {rowFeatureGaps.map((entry, index) => {
+                      const x1 = GUTTER + (entry.gap.start - rowStart) * cell;
+                      const x2 = GUTTER + (entry.gap.end - rowStart) * cell;
+                      const y = layout.featureTop + layout.featureHeight / 2;
+                      const color = entry.feature.color || tokens.accent;
+                      return (
+                        <g key={`feature-gap-${row}-${entry.feature.id}-${index}`}>
+                          <line
+                            x1={x1}
+                            y1={y}
+                            x2={x2}
+                            y2={y}
+                            stroke={color}
+                            strokeWidth={0.8}
+                            strokeDasharray="3 2"
+                            opacity={0.6}
+                          />
+                          {x2 - x1 > 8 ? (
+                            <polyline
+                              points={`${x1 + 3},${y - 3} ${x1 + 6},${y} ${x1 + 9},${y - 3}`}
+                              fill="none"
+                              stroke={color}
+                              strokeWidth={0.8}
+                              opacity={0.6}
+                            />
+                          ) : null}
+                          <title>
+                            {`${entry.feature.name} · intron ${entry.gap.start}–${entry.gap.end}`}
+                          </title>
+                        </g>
+                      );
+                    })}
+                  </g>
 
                   <g>
                     {rowFeatures.map((entry, index) => {

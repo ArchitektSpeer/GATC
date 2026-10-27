@@ -1208,16 +1208,56 @@ export function designGoldenGatePrimers(
   return output;
 }
 
+/**
+ * Recombination core sequences for the Gateway MultiSite site families.
+ *
+ * The values follow the att site annotations of the publicly deposited
+ * MultiSite Gateway donor/destination vectors (NCBI Nucleotide) and the
+ * primer recommendations of the MultiSite Gateway Pro user guide. attL/attR
+ * entries 3-5 include the flanking half-site bases that distinguish the left
+ * and right family members; without them the shared 21 bp core would make
+ * attL4 and attR4 indistinguishable. Reverse-orientation sites are
+ * represented by the normally oriented core; callers may suffix a name with
+ * "r" for annotation.
+ */
 export const GATEWAY_ATT_SITES = {
   attB1: 'ACAAGTTTGTACAAAAAAGCAGGCT',
   attB2: 'ACCCAGCTTTCTTGTACAAAGTGGT',
+  attB3: 'CAACTTTGTATAATAAAGTTG',
+  attB4: 'CCAACTTTGTATAGAAAAGTTG',
+  attB5: 'CAACTTTGTATACAAAAGTTG',
   attP1: 'ACAAGTTTGTACAAAAAAGCTGAACG',
   attP2: 'ACCCAGCTTTCTTGTACAAAGTGGTC',
+  attP3: 'CAACTTTGTATAATAAAGTTGAACG',
+  attP4: 'CGTTCAACTTTTCTATACAAAGTTG',
+  attP5: 'CAACTTTGTATACAAAAGTTGAACG',
   attL1: 'ACAAGTTTGTACAAAAAAGCAGGCT',
   attL2: 'ACCCAGCTTTCTTGTACAAAGTGGT',
+  attL3: 'TGCCAACTTTGTATAATAAAGTTG',
+  attL4: 'CAACTTTTCTATACAAAGTTGGCATT',
+  attL5: 'TGCCAACTTTGTATACAAAAGTTG',
   attR1: 'ACAAGTTTGTACAAAAAAGCTGAACG',
   attR2: 'ACCCAGCTTTCTTGTACAAAGTGGTC',
+  attR3: 'CAACTTTGTATAATAAAGTTGAACG',
+  attR4: 'CGTTCAACTTTTCTATACAAAGTTG',
+  attR5: 'CAACTTTGTATACAAAAGTTGAACG',
 } as const;
+
+type GatewayLRSerie = 'attL' | 'attR';
+type GatewayLRName = `${GatewayLRSerie}${1 | 2 | 3 | 4 | 5}`;
+
+const GATEWAY_LR_NAMES: GatewayLRName[] = [
+  'attL1',
+  'attL2',
+  'attL3',
+  'attL4',
+  'attL5',
+  'attR1',
+  'attR2',
+  'attR3',
+  'attR4',
+  'attR5',
+];
 
 interface AttSiteLocation {
   start: number;
@@ -1273,6 +1313,21 @@ function segmentFrom(doc: PlasmidDocument, start: number, end: number): SegmentD
   return { sequence: data.sequence, features: data.features, primers: data.primers };
 }
 
+function shiftFeatureWithSegments(feature: SequenceFeature, offset: number): SequenceFeature {
+  const shifted = shiftFeature(feature, offset);
+  if (shifted.notes?.segments) {
+    shifted.notes = {
+      ...shifted.notes,
+      segments: shifted.notes.segments.map((text) => {
+        const match = /^\s*(-?\d+)\s*-\s*(-?\d+)\s*$/.exec(text);
+        if (!match) return text;
+        return `${Number(match[1]) + offset}-${Number(match[2]) + offset}`;
+      }),
+    };
+  }
+  return shifted;
+}
+
 function appendSegment(
   target: SegmentData,
   segment: SegmentData,
@@ -1280,7 +1335,7 @@ function appendSegment(
 ): void {
   const offset = target.sequence.length;
   target.sequence += segment.sequence;
-  target.features.push(...segment.features.map((feature) => shiftFeature(feature, offset)));
+  target.features.push(...segment.features.map((feature) => shiftFeatureWithSegments(feature, offset)));
   target.primers.push(...segment.primers.map((primer) => shiftPrimer(primer, offset)));
   if (featureOverrides) target.features.push(...featureOverrides);
 }
@@ -1495,6 +1550,418 @@ export function simulateGatewayLR(
   return { expressionClone, byproduct, warnings };
 }
 
+interface GatewayLRHit {
+  name: GatewayLRName;
+  start: number;
+  end: number;
+  strand: 1 | -1;
+  annotated: boolean;
+}
+
+function parseGatewayLRFeatureName(
+  text: string,
+): { site: GatewayLRName; reversed: boolean } | null {
+  const match = /att([lr])([1-5])(r(?![a-z0-9]))?/i.exec(text.trim());
+  if (!match) return null;
+  const site = `att${match[1].toUpperCase()}${match[2]}` as GatewayLRName;
+  return { site, reversed: Boolean(match[3]) };
+}
+
+function gatewayLRArcOverlaps(
+  a: { start: number; end: number },
+  b: { start: number; end: number },
+  length: number,
+  circular: boolean,
+): boolean {
+  if (!circular) return a.start < b.end && b.start < a.end;
+  const aLength = a.end - a.start;
+  for (const shift of [-length, 0, length]) {
+    const shifted = a.start + shift;
+    if (shifted < b.end && b.start < shifted + aLength) return true;
+  }
+  return false;
+}
+
+/**
+ * Locates all MultiSite Gateway attL/attR sites in a document. Feature
+ * annotations take precedence over sequence matches, and longer sequence
+ * matches win over shorter cores that are contained inside them (for example
+ * the attL2 core that is also the 5' part of attR2).
+ */
+function collectGatewayLRSites(doc: PlasmidDocument): GatewayLRHit[] {
+  const circular = doc.topology === 'circular';
+  const hits: GatewayLRHit[] = [];
+  for (const feature of doc.features) {
+    const parsed = parseGatewayLRFeatureName(feature.name);
+    if (!parsed) continue;
+    hits.push({
+      name: parsed.site,
+      start: feature.start,
+      end: feature.end,
+      strand: parsed.reversed || feature.strand === -1 ? -1 : 1,
+      annotated: true,
+    });
+  }
+  for (const name of GATEWAY_LR_NAMES) {
+    const motif = GATEWAY_ATT_SITES[name];
+    for (const match of findMotifOnBothStrands(doc.sequence, motif, circular)) {
+      hits.push({
+        name,
+        start: match.position,
+        end: match.position + motif.length,
+        strand: match.strand,
+        annotated: false,
+      });
+    }
+  }
+  const unique: GatewayLRHit[] = [];
+  for (const hit of hits) {
+    if (
+      unique.some(
+        (existing) =>
+          existing.name === hit.name &&
+          existing.start === hit.start &&
+          existing.end === hit.end &&
+          existing.strand === hit.strand,
+      )
+    ) {
+      continue;
+    }
+    unique.push(hit);
+  }
+  const sorted = unique.sort((a, b) => {
+    if (a.annotated !== b.annotated) return a.annotated ? -1 : 1;
+    const lengthDifference = b.end - b.start - (a.end - a.start);
+    if (lengthDifference !== 0) return lengthDifference;
+    return a.start - b.start;
+  });
+  const resolved: GatewayLRHit[] = [];
+  for (const hit of sorted) {
+    if (resolved.some((existing) => gatewayLRArcOverlaps(existing, hit, doc.length, circular))) {
+      continue;
+    }
+    resolved.push(hit);
+  }
+  return resolved.sort((a, b) => a.start - b.start);
+}
+
+function gatewayPairIsCompatible(left: string, right: string): boolean {
+  const forward =
+    (left === 'attL1' && (right === 'attR5' || right === 'attL4')) ||
+    (left === 'attL5' && (right === 'attL4' || right === 'attL2')) ||
+    (left === 'attR4' && right === 'attR3') ||
+    (left === 'attL3' && right === 'attL2');
+  if (forward) return true;
+  return (
+    (right === 'attL1' && (left === 'attR5' || left === 'attL4')) ||
+    (right === 'attL5' && (left === 'attL4' || left === 'attL2')) ||
+    (right === 'attR4' && left === 'attR3') ||
+    (right === 'attL3' && left === 'attL2')
+  );
+}
+
+function gatewayProductSite(name: string): string {
+  const match = /^att[LR]([1-5])$/.exec(name);
+  return match ? `attB${match[1]}` : 'attB1';
+}
+
+interface GatewayEntryLayout {
+  doc: PlasmidDocument;
+  left: GatewayLRHit;
+  right: GatewayLRHit;
+  reversed: boolean;
+  segment: SegmentData;
+}
+
+function gatewayReversedSegment(
+  doc: PlasmidDocument,
+  start: number,
+  end: number,
+): SegmentData {
+  const data = sliceDocumentData(doc, start, end, {
+    circular: doc.topology === 'circular',
+    reverse: true,
+  });
+  return {
+    sequence: reverseComplement(data.sequence),
+    features: data.features,
+    primers: data.primers,
+  };
+}
+
+function gatewayExpectedLayout(count: number): Array<[GatewayLRName, GatewayLRName]> | null {
+  switch (count) {
+    case 1:
+      return [['attL1', 'attL2']];
+    case 2:
+      return [
+        ['attL1', 'attR5'],
+        ['attL5', 'attL2'],
+      ];
+    case 3:
+      return [
+        ['attL1', 'attL4'],
+        ['attR4', 'attR3'],
+        ['attL3', 'attL2'],
+      ];
+    case 4:
+      return [
+        ['attL1', 'attR5'],
+        ['attL5', 'attL4'],
+        ['attR4', 'attR3'],
+        ['attL3', 'attL2'],
+      ];
+    default:
+      return null;
+  }
+}
+
+function isBackboneMarker(feature: SequenceFeature): boolean {
+  return (
+    feature.type === 'rep_origin' ||
+    /(^|[^a-z])(ori|origin|kan|kanr|ampr|bla|aada|spec|str|cmr|ccdb|backbone|resistance)/i.test(
+      feature.name,
+    )
+  );
+}
+
+function backboneMarkerCount(segment: SegmentData): number {
+  return segment.features.filter(isBackboneMarker).length;
+}
+
+function arcInsertScore(segment: SegmentData): number {
+  const markers = backboneMarkerCount(segment);
+  const informative = segment.features.filter(
+    (feature) =>
+      !/att[LRBP]\d/i.test(feature.name) &&
+      !isBackboneMarker(feature) &&
+      (feature.type === 'CDS' ||
+        feature.type === 'promoter' ||
+        feature.type === 'terminator' ||
+        feature.type === 'regulatory' ||
+        feature.type === 'enhancer' ||
+        feature.type === 'protein_bind'),
+  ).length;
+  return markers * 100 - Math.min(informative, 9);
+}
+
+function gatewayLayoutForEntry(
+  doc: PlasmidDocument,
+  expected: [GatewayLRName, GatewayLRName],
+  index: number,
+  warnings: string[],
+): GatewayEntryLayout | null {
+  const hits = collectGatewayLRSites(doc);
+  const [expectedLeft, expectedRight] = expected;
+  const left = hits.find((hit) => hit.name === expectedLeft) ?? null;
+  const right = hits.find((hit) => hit.name === expectedRight) ?? null;
+  let leftHit = left;
+  let rightHit = right;
+  if (!leftHit || !rightHit) {
+    const pair = hits.find((candidate, candidateIndex) =>
+      hits.some(
+        (other, otherIndex) =>
+          otherIndex !== candidateIndex &&
+          !gatewayLRArcOverlaps(candidate, other, doc.length, doc.topology === 'circular') &&
+          gatewayPairIsCompatible(candidate.name, other.name),
+      ),
+    );
+    if (pair) {
+      const other = hits.find(
+        (candidate) =>
+          candidate !== pair &&
+          !gatewayLRArcOverlaps(candidate, pair, doc.length, doc.topology === 'circular') &&
+          gatewayPairIsCompatible(pair.name, candidate.name),
+      );
+      if (other) {
+        leftHit = pair;
+        rightHit = other;
+      }
+    }
+    if (!leftHit || !rightHit) {
+      const remaining = hits.filter(
+        (candidate) =>
+          candidate !== leftHit &&
+          candidate !== rightHit &&
+          (!leftHit ||
+            !gatewayLRArcOverlaps(candidate, leftHit, doc.length, doc.topology === 'circular')) &&
+          (!rightHit ||
+            !gatewayLRArcOverlaps(candidate, rightHit, doc.length, doc.topology === 'circular')),
+      );
+      if (!leftHit && remaining.length) leftHit = remaining.shift() ?? null;
+      if (!rightHit && remaining.length) rightHit = remaining.shift() ?? null;
+    }
+    if (!leftHit || !rightHit) {
+      warnings.push(
+        `Entry clone ${index + 1} (${doc.name}) does not contain two usable attL/attR sites.`,
+      );
+      return null;
+    }
+    warnings.push(
+      `Entry clone ${index + 1} (${doc.name}) carries ${leftHit.name}/${rightHit.name} instead of the expected ${expectedLeft}/${expectedRight}; the detected sites were used.`,
+    );
+  }
+  if (leftHit.start === rightHit.start && leftHit.end === rightHit.end) {
+    warnings.push(`Entry clone ${index + 1} (${doc.name}) has both att sites on the same coordinates.`);
+    return null;
+  }
+  let reversed = leftHit.strand === -1 && rightHit.strand === 1;
+  let forwardSegment: SegmentData | null = null;
+  let reverseSegment: SegmentData | null = null;
+  if (leftHit.strand === rightHit.strand) {
+    forwardSegment = segmentFrom(doc, leftHit.end, rightHit.start);
+    reverseSegment = gatewayReversedSegment(doc, rightHit.end, leftHit.start);
+    const forwardMarkers = backboneMarkerCount(forwardSegment);
+    const reverseMarkers = backboneMarkerCount(reverseSegment);
+    if (reverseMarkers !== forwardMarkers) {
+      reversed = reverseMarkers < forwardMarkers;
+    } else {
+      reversed = arcInsertScore(reverseSegment) < arcInsertScore(forwardSegment);
+    }
+    warnings.push(
+      `Entry clone ${index + 1} (${doc.name}) has both att sites on the same strand; the insert orientation was inferred from the vector backbone and insert annotations.`,
+    );
+  }
+  let segment: SegmentData;
+  if (reversed) {
+    warnings.push(
+      `Entry clone ${index + 1} (${doc.name}) is in the reverse orientation; the insert was flipped for assembly.`,
+    );
+    segment = reverseSegment ?? gatewayReversedSegment(doc, rightHit.end, leftHit.start);
+  } else {
+    segment = forwardSegment ?? segmentFrom(doc, leftHit.end, rightHit.start);
+  }
+  return { doc, left: leftHit, right: rightHit, reversed, segment };
+}
+
+/**
+ * Simulates a MultiSite Gateway LR reaction for two to four entry clones.
+ *
+ * The entry clones are supplied in biological order. Each clone is expected
+ * to expose the site pair used by the corresponding MultiSite reaction:
+ * L1-R5/L5-L2 (2 fragments), L1-L4/R4-R3/L3-L2 (3 fragments) or
+ * L1-R5/L5-L4/R4-R3/L3-L2 (4 fragments). The destination must contain attR1
+ * and attR2. Mismatched site order or orientation is reported in `warnings`;
+ * the assembled product still uses the detected sites so that the result can
+ * be inspected.
+ */
+export function simulateMultiSiteGatewayLR(
+  entryClones: PlasmidDocument[],
+  destination: PlasmidDocument,
+): { expressionClone: PlasmidDocument | null; warnings: string[] } {
+  const warnings: string[] = [];
+  if (entryClones.length === 0) {
+    return { expressionClone: null, warnings: ['At least one entry clone is required.'] };
+  }
+  const layout = gatewayExpectedLayout(entryClones.length);
+  if (!layout) {
+    return {
+      expressionClone: null,
+      warnings: ['MultiSite Gateway LR supports one to four entry clones.'],
+    };
+  }
+  if (entryClones.length === 1) {
+    warnings.push('A single entry clone was supplied; consider using simulateGatewayLR for a standard LR reaction.');
+  }
+  const r1 = findAttSite(destination, ['attR1', 'attr1'], [GATEWAY_ATT_SITES.attR1]);
+  const r2 = findAttSite(destination, ['attR2', 'attr2'], [GATEWAY_ATT_SITES.attR2]);
+  if (!r1 || !r2) {
+    return {
+      expressionClone: null,
+      warnings: ['attR1 and attR2 sites must both be present on the destination vector.'],
+    };
+  }
+  if (r1.start >= r2.start) {
+    warnings.push('attR1 is downstream of attR2; verify the destination orientation.');
+  }
+  const entries: GatewayEntryLayout[] = [];
+  for (let index = 0; index < entryClones.length; index += 1) {
+    const entry = gatewayLayoutForEntry(entryClones[index], layout[index], index, warnings);
+    if (!entry) {
+      return { expressionClone: null, warnings };
+    }
+    if (entry.doc.topology !== 'circular') {
+      warnings.push(
+        `Entry clone ${index + 1} (${entry.doc.name}) is linear; circular assembly may be incomplete.`,
+      );
+    }
+    entries.push(entry);
+  }
+
+  const attSites: Array<{ name: string; sequence: string }> = [];
+  attSites.push({ name: 'attB1', sequence: GATEWAY_ATT_SITES.attB1 });
+  for (let index = 0; index < entries.length - 1; index += 1) {
+    const leftName = entries[index].right.name;
+    const rightName = entries[index + 1].left.name;
+    const compatible =
+      (leftName === 'attR5' && rightName === 'attL5') ||
+      (leftName === 'attL4' && rightName === 'attR4') ||
+      (leftName === 'attR3' && rightName === 'attL3');
+    if (!compatible) {
+      warnings.push(
+        `Incompatible junction between entry clone ${index + 1} (${leftName}) and entry clone ${index + 2} (${rightName}); predicted recombination scar ${gatewayProductSite(leftName)}.`,
+      );
+    }
+    const productName = compatible
+      ? leftName === 'attR5'
+        ? 'attB5'
+        : leftName === 'attL4'
+          ? 'attB4'
+          : 'attB3'
+      : gatewayProductSite(leftName);
+    attSites.push({
+      name: productName,
+      sequence: GATEWAY_ATT_SITES[productName as keyof typeof GATEWAY_ATT_SITES],
+    });
+  }
+  attSites.push({ name: 'attB2', sequence: GATEWAY_ATT_SITES.attB2 });
+
+  if (entries[0].left.name !== 'attL1') {
+    warnings.push(
+      `The first entry clone starts with ${entries[0].left.name} instead of attL1; the destination attR1 junction is not specific.`,
+    );
+  }
+  const last = entries[entries.length - 1];
+  if (last.right.name !== 'attL2') {
+    warnings.push(
+      `The last entry clone ends with ${last.right.name} instead of attL2; the destination attR2 junction is not specific.`,
+    );
+  }
+
+  const topology = destination.topology;
+  const insertSegments = entries.map((entry) => entry.segment);
+  let segments: SegmentData[];
+  if (topology === 'circular') {
+    const backbone = segmentFrom(destination, r2.end, r1.start);
+    segments = [backbone, ...insertSegments];
+  } else {
+    const before = segmentFrom(destination, 0, r1.start);
+    const after = segmentFrom(destination, r2.end, destination.length);
+    segments = [before, ...insertSegments, after];
+  }
+
+  const expressionClone = buildGatewayProduct(
+    `${destination.name}_${entries.length}way_expression`,
+    'gateway_lr',
+    [destination, ...entryClones],
+    segments,
+    attSites,
+    topology,
+    warnings,
+    topology === 'linear'
+      ? {
+          left: copyOverhang(destination.linearEnds?.left ?? bluntOverhang()),
+          right: copyOverhang(destination.linearEnds?.right ?? bluntOverhang()),
+        }
+      : undefined,
+  );
+  if (expressionClone.length === 0) {
+    warnings.push('The MultiSite LR expression clone is empty.');
+    return { expressionClone: null, warnings };
+  }
+  return { expressionClone, warnings };
+}
+
 interface PrimerBinding {
   start: number;
   end: number;
@@ -1598,7 +2065,8 @@ function resolvePrimerBinding(
     return {
       binding: {
         start: mod(primer.bindingStart, template.length),
-        end: mod(primer.bindingEnd, template.length),
+        // On a linear template an end equal to the length is the 3' terminus, not position 0.
+        end: circular ? mod(primer.bindingEnd, template.length) : Math.min(primer.bindingEnd, template.length),
         tail: primer.tailSequence,
         annealing: primer.sequence.slice(primer.tailSequence.length),
         strand: primer.strand,
@@ -1931,3 +2399,6 @@ export function designPrimerPairForFeature(
 export function gcOf(sequence: string): number {
   return gcPercentOf(sequence);
 }
+
+export * from './assembly';
+export * from './recombination';

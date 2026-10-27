@@ -1,5 +1,5 @@
 {
-  "name": "opensnapgene",
+  "name": "gatc",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -18,10 +18,12 @@
     "@teselagen/range-utils": "^0.3.20",
     "@teselagen/sequence-utils": "^0.3.42",
     "cmdk": "^1.1.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.61.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "seqviz": "^3.10.25",
+    "svg2pdf.js": "^2.8.1",
     "zundo": "^2.3.0",
     "zustand": "^5.0.16"
   },
@@ -40,5 +42,5 @@
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.0.5"
   },
-  "license": "MIT"
+  "license": "GPL-3.0-or-later"
 }

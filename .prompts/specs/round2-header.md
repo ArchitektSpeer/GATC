@@ -1,4 +1,4 @@
-你负责维护 `__DIR__/`（OpenSnapGene，开源 SnapGene 替代品，GPL 发布）。这是第二轮补齐功能缺口。先通读本目录现有代码与 `src/types/schema.ts`，在现有风格上增量扩展。
+你负责维护 `__DIR__/`（GATC — Gene Assembly & Toolkit for Cloning，开源分子克隆工作台，GPL 发布）。这是新一轮补齐功能缺口（与其他模块的构建并行进行）。先通读本目录现有代码与 `src/types/schema.ts`，在现有风格上增量扩展。
 
 硬性规则：
 - 只允许修改 `__DIR__/` 下的文件；禁止修改 `src/types/schema.ts`、其他模块、`src/app/`、`test-data/`、package.json、tsconfig、vite.config；禁止 npm install（所需依赖已安装）。

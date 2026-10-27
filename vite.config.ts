@@ -11,8 +11,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'OpenSnapGene',
-        short_name: 'OpenSnapGene',
+        name: 'GATC — Gene Assembly & Toolkit for Cloning',
+        short_name: 'GATC',
+        description: 'Open-source molecular cloning workbench',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
@@ -25,6 +26,9 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     testTimeout: 30000,
+    // Several suites assert wall-clock budgets (e.g. 100 kb annotation < 30 ms); running files
+    // one at a time keeps those measurements free of CPU contention. The full run takes ~15 s.
+    fileParallelism: false,
     env: { AB1_SAMPLE: 'test-data/example1.ab1' },
   },
 });

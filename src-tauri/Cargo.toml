@@ -1,17 +1,17 @@
 [package]
-name = "opensnapgene"
+name = "gatc"
 version = "0.1.0"
-description = "OpenSnapGene desktop shell"
+description = "GATC (Gene Assembly & Toolkit for Cloning) desktop shell"
 authors = ["Qiu Shui"]
-license = "MIT"
-repository = "https://github.com/ArchitektSpeer/OpenSnapGene"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/ArchitektSpeer/GATC"
 edition = "2024"
 rust-version = "1.90"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "opensnapgene_lib"
+name = "gatc_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

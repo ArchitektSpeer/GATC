@@ -13,7 +13,8 @@ import type {
   StrandDirection,
 } from '../../types/schema';
 
-export const AI_CONFIG_STORAGE_KEY = 'opensnapgene_ai_config';
+export const AI_CONFIG_STORAGE_KEY = 'gatc_ai_config';
+export const LEGACY_AI_CONFIG_STORAGE_KEY = 'opensnapgene_ai_config';
 
 export const PROVIDER_DEFAULTS: Record<AIProviderType, { baseUrl: string; model: string }> = {
   openai: {
@@ -614,7 +615,7 @@ export function buildPlasmidContextPrompt(
 
 export function buildSystemPrompt(): string {
   return [
-    '你是 OpenSnapGene 中一位严谨的分子克隆与合成生物学实验导师。',
+    '你是 GATC 中一位严谨的分子克隆与合成生物学实验导师。',
     '你的任务是帮助实验人员规划克隆、排查酶切/连接/转化失败、解读 Sanger 测序结果，并推荐可验证的鉴定方案。',
     '',
     '## 回答原则',
@@ -627,9 +628,9 @@ export function buildSystemPrompt(): string {
     '',
     '## 可执行操作协议',
     '当且仅当你的建议可以转化为界面操作时，在回复末尾追加一个或多个如下块（解析为 AIToolAction[]）。每个块内只能放一个 JSON 对象或 JSON 数组；块外不要包 markdown 代码围栏。',
-    '<opensnapgene_action>',
+    '<gatc_action>',
     '{"type":"DESIGN_PRIMERS","payload":{"targetStart":0,"targetEnd":600,"cloningMethod":"gibson","forwardTail":"","reverseTail":""}}',
-    '</opensnapgene_action>',
+    '</gatc_action>',
     '',
     '允许的 action 类型与 payload：',
     '- DESIGN_PRIMERS: targetStart/targetEnd 为整数且在质粒范围内；cloningMethod 取 "gibson" | "restriction" | "mutagenesis"；forwardTail/reverseTail 为可选 5\' 端 IUPAC DNA 尾；mutationSeq 为可选定点突变序列。',
@@ -741,7 +742,8 @@ export function parseAssistantReply(text: string): { content: string; actions: A
     return { content: '', actions: [] };
   }
 
-  const blockPattern = /<opensnapgene_action[^>]*>([\s\S]*?)<\/opensnapgene_action\s*>/gi;
+  const blockPattern =
+    /<(?:gatc_action|opensnapgene_action)[^>]*>([\s\S]*?)<\/(?:gatc_action|opensnapgene_action)\s*>/gi;
   const actions: AIToolAction[] = [];
   let match: RegExpExecArray | null;
 
@@ -775,7 +777,7 @@ export function parseAssistantReply(text: string): { content: string; actions: A
   }
 
   let content = text.replace(blockPattern, '\n');
-  const unclosedIndex = content.search(/<opensnapgene_action[^>]*>/i);
+  const unclosedIndex = content.search(/<(?:gatc_action|opensnapgene_action)[^>]*>/i);
   if (unclosedIndex >= 0) {
     content = content.slice(0, unclosedIndex);
   }
@@ -1610,7 +1612,24 @@ export function loadAIConfig(): AIConfig | null {
   try {
     const storage = globalThis.localStorage;
     if (!storage) return null;
-    const raw = storage.getItem(AI_CONFIG_STORAGE_KEY);
+
+    let raw = storage.getItem(AI_CONFIG_STORAGE_KEY);
+    if (!raw) {
+      const legacyRaw = storage.getItem(LEGACY_AI_CONFIG_STORAGE_KEY);
+      if (legacyRaw) {
+        raw = legacyRaw;
+        try {
+          storage.setItem(AI_CONFIG_STORAGE_KEY, legacyRaw);
+        } catch {
+          // Reading the legacy entry still succeeds even if migration fails.
+        }
+        try {
+          storage.removeItem(LEGACY_AI_CONFIG_STORAGE_KEY);
+        } catch {
+          // Leaving the legacy entry behind is harmless; it is ignored once the new key exists.
+        }
+      }
+    }
     if (!raw) return null;
 
     const parsed: unknown = JSON.parse(raw);
@@ -1679,6 +1698,7 @@ export function clearAIConfig(): void {
     const storage = globalThis.localStorage;
     if (!storage) return;
     storage.removeItem(AI_CONFIG_STORAGE_KEY);
+    storage.removeItem(LEGACY_AI_CONFIG_STORAGE_KEY);
   } catch {
     // Storage can be unavailable in private browsing or non-browser runtimes.
   }

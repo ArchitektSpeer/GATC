@@ -21,9 +21,36 @@ import { COMMERCIAL_ENZYMES, getEnzymeByName } from './enzymes';
 import { FEATURE_LIBRARY } from './feature-library';
 import type { FeatureLibraryEntry } from './feature-library';
 
-export { COMMERCIAL_ENZYMES, getEnzymeByName };
+export {
+  COMMERCIAL_ENZYMES,
+  ENZYME_DATABASE,
+  ENZYME_SETS,
+  filterEnzymes,
+  findIsoschizomers,
+  getEnzymeByName,
+} from './enzymes';
+export type { EnzymeSet } from './enzymes';
+export { searchMotif } from './motif-search';
+export type { MotifHit } from './motif-search';
+export {
+  CODON_USAGE,
+  backTranslate,
+  codonAdaptationIndex,
+} from './codon-usage';
+export type { CodonUsageOrganism } from './codon-usage';
 export { FEATURE_LIBRARY };
 export type { FeatureLibraryEntry };
+export { FEATURE_LIBRARY_EXTRA } from './feature-library-extra';
+export type { FeatureLibraryExtraEntry } from './feature-library-extra';
+export {
+  ENZYME_DIGEST_CONDITIONS,
+  recommendDoubleDigestBuffer,
+} from './digest-buffer';
+export type {
+  DoubleDigestRecommendation,
+  EnzymeDigestCondition,
+  NebBufferName,
+} from './digest-buffer';
 
 export type SequenceEdit =
   | { type: 'insert'; position: number; bases: string }
@@ -61,12 +88,43 @@ const AMINO_ACID_MASS: Record<string, number> = {
   S: 105.09, T: 119.12, W: 204.23, Y: 181.19, V: 117.15,
 };
 
-const IUPAC_PATTERN: Record<string, string> = {
-  A: 'A', C: 'C', G: 'G', T: 'T', U: 'T',
-  R: '[AG]', Y: '[CT]', S: '[GC]', W: '[AT]',
-  K: '[GT]', M: '[AC]', B: '[CGT]', D: '[AGT]',
-  H: '[ACT]', V: '[ACG]', N: '[ACGT]',
+const BASE_CODE: Record<string, number> = {
+  A: 1,
+  C: 2,
+  G: 4,
+  T: 8,
+  U: 8,
 };
+
+const IUPAC_MASK: Record<string, number> = {
+  A: 1, C: 2, G: 4, T: 8, U: 8,
+  R: 5, Y: 10, S: 6, W: 9,
+  K: 12, M: 3, B: 14, D: 13,
+  H: 11, V: 7, N: 15,
+};
+
+const BASES_BY_MASK: Record<number, string> = {
+  1: 'A', 2: 'C', 4: 'G', 8: 'T',
+  3: 'AC', 5: 'AG', 6: 'CG', 9: 'AT',
+  10: 'CT', 12: 'GT',
+  7: 'ACG', 11: 'ACT', 13: 'AGT', 14: 'CGT',
+  15: 'ACGT',
+};
+
+function expandIupacPattern(pattern: string, limit: number): string[] | null {
+  let variants = [''];
+  for (const letter of pattern) {
+    const mask = IUPAC_MASK[letter];
+    const bases = mask === undefined ? undefined : BASES_BY_MASK[mask];
+    if (!bases || variants.length * bases.length > limit) return null;
+    const next: string[] = [];
+    for (const prefix of variants) {
+      for (const base of bases) next.push(prefix + base);
+    }
+    variants = next;
+  }
+  return variants;
+}
 
 let identifierCounter = 0;
 
@@ -114,11 +172,64 @@ export function translateDna(seq: string): string {
   return protein;
 }
 
+const TRANSLATION_BASE: Record<string, number> = {
+  A: 0,
+  C: 1,
+  G: 2,
+  T: 3,
+};
+
+const AMINO_ACID_CODE: Record<string, number> = {
+  A: 0,
+  C: 1,
+  D: 2,
+  E: 3,
+  F: 4,
+  G: 5,
+  H: 6,
+  I: 7,
+  K: 8,
+  L: 9,
+  M: 10,
+  N: 11,
+  P: 12,
+  Q: 13,
+  R: 14,
+  S: 15,
+  T: 16,
+  V: 17,
+  W: 18,
+  Y: 19,
+};
+
+const CODON_AMINO_ACID_CODE = new Int8Array(64).fill(-1);
+for (const [codon, aminoAcid] of Object.entries(CODON_TABLE)) {
+  const a = TRANSLATION_BASE[codon[0]];
+  const c = TRANSLATION_BASE[codon[1]];
+  const g = TRANSLATION_BASE[codon[2]];
+  if (a === undefined || c === undefined || g === undefined) continue;
+  const index = a * 16 + c * 4 + g;
+  const code = AMINO_ACID_CODE[aminoAcid];
+  if (code !== undefined) CODON_AMINO_ACID_CODE[index] = code;
+}
+
 function isPalindromic(sequence: string): boolean {
   return reverseComplement(sequence) === sequence;
 }
 
-function findPatternPositions(sequence: string, pattern: string): number[] {
+function encodeSequence(sequence: string): Uint8Array {
+  const encoded = new Uint8Array(sequence.length);
+  for (let position = 0; position < sequence.length; position += 1) {
+    encoded[position] = BASE_CODE[sequence[position]] ?? 0;
+  }
+  return encoded;
+}
+
+function findPatternPositions(
+  sequence: string,
+  pattern: string,
+  encodedSequence?: Uint8Array,
+): number[] {
   if (!pattern || sequence.length < pattern.length) return [];
   if (/^[ACGT]+$/.test(pattern)) {
     const positions: number[] = [];
@@ -130,28 +241,49 @@ function findPatternPositions(sequence: string, pattern: string): number[] {
     return positions;
   }
 
-  let body = '';
-  for (const letter of pattern) {
-    body += IUPAC_PATTERN[letter] ?? '[ACGT]';
+  const masks = new Uint8Array(pattern.length);
+  for (let index = 0; index < pattern.length; index += 1) {
+    const mask = IUPAC_MASK[pattern[index]];
+    if (mask === undefined) return [];
+    masks[index] = mask;
   }
-  const expression = new RegExp(`(?=(${body}))`, 'g');
+
+  if (pattern.length <= 31) {
+    // Shift-And matching evaluates every IUPAC pattern against the whole
+    // sequence with one bit-parallel pass, independent of the number of
+    // degenerate positions in the pattern.
+    const baseMasks = new Int32Array(16);
+    for (let index = 0; index < masks.length; index += 1) {
+      const bit = 1 << index;
+      const mask = masks[index];
+      if (mask & 1) baseMasks[1] |= bit;
+      if (mask & 2) baseMasks[2] |= bit;
+      if (mask & 4) baseMasks[4] |= bit;
+      if (mask & 8) baseMasks[8] |= bit;
+    }
+    const highBit = 1 << (pattern.length - 1);
+    const encoded = encodedSequence ?? encodeSequence(sequence);
+    const positions: number[] = [];
+    let state = 0;
+    for (let position = 0; position < sequence.length; position += 1) {
+      state = ((state << 1) | 1) & baseMasks[encoded[position]];
+      if (state & highBit) positions.push(position - pattern.length + 1);
+    }
+    return positions;
+  }
+
+  const matchesAt = (start: number): boolean => {
+    for (let offset = 0; offset < masks.length; offset += 1) {
+      const code = BASE_CODE[sequence[start + offset]] ?? 0;
+      if ((code & masks[offset]) === 0) return false;
+    }
+    return true;
+  };
   const positions: number[] = [];
-  let match = expression.exec(sequence);
-  while (match) {
-    positions.push(match.index);
-    expression.lastIndex = match.index + 1;
-    match = expression.exec(sequence);
+  for (let start = 0; start + pattern.length <= sequence.length; start += 1) {
+    if (matchesAt(start)) positions.push(start);
   }
   return positions;
-}
-
-function extractRound(sequence: string, start: number, length: number): string {
-  if (length <= 0) return '';
-  let result = '';
-  for (let index = 0; index < length; index += 1) {
-    result += sequence[mod(start + index, sequence.length)];
-  }
-  return result;
 }
 
 function extractSegment(
@@ -161,29 +293,18 @@ function extractSegment(
   length: number,
 ): string {
   if (length <= 0) return '';
-  if (circular) return extractRound(sequence, start, length);
-  if (start < 0 || start + length > sequence.length) return '';
+  const sequenceLength = sequence.length;
+  if (circular) {
+    const normalizedStart = mod(start, sequenceLength);
+    const end = normalizedStart + length;
+    if (end <= sequenceLength) return sequence.slice(normalizedStart, end);
+    return (
+      sequence.slice(normalizedStart) +
+      sequence.slice(0, end - sequenceLength)
+    );
+  }
+  if (start < 0 || start + length > sequenceLength) return '';
   return sequence.slice(start, start + length);
-}
-
-interface OverhangResult {
-  type: CutSite['overhangType'];
-  sequence: string;
-}
-
-function calculateOverhang(
-  sequence: string,
-  circular: boolean,
-  rawTop: number,
-  rawBottom: number,
-): OverhangResult {
-  const difference = rawBottom - rawTop;
-  if (difference === 0) return { type: 'blunt', sequence: '' };
-  const start = Math.min(rawTop, rawBottom);
-  return {
-    type: difference > 0 ? '5-prime' : '3-prime',
-    sequence: extractSegment(sequence, circular, start, Math.abs(difference)),
-  };
 }
 
 interface MethylationMasks {
@@ -241,6 +362,7 @@ function maskContains(
 
 function isMethylationBlocked(
   enzyme: RestrictionEnzyme,
+  enzymeIsDpnI: boolean,
   recognitionStart: number,
   recognitionLength: number,
   rawTop: number,
@@ -249,12 +371,17 @@ function isMethylationBlocked(
   sequenceLength: number,
   circular: boolean,
 ): boolean {
-  if (enzyme.name.toUpperCase() === 'DPNI') {
+  if (enzymeIsDpnI) {
     return !masks.profile.dam;
   }
 
   const sensitivity = enzyme.methylationSensitivity;
   if (!sensitivity) return false;
+
+  const damBlocked = sensitivity.dam === 'blocked' && masks.profile.dam;
+  const dcmBlocked = sensitivity.dcm === 'blocked' && masks.profile.dcm;
+  const cpgBlocked = sensitivity.cpg === 'blocked' && masks.profile.cpg;
+  if (!damBlocked && !dcmBlocked && !cpgBlocked) return false;
 
   const cutStart = Math.min(rawTop, rawBottom);
   const cutLength = Math.abs(rawBottom - rawTop);
@@ -273,16 +400,27 @@ function isMethylationBlocked(
     return false;
   };
 
-  if (sensitivity.dam === 'blocked' && masks.profile.dam && overlap(masks.dam)) {
-    return true;
-  }
-  if (sensitivity.dcm === 'blocked' && masks.profile.dcm && overlap(masks.dcm)) {
-    return true;
-  }
-  if (sensitivity.cpg === 'blocked' && masks.profile.cpg && overlap(masks.cpg)) {
-    return true;
-  }
+  if (damBlocked && overlap(masks.dam)) return true;
+  if (dcmBlocked && overlap(masks.dcm)) return true;
+  if (cpgBlocked && overlap(masks.cpg)) return true;
   return false;
+}
+
+function orderCutSites(sites: CutSite[], sequenceLength: number): CutSite[] {
+  if (sites.length < 2) return sites;
+  const counts = new Uint32Array(sequenceLength);
+  for (const site of sites) counts[site.position] += 1;
+  const starts = new Uint32Array(sequenceLength + 1);
+  for (let position = 0; position < sequenceLength; position += 1) {
+    starts[position + 1] = starts[position] + counts[position];
+  }
+  const cursors = starts.slice(0, sequenceLength);
+  const ordered = new Array<CutSite>(sites.length);
+  for (const site of sites) {
+    ordered[cursors[site.position]] = site;
+    cursors[site.position] += 1;
+  }
+  return ordered;
 }
 
 export function findCutSites(
@@ -311,6 +449,10 @@ export function findCutSites(
     return true;
   });
   if (selected.length === 0) return [];
+  // Generating sites in enzyme-name order lets a stable counting sort below
+  // reproduce the historical position/name/strand ordering without comparing
+  // every pair of cut sites.
+  selected.sort((left, right) => left.name.localeCompare(right.name));
 
   let maximumRecognitionLength = 0;
   for (const enzyme of selected) {
@@ -322,86 +464,161 @@ export function findCutSites(
   const scanSequence = circular
     ? sequence + sequence.slice(0, maximumRecognitionLength)
     : sequence;
+  const encodedScan = encodeSequence(scanSequence);
   const masks = buildMethylationMasks(
     sequence,
     circular,
     doc.methylationProfile,
   );
 
+  // Isoschizomers and commercial aliases share recognition sequences, so the
+  // scan is performed once per unique motif and reused by every enzyme.
+  const patternCache = new Map<string, number[]>();
+  const patterns = new Set<string>();
+  for (const enzyme of selected) {
+    const recognition = enzyme.recognitionSeq.toUpperCase();
+    patterns.add(recognition);
+    if (!isPalindromic(recognition)) {
+      patterns.add(reverseComplement(recognition));
+    }
+  }
+
+  // Motifs with a small IUPAC expansion share one Aho-Corasick pass. Highly
+  // degenerate motifs fall back to the bit-parallel matcher.
+  const automaton = new AnnotationAutomaton();
+  const expandedPatterns: string[] = [];
+  const entryPatterns: number[] = [];
+  const fallbackPatterns: string[] = [];
+  for (const pattern of patterns) {
+    const variants = expandIupacPattern(pattern, 64);
+    if (!variants) {
+      fallbackPatterns.push(pattern);
+      continue;
+    }
+    const patternIndex = expandedPatterns.length;
+    expandedPatterns.push(pattern);
+    for (const variant of variants) {
+      entryPatterns.push(patternIndex);
+      automaton.add(variant, {
+        libraryIndex: patternIndex,
+        strand: 1,
+        kind: 'full',
+        offset: 0,
+      });
+    }
+  }
+
+  if (expandedPatterns.length > 0) {
+    automaton.build();
+    const buckets = expandedPatterns.map(() => [] as number[]);
+    for (const match of automaton.search(scanSequence)) {
+      buckets[entryPatterns[match.entryIndex]].push(match.start);
+    }
+    for (let index = 0; index < expandedPatterns.length; index += 1) {
+      patternCache.set(
+        expandedPatterns[index],
+        buckets[index].filter((position) => position < length),
+      );
+    }
+  }
+
+  for (const pattern of fallbackPatterns) {
+    patternCache.set(
+      pattern,
+      findPatternPositions(scanSequence, pattern, encodedScan).filter(
+        (position) => position < length,
+      ),
+    );
+  }
+
+  const positionsFor = (pattern: string): number[] =>
+    patternCache.get(pattern) ?? [];
+
   const allSites: CutSite[] = [];
 
   for (const enzyme of selected) {
     const recognition = enzyme.recognitionSeq.toUpperCase();
     const recognitionLength = recognition.length;
-    const hits: Array<{ position: number; strand: Strand }> = [];
+    const enzymeIsDpnI = enzyme.name.toUpperCase() === 'DPNI';
+    const sensitivity = enzyme.methylationSensitivity;
+    const hasBlockingMethylation =
+      enzymeIsDpnI ||
+      (sensitivity !== undefined &&
+        ((sensitivity.dam === 'blocked' && masks.profile.dam) ||
+          (sensitivity.dcm === 'blocked' && masks.profile.dcm) ||
+          (sensitivity.cpg === 'blocked' && masks.profile.cpg)));
+    const firstSiteIndex = allSites.length;
 
-    for (const position of findPatternPositions(scanSequence, recognition)) {
-      if (position < length) hits.push({ position, strand: 1 });
-    }
-
-    if (!isPalindromic(recognition)) {
-      const reverseRecognition = reverseComplement(recognition);
-      for (const position of findPatternPositions(scanSequence, reverseRecognition)) {
-        if (position < length) hits.push({ position, strand: -1 });
-      }
-    }
-
-    const seen = new Set<string>();
-    const enzymeSites: CutSite[] = [];
-
-    for (const hit of hits) {
-      const identity = `${hit.position}:${hit.strand}`;
-      if (seen.has(identity)) continue;
-      seen.add(identity);
-
+    const addPosition = (position: number, strand: Strand): void => {
       const rawTop =
-        hit.strand === 1
-          ? hit.position + enzyme.cutIndexTop
-          : hit.position + recognitionLength - enzyme.cutIndexBottom;
+        strand === 1
+          ? position + enzyme.cutIndexTop
+          : position + recognitionLength - enzyme.cutIndexBottom;
       const rawBottom =
-        hit.strand === 1
-          ? hit.position + enzyme.cutIndexBottom
-          : hit.position + recognitionLength - enzyme.cutIndexTop;
+        strand === 1
+          ? position + enzyme.cutIndexBottom
+          : position + recognitionLength - enzyme.cutIndexTop;
 
       if (
         !circular &&
         (rawTop < 0 || rawTop > length || rawBottom < 0 || rawBottom > length)
       ) {
-        continue;
+        return;
       }
 
-      const cutPositionTop = circular ? mod(rawTop, length) : rawTop;
-      const cutPositionBottom = circular ? mod(rawBottom, length) : rawBottom;
-      const overhang = calculateOverhang(sequence, circular, rawTop, rawBottom);
-      const blocked = isMethylationBlocked(
+      const difference = rawBottom - rawTop;
+      const overhangType: CutSite['overhangType'] =
+        difference === 0 ? 'blunt' : difference > 0 ? '5-prime' : '3-prime';
+      const overhangSeq =
+        difference === 0
+          ? ''
+          : extractSegment(
+              sequence,
+              circular,
+              Math.min(rawTop, rawBottom),
+              Math.abs(difference),
+            );
+      allSites.push({
+        id: `${enzyme.name}:${position}:${strand}`,
         enzyme,
-        hit.position,
-        recognitionLength,
-        rawTop,
-        rawBottom,
-        masks,
-        length,
-        circular,
-      );
-
-      enzymeSites.push({
-        id: `${enzyme.name}:${hit.position}:${hit.strand}`,
-        enzyme,
-        position: hit.position,
-        strand: hit.strand,
-        cutPositionTop,
-        cutPositionBottom,
-        overhangType: overhang.type,
-        overhangSeq: overhang.sequence,
-        isMethylationBlocked: blocked,
+        position,
+        strand,
+        cutPositionTop: circular ? mod(rawTop, length) : rawTop,
+        cutPositionBottom: circular ? mod(rawBottom, length) : rawBottom,
+        overhangType,
+        overhangSeq,
+        isMethylationBlocked: hasBlockingMethylation
+          ? isMethylationBlocked(
+              enzyme,
+              enzymeIsDpnI,
+              position,
+              recognitionLength,
+              rawTop,
+              rawBottom,
+              masks,
+              length,
+              circular,
+            )
+          : false,
         totalCutsInPlasmid: 0,
       });
+    };
+
+    for (const position of positionsFor(recognition)) {
+      addPosition(position, 1);
     }
 
-    for (const site of enzymeSites) {
-      site.totalCutsInPlasmid = enzymeSites.length;
+    if (!isPalindromic(recognition)) {
+      const reverseRecognition = reverseComplement(recognition);
+      for (const position of positionsFor(reverseRecognition)) {
+        addPosition(position, -1);
+      }
     }
-    allSites.push(...enzymeSites);
+
+    const enzymeCutCount = allSites.length - firstSiteIndex;
+    for (let index = firstSiteIndex; index < allSites.length; index += 1) {
+      allSites[index].totalCutsInPlasmid = enzymeCutCount;
+    }
   }
 
   let result = allSites;
@@ -412,12 +629,7 @@ export function findCutSites(
     result = result.filter((site) => !site.isMethylationBlocked);
   }
 
-  return result.sort(
-    (left, right) =>
-      left.position - right.position ||
-      left.enzyme.name.localeCompare(right.enzyme.name) ||
-      left.strand - right.strand,
-  );
+  return orderCutSites(result, length);
 }
 
 function proteinMolecularWeightKda(aminoAcids: string): number {
@@ -1277,6 +1489,286 @@ class AnnotationAutomaton {
   }
 }
 
+const AMINO_ACID_PATTERN = /^[ACDEFGHIKLMNPQRSTVWY]+$/;
+
+interface ProteinAutomationEntry {
+  libraryIndex: number;
+  strand: Strand;
+  kind: 'full' | 'seed';
+  offset: number;
+  patternLength: number;
+}
+
+interface ProteinAutomatonNode {
+  next: Int32Array;
+  fail: number;
+  outputs: number[];
+}
+
+function createProteinNode(): ProteinAutomatonNode {
+  return { next: new Int32Array(20).fill(-1), fail: 0, outputs: [] };
+}
+
+// Amino-acid automaton used to find protein seeds in the six translated
+// frames of a query. It mirrors the nucleotide automaton but uses the
+// twenty standard residues; ambiguous residues reset the current state.
+class ProteinAnnotationAutomaton {
+  private readonly nodes: ProteinAutomatonNode[] = [createProteinNode()];
+
+  readonly entries: ProteinAutomationEntry[] = [];
+
+  add(
+    pattern: string,
+    entry: Omit<ProteinAutomationEntry, 'patternLength'>,
+  ): void {
+    if (!pattern || !AMINO_ACID_PATTERN.test(pattern)) return;
+    let state = 0;
+    for (const letter of pattern) {
+      const code = AMINO_ACID_CODE[letter];
+      if (code === undefined) continue;
+      let next = this.nodes[state].next[code];
+      if (next === -1) {
+        next = this.nodes.length;
+        this.nodes.push(createProteinNode());
+        this.nodes[state].next[code] = next;
+      }
+      state = next;
+    }
+    this.entries.push({ ...entry, patternLength: pattern.length });
+    this.nodes[state].outputs.push(this.entries.length - 1);
+  }
+
+  build(): void {
+    const queue: number[] = [];
+    for (let code = 0; code < 20; code += 1) {
+      const child = this.nodes[0].next[code];
+      if (child !== -1) {
+        this.nodes[child].fail = 0;
+        queue.push(child);
+      }
+    }
+
+    let queueIndex = 0;
+    while (queueIndex < queue.length) {
+      const current = queue[queueIndex];
+      queueIndex += 1;
+      for (let code = 0; code < 20; code += 1) {
+        const child = this.nodes[current].next[code];
+        if (child === -1) continue;
+
+        let fallback = this.nodes[current].fail;
+        while (
+          fallback !== 0 &&
+          this.nodes[fallback].next[code] === -1
+        ) {
+          fallback = this.nodes[fallback].fail;
+        }
+        const candidate = this.nodes[fallback].next[code];
+        this.nodes[child].fail =
+          candidate !== -1 && candidate !== child ? candidate : 0;
+        this.nodes[child].outputs.push(
+          ...this.nodes[this.nodes[child].fail].outputs,
+        );
+        queue.push(child);
+      }
+    }
+  }
+
+  search(text: string): Array<{ entryIndex: number; start: number }> {
+    const results: Array<{ entryIndex: number; start: number }> = [];
+    let state = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      const code = AMINO_ACID_CODE[text[index]];
+      if (code === undefined) {
+        state = 0;
+        continue;
+      }
+      while (state !== 0 && this.nodes[state].next[code] === -1) {
+        state = this.nodes[state].fail;
+      }
+      const next = this.nodes[state].next[code];
+      state = next === -1 ? 0 : next;
+      for (const output of this.nodes[state].outputs) {
+        const entry = this.entries[output];
+        results.push({
+          entryIndex: output,
+          start: index - entry.patternLength + 1,
+        });
+      }
+    }
+    return results;
+  }
+
+  searchCodons(
+    sequence: string,
+    frame: number,
+  ): Array<{ entryIndex: number; start: number }> {
+    const results: Array<{ entryIndex: number; start: number }> = [];
+    let state = 0;
+    const length = Math.max(0, Math.floor((sequence.length - frame) / 3));
+    for (let index = 0; index < length; index += 1) {
+      const offset = frame + index * 3;
+      const a = TRANSLATION_BASE[sequence[offset]];
+      const c = TRANSLATION_BASE[sequence[offset + 1]];
+      const g = TRANSLATION_BASE[sequence[offset + 2]];
+      const code =
+        a === undefined || c === undefined || g === undefined
+          ? -1
+          : CODON_AMINO_ACID_CODE[a * 16 + c * 4 + g];
+      if (code < 0) {
+        state = 0;
+        continue;
+      }
+      while (state !== 0 && this.nodes[state].next[code] === -1) {
+        state = this.nodes[state].fail;
+      }
+      const next = this.nodes[state].next[code];
+      state = next === -1 ? 0 : next;
+      for (const output of this.nodes[state].outputs) {
+        const entry = this.entries[output];
+        results.push({
+          entryIndex: output,
+          start: index - entry.patternLength + 1,
+        });
+      }
+    }
+    return results;
+  }
+}
+
+interface ProteinAutomationData {
+  automaton: ProteinAnnotationAutomaton;
+  proteins: string[];
+  maxProteinLength: number;
+}
+
+const PROTEIN_AUTOMATA = new WeakMap<object, ProteinAutomationData>();
+const LIBRARY_PROTEIN_CACHE = new WeakMap<object, string>();
+
+function libraryProtein(entry: FeatureLibraryEntry): string {
+  const cached = LIBRARY_PROTEIN_CACHE.get(entry);
+  if (cached !== undefined) return cached;
+  const proteinTagNames =
+    /(?:\bHis\b|6xHis|FLAG|\bHA\b|Myc|\bV5\b|Strep|S-Tag|E-Tag|TEV|PreScission|Thrombin|Factor Xa|Enterokinase|\bNLS\b|2A peptide|\bP2A\b|\bT2A\b|\bE2A\b|\bF2A\b)/i;
+  const isCoding =
+    entry.type === 'CDS' ||
+    (entry.type === 'misc_feature' && proteinTagNames.test(entry.name));
+  if (!isCoding) {
+    LIBRARY_PROTEIN_CACHE.set(entry, '');
+    return '';
+  }
+  const sequence = (entry.sequence ?? '').toUpperCase();
+  if (sequence.length < 15 || sequence.length % 3 !== 0) {
+    LIBRARY_PROTEIN_CACHE.set(entry, '');
+    return '';
+  }
+  const translated = translateDna(sequence);
+  const protein = translated.endsWith('*')
+    ? translated.slice(0, -1)
+    : translated;
+  if (
+    protein.length < 5 ||
+    protein.includes('*') ||
+    !AMINO_ACID_PATTERN.test(protein)
+  ) {
+    LIBRARY_PROTEIN_CACHE.set(entry, '');
+    return '';
+  }
+  LIBRARY_PROTEIN_CACHE.set(entry, protein);
+  return protein;
+}
+
+function buildProteinAutomation(
+  library: FeatureLibraryEntry[],
+): ProteinAutomationData {
+  const automaton = new ProteinAnnotationAutomaton();
+  const proteins: string[] = [];
+  let maxProteinLength = 0;
+
+  const addSeeds = (
+    protein: string,
+    libraryIndex: number,
+    strand: Strand,
+  ): void => {
+    if (protein.length <= 8) {
+      automaton.add(protein, {
+        libraryIndex,
+        strand,
+        kind: 'full',
+        offset: 0,
+      });
+      return;
+    }
+    if (protein.length <= 60) {
+      automaton.add(protein, {
+        libraryIndex,
+        strand,
+        kind: 'full',
+        offset: 0,
+      });
+    }
+    const seedLength = protein.length < 30 ? 5 : 6;
+    const count = protein.length < 30 ? 3 : protein.length < 60 ? 3 : 5;
+    const available = protein.length - seedLength;
+    if (available < 0) return;
+    const offsets =
+      count === 3
+        ? [0, Math.floor(available / 2), available]
+        : [
+            0,
+            Math.floor(available / 4),
+            Math.floor(available / 2),
+            Math.floor((3 * available) / 4),
+            available,
+          ];
+    const uniqueOffsets = [...new Set(offsets)].filter(
+      (offset) => offset >= 0 && offset + seedLength <= protein.length,
+    );
+    for (const offset of uniqueOffsets) {
+      automaton.add(protein.slice(offset, offset + seedLength), {
+        libraryIndex,
+        strand,
+        kind: 'seed',
+        offset,
+      });
+    }
+  };
+
+  for (let index = 0; index < library.length; index += 1) {
+    const protein = libraryProtein(library[index]);
+    proteins.push(protein);
+    if (!protein) continue;
+    maxProteinLength = Math.max(maxProteinLength, protein.length);
+    addSeeds(protein, index, 1);
+    // The same coding protein can be present on either strand; the search
+    // translates the reverse complement separately, so only one protein
+    // pattern set is required.
+  }
+
+  automaton.build();
+  return { automaton, proteins, maxProteinLength };
+}
+
+function getProteinAutomation(
+  library: FeatureLibraryEntry[],
+): ProteinAutomationData {
+  const cached = PROTEIN_AUTOMATA.get(library);
+  if (cached) return cached;
+  const built = buildProteinAutomation(library);
+  PROTEIN_AUTOMATA.set(library, built);
+  return built;
+}
+
+function proteinIdentity(left: string, right: string): number {
+  const length = Math.min(left.length, right.length);
+  if (length === 0) return 0;
+  let matches = 0;
+  for (let index = 0; index < length; index += 1) {
+    if (left[index] === right[index]) matches += 1;
+  }
+  return matches / length;
+}
+
 interface AutomationData {
   automaton: AnnotationAutomaton;
   sequences: string[];
@@ -1284,6 +1776,8 @@ interface AutomationData {
 }
 
 const AUTOMATA = new WeakMap<object, AutomationData>();
+
+const MIN_ANNOTATION_PATTERN_LENGTH = 12;
 
 function buildAutomation(library: FeatureLibraryEntry[]): AutomationData {
   const automaton = new AnnotationAutomaton();
@@ -1337,7 +1831,12 @@ function buildAutomation(library: FeatureLibraryEntry[]): AutomationData {
 
   for (let index = 0; index < library.length; index += 1) {
     const sequence = (library[index].sequence ?? '').toUpperCase();
-    if (!/^[ACGT]+$/.test(sequence)) {
+    // Very short motifs (Kozak, Shine-Dalgarno, restriction half-sites) are
+    // useful as library entries but too ambiguous for genome-wide marking.
+    if (
+      sequence.length < MIN_ANNOTATION_PATTERN_LENGTH ||
+      !/^[ACGT]+$/.test(sequence)
+    ) {
       sequences.push('');
       continue;
     }
@@ -1463,6 +1962,7 @@ interface AnnotationCandidate {
   exact: boolean;
   identity: number;
   patternLength: number;
+  source: 'dna' | 'protein';
 }
 
 const MIN_ANNOTATION_IDENTITY = 0.95;
@@ -1528,12 +2028,24 @@ function representsSameElement(
   if (!Number.isFinite(lengthRatio) || lengthRatio < SIMILAR_ELEMENT_LENGTH_RATIO) {
     return false;
   }
+  const dnaIdentity = patternIdentity(
+    leftEntry.sequence,
+    rightEntry.sequence,
+    left.strand === right.strand,
+  );
+  if (dnaIdentity >= SIMILAR_ELEMENT_IDENTITY) return true;
+
+  // Codon-optimised coding sequences can share almost no nucleotides while
+  // encoding the same protein. Treat those as the same element as well.
+  const leftProtein = libraryProtein(leftEntry);
+  const rightProtein = libraryProtein(rightEntry);
+  if (!leftProtein || !rightProtein) return false;
+  const proteinLengthRatio =
+    Math.min(leftProtein.length, rightProtein.length) /
+    Math.max(leftProtein.length, rightProtein.length);
   return (
-    patternIdentity(
-      leftEntry.sequence,
-      rightEntry.sequence,
-      left.strand === right.strand,
-    ) >= SIMILAR_ELEMENT_IDENTITY
+    proteinLengthRatio >= SIMILAR_ELEMENT_LENGTH_RATIO &&
+    proteinIdentity(leftProtein, rightProtein) >= SIMILAR_ELEMENT_IDENTITY
   );
 }
 
@@ -1546,7 +2058,10 @@ export function autoAnnotateFeatures(
   if (length === 0) return [];
 
   const data = getAutomation(library);
-  if (data.maxPatternLength === 0) return [];
+  const proteinData = getProteinAutomation(library);
+  if (data.maxPatternLength === 0 && proteinData.maxProteinLength === 0) {
+    return [];
+  }
   const circular = doc.topology === 'circular';
   const text = circular
     ? sequence + sequence.slice(0, Math.max(0, data.maxPatternLength - 1))
@@ -1577,6 +2092,96 @@ export function autoAnnotateFeatures(
     }
   }
 
+  interface ProteinCandidate {
+    libraryIndex: number;
+    strand: Strand;
+    start: number;
+    end: number;
+    identity: number;
+    patternLength: number;
+  }
+  const proteinCandidates = new Map<string, ProteinCandidate>();
+
+  if (proteinData.maxProteinLength > 0) {
+    const extraNt = circular ? proteinData.maxProteinLength * 3 : 0;
+    const forwardText = circular
+      ? sequence + sequence.slice(0, Math.min(length, extraNt))
+      : sequence;
+    const reverseText = reverseComplement(forwardText);
+
+    const scanFrames = (textValue: string, strand: Strand): void => {
+      for (let frame = 0; frame < 3; frame += 1) {
+        for (const match of proteinData.automaton.searchCodons(textValue, frame)) {
+          const entry = proteinData.automaton.entries[match.entryIndex];
+          const aminoAcidStart = match.start - entry.offset;
+          if (aminoAcidStart < 0) continue;
+          const orientedStart = frame + aminoAcidStart * 3;
+          if (orientedStart < 0 || orientedStart >= length) continue;
+
+          const protein = proteinData.proteins[entry.libraryIndex];
+          if (!protein) continue;
+          const codingLength = protein.length * 3;
+          const translated = translateDna(
+            textValue.slice(orientedStart, orientedStart + codingLength),
+          );
+          if (translated.length < protein.length) continue;
+
+          let matches = 0;
+          for (let index = 0; index < protein.length; index += 1) {
+            if (translated[index] === protein[index]) matches += 1;
+          }
+          const aminoAcidIdentity = matches / protein.length;
+          const threshold = protein.length < 10 ? 1 : 0.9;
+          if (aminoAcidIdentity < threshold) continue;
+
+          let orientedEnd = orientedStart + codingLength;
+          if (
+            STOP_CODONS.has(
+              textValue.slice(orientedEnd, orientedEnd + 3),
+            )
+          ) {
+            orientedEnd += 3;
+          }
+          if (orientedEnd > textValue.length) continue;
+
+          let start: number;
+          let end: number;
+          if (strand === 1) {
+            start = orientedStart;
+            end = orientedEnd;
+          } else {
+            start = length - orientedEnd;
+            end = length - orientedStart;
+          }
+          if (circular) {
+            start = mod(start, length);
+            end = mod(end, length);
+            if (start === end) continue;
+          } else if (start < 0 || end > length || start >= end) {
+            continue;
+          }
+
+          const key = `${entry.libraryIndex}:${strand}:${start}`;
+          if (candidates.has(key)) continue;
+          const existing = proteinCandidates.get(key);
+          if (!existing || aminoAcidIdentity > existing.identity) {
+            proteinCandidates.set(key, {
+              libraryIndex: entry.libraryIndex,
+              strand,
+              start,
+              end,
+              identity: 0.9 + 0.099 * aminoAcidIdentity,
+              patternLength: codingLength,
+            });
+          }
+        }
+      }
+    };
+
+    scanFrames(forwardText, 1);
+    scanFrames(reverseText, -1);
+  }
+
   const scored: AnnotationCandidate[] = [];
   for (const candidate of candidates.values()) {
     const pattern = data.sequences[candidate.libraryIndex];
@@ -1603,15 +2208,31 @@ export function autoAnnotateFeatures(
       exact: candidate.exact,
       identity,
       patternLength: pattern.length,
+      source: 'dna',
+    });
+  }
+
+  for (const candidate of proteinCandidates.values()) {
+    scored.push({
+      libraryIndex: candidate.libraryIndex,
+      strand: candidate.strand,
+      start: candidate.start,
+      end: candidate.end,
+      exact: false,
+      identity: candidate.identity,
+      patternLength: candidate.patternLength,
+      source: 'protein',
     });
   }
 
   // Higher identity wins first, exact hits ahead of tolerated mismatches, so a
-  // wild-type element is never displaced by a close mutant allele.
+  // wild-type element is never displaced by a close mutant allele. Protein
+  // matches score just below exact DNA hits but above tolerated DNA matches.
   scored.sort(
     (left, right) =>
       right.identity - left.identity ||
       Number(right.exact) - Number(left.exact) ||
+      Number(right.source === 'dna') - Number(left.source === 'dna') ||
       right.patternLength - left.patternLength ||
       left.start - right.start ||
       library[left.libraryIndex].name.localeCompare(
@@ -1673,6 +2294,7 @@ export function autoAnnotateFeatures(
   });
 }
 
-// Build the default multi-pattern index once at module load so the first
+// Build the default multi-pattern indexes once at module load so the first
 // annotation request only pays for scanning, not for trie construction.
 getAutomation(FEATURE_LIBRARY);
+getProteinAutomation(FEATURE_LIBRARY);

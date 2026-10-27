@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Microscope, Trash2 } from 'lucide-react';
-import type { CutSite, ORF, PlasmidDocument } from '../types/schema';
-import { calcGcPercent, translateDna } from '../modules/seq-engine';
+import { Microscope, Pencil, Plus, Trash2 } from 'lucide-react';
+import type { CutSite, ORF, PlasmidDocument, SequenceFeature } from '../types/schema';
+import { COMMERCIAL_ENZYMES, ENZYME_SETS, calcGcPercent, recommendDoubleDigestBuffer, translateDna } from '../modules/seq-engine';
 import { evaluateOligoThermodynamics } from '../modules/cloning-primer';
 import { callBio } from './bio-client';
-import { digestToGel, historyNode } from './actions';
-import { useWorkbench, type NebBuffer } from './store';
+import { digestToGel, historyNode, uid } from './actions';
+import { FeatureEditor, PrimerEditor } from './editors';
+import { ALL_COMMERCIAL_SET, useWorkbench, type NebBuffer } from './store';
 import { Badge, Button, Input, Select, cn } from './ui';
 
 const BUFFERS: NebBuffer[] = ['r1.1', 'r2.1', 'r3.1', 'rCutSmart'];
@@ -27,6 +28,27 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
   const setSelection = useWorkbench((s) => s.setSelection);
   const setView = useWorkbench((s) => s.setView);
   const [picked, setPicked] = useState<string[]>([]);
+  const enzymeSetId = useWorkbench((s) => s.enzymeSetId);
+  const customSets = useWorkbench((s) => s.customEnzymeSets);
+  const setEnzymeSet = useWorkbench((s) => s.setEnzymeSet);
+  const saveCustomSet = useWorkbench((s) => s.saveCustomEnzymeSet);
+  const deleteCustomSet = useWorkbench((s) => s.deleteCustomEnzymeSet);
+  const isCustom = customSets.some((c) => c.id === enzymeSetId);
+  const digestPlan = useMemo(() => {
+    if (picked.length < 2) return null;
+    const enzymes = picked.map((n) => sites.find((x) => x.enzyme.name === n)?.enzyme).filter((e): e is NonNullable<typeof e> => !!e);
+    try {
+      return enzymes.length >= 2 ? recommendDoubleDigestBuffer(enzymes) : null;
+    } catch {
+      return null;
+    }
+  }, [picked, sites]);
+
+  const saveSet = () => {
+    const name = window.prompt(`将勾选的 ${picked.length} 种酶保存为酶集，名称：`, '我的酶集');
+    if (!name?.trim()) return;
+    saveCustomSet({ id: uid('set'), name: name.trim(), description: '自定义酶集', enzymeNames: picked });
+  };
 
   const groups = useMemo(() => {
     const m = new Map<string, CutSite[]>();
@@ -43,6 +65,30 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] p-2">
+        <Select aria-label="酶集" value={enzymeSetId} onChange={(e) => setEnzymeSet(e.target.value)} title="用于扫描与图谱显示的酶集">
+          <option value={ALL_COMMERCIAL_SET}>全部市售酶 ({COMMERCIAL_ENZYMES.length})</option>
+          <optgroup label="预设酶集">
+            {ENZYME_SETS.map((es) => (
+              <option key={es.id} value={es.id} title={es.description}>
+                {es.name} ({es.enzymeNames.length})
+              </option>
+            ))}
+          </optgroup>
+          {customSets.length > 0 && (
+            <optgroup label="自定义酶集">
+              {customSets.map((es) => (
+                <option key={es.id} value={es.id}>
+                  {es.name} ({es.enzymeNames.length})
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </Select>
+        {isCustom && (
+          <Button size="sm" variant="ghost" onClick={() => deleteCustomSet(enzymeSetId)} aria-label="删除酶集" title="删除此自定义酶集">
+            <Trash2 size={12} />
+          </Button>
+        )}
         <Input className="w-40" placeholder="搜索酶 / 识别序列" value={filter.query} onChange={(e) => setFilter({ query: e.target.value })} />
         <label className="flex items-center gap-1 text-xs">
           <input type="checkbox" checked={filter.uniqueOnly} onChange={(e) => setFilter({ uniqueOnly: e.target.checked })} /> 单切点
@@ -64,6 +110,9 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
           ))}
         </Select>
         <div className="flex-1" />
+        <Button size="sm" disabled={!picked.length} onClick={saveSet}>
+          保存为酶集
+        </Button>
         <Button
           variant="primary"
           size="sm"
@@ -76,6 +125,21 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
           <Microscope size={13} /> 酶切并跑胶 ({picked.length})
         </Button>
       </div>
+      {digestPlan && (
+        <div className="border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs">
+          <b>双酶切推荐：</b>
+          {digestPlan.buffer === 'sequential' ? <Badge tone="amber">分步酶切</Badge> : <Badge tone="green">NEB {digestPlan.buffer}</Badge>}{' '}
+          {Object.entries(digestPlan.activities)
+            .map(([n, a]) => `${n} ${a}%`)
+            .join(' · ')}
+          {digestPlan.temperatureC.length > 0 && <> · {[...new Set(digestPlan.temperatureC)].join('/')} °C</>}
+          {[...digestPlan.starActivityWarning, ...digestPlan.notes].map((n, i) => (
+            <div key={i} className="text-[var(--muted)]">
+              {n}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-[var(--panel)] text-left text-[var(--muted)]">
@@ -138,6 +202,9 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
   const replaceDoc = useWorkbench((s) => s.replaceDoc);
   const [orfs, setOrfs] = useState<ORF[]>([]);
   const [tab, setTab] = useState<'features' | 'primers' | 'orfs'>('features');
+  // undefined: closed; null: new feature; otherwise the feature being edited.
+  const [editing, setEditing] = useState<SequenceFeature | null | undefined>(undefined);
+  const [addingPrimer, setAddingPrimer] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -156,6 +223,13 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
     });
   const removePrimer = (id: string) =>
     replaceDoc({ ...doc, primers: doc.primers.filter((p) => p.id !== id), updatedAt: new Date().toISOString() });
+  const addOrfAsFeature = (o: ORF) =>
+    replaceDoc({
+      ...doc,
+      features: [...doc.features, { id: `f-${o.id}`, name: `ORF ${o.start + 1}..${o.end}`, type: 'CDS', start: o.start, end: o.end, strand: o.strand, color: '#3b82f6', translation: o.aminoAcids }],
+      updatedAt: new Date().toISOString(),
+      history: [...doc.history, historyNode('manual_edit', '将 ORF 添加为 CDS 特征')],
+    });
 
   return (
     <div className="flex h-full flex-col">
@@ -171,7 +245,20 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
             {label}
           </Button>
         ))}
+        <div className="flex-1" />
+        {tab === 'features' && (
+          <Button size="sm" onClick={() => setEditing(null)}>
+            <Plus size={12} /> 添加特征
+          </Button>
+        )}
+        {tab === 'primers' && (
+          <Button size="sm" onClick={() => setAddingPrimer(true)}>
+            <Plus size={12} /> 添加引物
+          </Button>
+        )}
       </div>
+      <FeatureEditor doc={doc} feature={editing ?? null} open={editing !== undefined} onClose={() => setEditing(undefined)} />
+      <PrimerEditor doc={doc} open={addingPrimer} onClose={() => setAddingPrimer(false)} />
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-xs">
           <tbody>
@@ -186,7 +273,10 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
                   <td className="mono">
                     {f.start + 1}..{f.end} {f.strand === -1 ? '←' : f.strand === 1 ? '→' : ''}
                   </td>
-                  <td className="text-right">
+                  <td className="whitespace-nowrap text-right">
+                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), setEditing(f))} aria-label="编辑">
+                      <Pencil size={12} />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), removeFeature(f.id))} aria-label="删除">
                       <Trash2 size={12} />
                     </Button>
@@ -218,6 +308,11 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
                   <td>{Math.round(o.lengthBp / 3) - 1} aa</td>
                   <td>{o.mwKda.toFixed(1)} kDa</td>
                   <td>pI {o.pI.toFixed(2)}</td>
+                  <td className="text-right">
+                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), addOrfAsFeature(o))} aria-label="添加为特征">
+                      <Plus size={12} />
+                    </Button>
+                  </td>
                 </tr>
               ))}
           </tbody>

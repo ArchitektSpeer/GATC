@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type * as React from 'react';
 import { Activity, AlertTriangle, Dna, ScanLine } from 'lucide-react';
 import type { PlasmidDocument, SangerTraceData } from '../../types/schema';
 import type { VizTheme } from './theme';
@@ -12,6 +13,12 @@ import {
   MUTATION_LABEL,
   type SangerMutationEntry,
 } from './layout/sangerLayout';
+import {
+  computeSangerCoverage,
+  coverageRuns,
+  coverageStatusColor,
+  type CoverageStatus,
+} from './layout/coverage';
 import { complementBase } from './layout/linearLayout';
 
 export interface SangerAlignmentViewerProps {
@@ -19,6 +26,8 @@ export interface SangerAlignmentViewerProps {
   traces: SangerTraceData[];
   theme?: VizTheme;
   height?: number;
+  showCoverage?: boolean;
+  onCoverageClick?: (position: number) => void;
 }
 
 const LABEL_WIDTH = 142;
@@ -322,6 +331,8 @@ export function SangerAlignmentViewer({
   traces,
   theme = 'light',
   height = 680,
+  showCoverage = false,
+  onCoverageClick,
 }: SangerAlignmentViewerProps) {
   const tokens = getTheme(theme);
   const plotRootRef = useRef<HTMLDivElement | null>(null);
@@ -330,6 +341,7 @@ export function SangerAlignmentViewer({
   const clearTimerRef = useRef<number | null>(null);
   const [plotRootWidth, setPlotRootWidth] = useState(760);
   const [selectedMutation, setSelectedMutation] = useState<string | null>(null);
+  const [coverageCursor, setCoverageCursor] = useState<number | null>(null);
 
   const windowInfo = useMemo(() => buildSangerWindow(doc, traces), [doc, traces]);
   const plotWidth = Math.max(240, plotRootWidth - LABEL_WIDTH);
@@ -363,6 +375,22 @@ export function SangerAlignmentViewer({
       aligned.length
     );
   }, [traces]);
+  const coverage = useMemo(
+    () =>
+      showCoverage && traces.length > 0
+        ? computeSangerCoverage(
+            traces,
+            windowInfo.start,
+            windowInfo.end,
+            doc.sequence,
+          )
+        : null,
+    [showCoverage, traces, windowInfo.start, windowInfo.end, doc.sequence],
+  );
+  const coverageRunList = useMemo(
+    () => (coverage ? coverageRuns(coverage) : []),
+    [coverage],
+  );
 
   useEffect(() => {
     const element = plotRootRef.current;
@@ -387,12 +415,48 @@ export function SangerAlignmentViewer({
     const container = scrollRef.current;
     const row = rowRefs.current[mutation.rowIndex];
     if (container && row) {
-      const headerHeight = 116;
+      const headerHeight = coverage ? 178 : 116;
       const target = Math.max(0, row.offsetTop - headerHeight - 8);
       container.scrollTo({ top: target, behavior: 'smooth' });
     }
     if (clearTimerRef.current !== null) window.clearTimeout(clearTimerRef.current);
     clearTimerRef.current = window.setTimeout(() => setSelectedMutation(null), 2200);
+  };
+
+  const jumpToCoveragePosition = (event: React.MouseEvent<SVGSVGElement>) => {
+    if (!coverage) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const fraction = clamp(
+      (event.clientX - rect.left) / Math.max(1, rect.width),
+      0,
+      1,
+    );
+    const offset = Math.min(
+      coverage.status.length - 1,
+      Math.max(0, Math.floor(fraction * coverage.status.length)),
+    );
+    const position = windowInfo.start + offset;
+    setCoverageCursor(position);
+    onCoverageClick?.(position);
+    const mutation = mutations.find((entry) => entry.refIndex === position);
+    if (mutation) {
+      focusMutation(mutation);
+      return;
+    }
+    const coveringRow = traces.findIndex((trace) => {
+      const alignment = trace.alignment;
+      if (!alignment) return position < trace.calledSequence.length;
+      return position >= alignment.refStart && position < alignment.refEnd;
+    });
+    const container = scrollRef.current;
+    const row = coveringRow >= 0 ? rowRefs.current[coveringRow] : null;
+    if (container && row) {
+      const headerHeight = coverage ? 178 : 116;
+      container.scrollTo({
+        top: Math.max(0, row.offsetTop - headerHeight - 8),
+        behavior: 'smooth',
+      });
+    }
   };
 
   const css = `
@@ -501,11 +565,125 @@ export function SangerAlignmentViewer({
                     top: 0,
                     zIndex: 4,
                     display: 'flex',
+                    flexDirection: 'column',
                     background: tokens.panelAlt,
                     borderBottom: `1px solid ${tokens.border}`,
                     boxShadow: `0 4px 12px -10px ${tokens.shadow}`,
                   }}
                 >
+                  {coverage ? (
+                    <div style={{ display: 'flex', borderBottom: `1px solid ${tokens.border}` }}>
+                      <div
+                        style={{
+                          width: LABEL_WIDTH,
+                          flexShrink: 0,
+                          padding: '6px 10px',
+                          borderRight: `1px solid ${tokens.border}`,
+                          background: tokens.panelAlt,
+                        }}
+                      >
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tokens.muted }}>
+                          COVERAGE
+                        </div>
+                        <div style={{ fontSize: 9.5, color: tokens.muted, marginTop: 2, fontFamily: tokens.fontMono }}>
+                          ×{trimNumber(coverage.meanDepth, 1)} mean · max {coverage.maxDepth}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
+                          {(
+                            [
+                              ['match', 'match'],
+                              ['mismatch', 'mismatch'],
+                              ['heterozygous', 'het'],
+                              ['uncovered', 'gap'],
+                            ] as Array<[CoverageStatus, string]>
+                          ).map(([status, label]) => (
+                            <span
+                              key={status}
+                              title={label}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 2,
+                                fontSize: 8.5,
+                                color: tokens.muted,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 5,
+                                  height: 5,
+                                  borderRadius: 99,
+                                  background: coverageStatusColor(status, tokens),
+                                }}
+                              />
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <svg
+                        width={plotWidth}
+                        height={62}
+                        viewBox={`0 0 ${plotWidth} 62`}
+                        style={{ display: 'block', flexShrink: 0, cursor: 'pointer' }}
+                        role="img"
+                        aria-label="Read coverage and per-base consistency"
+                        onClick={jumpToCoveragePosition}
+                      >
+                        <rect width={plotWidth} height={62} fill={tokens.panelAlt} />
+                        <line x1={0} y1={36.5} x2={plotWidth} y2={36.5} stroke={tokens.border} strokeWidth={0.7} />
+                        {coverageRunList.map((run, index) => {
+                          const x = run.startOffset * baseWidth;
+                          const width = Math.max(0.6, (run.endOffset - run.startOffset) * baseWidth);
+                          const height =
+                            coverage.maxDepth > 0
+                              ? (run.depth / coverage.maxDepth) * 26
+                              : 0;
+                          const color = coverageStatusColor(run.status, tokens);
+                          return (
+                            <g key={`coverage-run-${index}`}>
+                              <rect
+                                x={x}
+                                y={36 - height}
+                                width={width}
+                                height={Math.max(run.depth > 0 ? 1 : 0, height)}
+                                fill={color}
+                                opacity={run.status === 'uncovered' ? 0.2 : 0.68}
+                              />
+                              <rect
+                                x={x}
+                                y={41}
+                                width={width}
+                                height={6}
+                                fill={color}
+                                opacity={run.status === 'uncovered' ? 0.18 : 0.92}
+                              />
+                            </g>
+                          );
+                        })}
+                        {coverageCursor !== null &&
+                        coverageCursor >= windowInfo.start &&
+                        coverageCursor < windowInfo.end ? (
+                          <line
+                            x1={(coverageCursor - windowInfo.start + 0.5) * baseWidth}
+                            y1={4}
+                            x2={(coverageCursor - windowInfo.start + 0.5) * baseWidth}
+                            y2={50}
+                            stroke={tokens.accent}
+                            strokeWidth={1.4}
+                            pointerEvents="none"
+                          />
+                        ) : null}
+                        <text x={4} y={58} fill={tokens.faint} fontSize={7.5} fontFamily={tokens.fontMono}>
+                          {coverageCursor !== null ? `position ${coverageCursor + 1}` : `${coverage.coveredBases} covered / ${coverage.status.length} bp`}
+                        </text>
+                        <text x={plotWidth - 4} y={58} textAnchor="end" fill={tokens.faint} fontSize={7.5} fontFamily={tokens.fontMono}>
+                          {coverage.mismatchBases} mismatch · {coverage.heterozygousBases} het
+                        </text>
+                      </svg>
+                    </div>
+                  ) : null}
+                  <div style={{ display: 'flex' }}>
                   <div style={{ width: LABEL_WIDTH, flexShrink: 0, padding: '10px 10px', borderRight: `1px solid ${tokens.border}` }}>
                     <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tokens.muted }}>REFERENCE</div>
                     <div style={{ fontSize: 10.5, color: tokens.muted, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -579,6 +757,19 @@ export function SangerAlignmentViewer({
                         </g>
                       );
                     })}
+                    {coverageCursor !== null &&
+                    coverageCursor >= windowInfo.start &&
+                    coverageCursor < windowInfo.end ? (
+                      <line
+                        x1={(coverageCursor - windowInfo.start + 0.5) * baseWidth}
+                        y1={24}
+                        x2={(coverageCursor - windowInfo.start + 0.5) * baseWidth}
+                        y2={100}
+                        stroke={tokens.accent}
+                        strokeWidth={1.2}
+                        strokeDasharray="2 2"
+                      />
+                    ) : null}
                     <line x1={0} y1={100.5} x2={plotWidth} y2={100.5} stroke={tokens.border} strokeWidth={0.7} />
                     <text x={4} y={111} fill={tokens.faint} fontSize={8} fontFamily={tokens.fontMono}>
                       {windowInfo.start + 1}
@@ -587,6 +778,7 @@ export function SangerAlignmentViewer({
                       {windowInfo.end}
                     </text>
                   </svg>
+                  </div>
                 </div>
 
                 {traces.map((trace, rowIndex) => {

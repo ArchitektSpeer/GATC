@@ -21,7 +21,7 @@ function serializeSvg(svg: SVGSVGElement): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n${source}`;
 }
 
-function triggerDownload(blob: Blob, fileName: string): void {
+export function triggerDownload(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

@@ -15,6 +15,10 @@ const TABS: Array<{ value: WizardKind; label: string }> = [
   { value: 'golden_gate', label: 'Golden Gate' },
   { value: 'mutagenesis', label: '定点突变' },
   { value: 'gateway', label: 'Gateway' },
+  { value: 'ta_topo', label: 'TA / TOPO' },
+  { value: 'lic', label: 'LIC' },
+  { value: 'recombinase', label: 'Cre / Flp' },
+  { value: 'insert', label: '插入片段' },
 ];
 
 export function CloningWizard() {
@@ -43,6 +47,10 @@ export function CloningWizard() {
           {wizard === 'golden_gate' && <GoldenGateTab />}
           {wizard === 'mutagenesis' && <MutagenesisTab />}
           {wizard === 'gateway' && <GatewayTab />}
+          {wizard === 'ta_topo' && <TaTopoTab />}
+          {wizard === 'lic' && <LicTab />}
+          {wizard === 'recombinase' && <RecombinaseTab />}
+          {wizard === 'insert' && <InsertFragmentTab />}
         </div>
       )}
     </Dialog>
@@ -232,10 +240,12 @@ function EnzymeSelect({ value, onChange }: { value: string; onChange: (v: string
 
 function PcrTab() {
   const activeId = useActiveId();
-  const [templateId, setTemplateId] = useState(activeId);
+  const preset = usePreset();
+  const [templateId, setTemplateId] = useState(preset?.docIds?.[0] ?? activeId);
   const template = useDoc(templateId);
-  const [fwd, setFwd] = useState('');
-  const [rev, setRev] = useState('');
+  const presetPrimers = (preset?.primerNames ?? []).map((n) => template?.primers.find((p) => p.name === n));
+  const [fwd, setFwd] = useState(presetPrimers.find((p) => p?.strand === 1)?.id ?? '');
+  const [rev, setRev] = useState(presetPrimers.find((p) => p?.strand === -1)?.id ?? '');
   const [overlapIds, setOverlapIds] = useState<string[]>([]);
   const { busy, error, run } = useRun();
   const primers = template?.primers ?? [];
@@ -349,11 +359,18 @@ function MultiDocPicker({ value, onChange }: { value: string[]; onChange: (ids: 
   );
 }
 
+function usePreset() {
+  // Read once on mount: a replayed history step pre-fills the tab.
+  const [preset] = useState(() => useWorkbench.getState().wizardPreset);
+  return preset;
+}
+
 function RestrictionTab() {
   const activeId = useActiveId();
-  const [vectorId, setVectorId] = useState(activeId);
-  const [insertId, setInsertId] = useState(activeId);
-  const [enzymesText, setEnzymesText] = useState('EcoRI, BamHI');
+  const preset = usePreset();
+  const [vectorId, setVectorId] = useState(preset?.docIds?.[0] ?? activeId);
+  const [insertId, setInsertId] = useState(preset?.docIds?.[1] ?? preset?.docIds?.[0] ?? activeId);
+  const [enzymesText, setEnzymesText] = useState(preset?.enzymes?.length ? preset.enzymes.join(', ') : 'EcoRI, BamHI');
   const [vecFrags, setVecFrags] = useState<PlasmidDocument[]>([]);
   const [insFrags, setInsFrags] = useState<PlasmidDocument[]>([]);
   const [vecPick, setVecPick] = useState(0);
@@ -480,10 +497,13 @@ function RestrictionTab() {
 }
 
 function GibsonTab() {
-  const [ids, setIds] = useState<string[]>([]);
+  const preset = usePreset();
+  const [ids, setIds] = useState<string[]>(preset?.docIds && preset.docIds.length > 1 ? preset.docIds : []);
   const [circular, setCircular] = useState(true);
+  const [kit, setKit] = useState<'Gibson' | 'NEBuilder HiFi' | 'In-Fusion'>('Gibson');
   const [result, setResult] = useState<{ junctions: Array<{ leftId: string; rightId: string; overlapSeq: string; overlapTm: number; reversed: boolean }>; warnings: string[] } | null>(null);
   const [primerParts, setPrimerParts] = useState<Array<{ partId: string; forward: Primer; reverse: Primer }>>([]);
+  const [designWarnings, setDesignWarnings] = useState<string[]>([]);
   const { busy, error, run } = useRun();
   const docs = useWorkbench((s) => s.docs);
   const frags = () => ids.map((id) => docs.find((d) => d.id === id)!).filter(Boolean);
@@ -492,19 +512,31 @@ function GibsonTab() {
     <div className="flex flex-col gap-3">
       <div className="text-xs text-[var(--muted)]">按组装顺序添加 2~8 个片段。已有 15~45 bp 同源臂的片段可直接组装；否则先设计带同源臂的引物。</div>
       <MultiDocPicker value={ids} onChange={setIds} />
-      <label className="flex items-center gap-2 text-xs">
-        <input type="checkbox" checked={circular} onChange={(e) => setCircular(e.target.checked)} /> 环化产物
-      </label>
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={circular} onChange={(e) => setCircular(e.target.checked)} /> 环化产物
+        </label>
+        <label className="flex items-center gap-2">
+          试剂盒
+          <Select value={kit} onChange={(e) => setKit(e.target.value as typeof kit)}>
+            <option value="Gibson">Gibson Assembly（20–40 bp 同源臂）</option>
+            <option value="NEBuilder HiFi">NEBuilder HiFi（15–35 bp）</option>
+            <option value="In-Fusion">In-Fusion（15 bp）</option>
+          </Select>
+        </label>
+      </div>
       <div className="flex flex-wrap gap-2">
         <Button
           disabled={busy || ids.length < 2}
           onClick={() =>
-            run(async () =>
-              setPrimerParts(await callBio('designGibsonPrimers', frags().map((d) => ({ doc: d, range: { start: 0, end: d.length } })), { overlapLength: 20, circular })),
-            )
+            run(async () => {
+              const r = await callBio('designHomologyAssemblyPrimers', frags(), kit, { circular });
+              setPrimerParts(r.primers.map((x) => ({ partId: x.fragmentId, forward: x.forward, reverse: x.reverse })));
+              setDesignWarnings(r.warnings);
+            })
           }
         >
-          设计 Gibson 引物
+          设计{kit}引物
         </Button>
         <Button
           variant="primary"
@@ -522,6 +554,7 @@ function GibsonTab() {
       </div>
       <ErrorLine error={error} />
       {primerParts.length > 0 && <PrimerTable primers={primerParts.flatMap((p) => [p.forward, p.reverse])} />}
+      <Warnings items={designWarnings} />
       {result && (
         <>
           <table className="w-full text-xs">
@@ -696,7 +729,8 @@ function MutagenesisTab() {
 
 function GatewayTab() {
   const activeId = useActiveId();
-  const [kind, setKind] = useState<'bp' | 'lr'>('bp');
+  const [kind, setKind] = useState<'bp' | 'lr' | 'multi'>('bp');
+  const [entryIds, setEntryIds] = useState<string[]>([]);
   const [aId, setAId] = useState(activeId);
   const [bId, setBId] = useState(activeId);
   const a = useDoc(aId);
@@ -711,10 +745,17 @@ function GatewayTab() {
         items={[
           { value: 'bp', label: 'BP 反应 (attB × attP)' },
           { value: 'lr', label: 'LR 反应 (attL × attR)' },
+          { value: 'multi', label: 'MultiSite LR（2–4 片段）' },
         ]}
       />
+      {kind === 'multi' && (
+        <>
+          <div className="text-xs text-[var(--muted)]">按顺序添加入门克隆（attL1-attR5 / attL5-attL4 / attR4-attR3 / attL3-attL2 …）</div>
+          <MultiDocPicker value={entryIds} onChange={setEntryIds} />
+        </>
+      )}
       <Grid>
-        <DocPicker label={kind === 'bp' ? 'attB 侧翼 PCR 产物' : '入门克隆 (attL)'} value={aId} onChange={setAId} />
+        {kind !== 'multi' && <DocPicker label={kind === 'bp' ? 'attB 侧翼 PCR 产物' : '入门克隆 (attL)'} value={aId} onChange={setAId} />}
         <DocPicker label={kind === 'bp' ? '供体载体 (attP, pDONR)' : '目的载体 (attR)'} value={bId} onChange={setBId} />
       </Grid>
       <div>
@@ -723,7 +764,13 @@ function GatewayTab() {
           disabled={busy || !a || !b}
           onClick={() =>
             run(async () => {
-              if (kind === 'bp') {
+              if (kind === 'multi') {
+                const docs = useWorkbench.getState().docs;
+                const entries = entryIds.map((id) => docs.find((d) => d.id === id)!).filter(Boolean);
+                const r = await callBio('simulateMultiSiteGatewayLR', entries, b!);
+                setWarnings(r.warnings);
+                openProduct(r.expressionClone, r.warnings);
+              } else if (kind === 'bp') {
                 const r = await callBio('simulateGatewayBP', a!, b!);
                 setWarnings(r.warnings);
                 openProduct(r.entryClone, r.warnings);
@@ -736,6 +783,275 @@ function GatewayTab() {
           }
         >
           <Play size={14} /> 模拟重组
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+      <Warnings items={warnings} />
+    </div>
+  );
+}
+
+function TaTopoTab() {
+  const activeId = useActiveId();
+  const [vectorId, setVectorId] = useState(activeId);
+  const [insertId, setInsertId] = useState(activeId);
+  const [kind, setKind] = useState<'ta' | 'gc' | 'TA' | 'blunt' | 'directional'>('ta');
+  const [orientation, setOrientation] = useState<'' | 'forward' | 'reverse'>('');
+  const [aTail, setATail] = useState(true);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const vector = useDoc(vectorId);
+  const insert = useDoc(insertId);
+  const { busy, error, run } = useRun();
+  const needsATail = kind === 'ta' || kind === 'TA';
+
+  const simulate = async () => {
+    const ins = needsATail && aTail ? await callBio('addATailing', insert!) : insert!;
+    const opts = orientation ? { orientation } : undefined;
+    const r =
+      kind === 'ta'
+        ? await callBio('simulateTACloning', vector!, ins, opts)
+        : kind === 'gc'
+          ? await callBio('simulateGCCloning', vector!, insert!, opts)
+          : await callBio('simulateTOPOCloning', vector!, ins, kind, opts);
+    setWarnings(r.warnings);
+    openProduct(r.product && { ...r.product, name: `${vector!.name}::${insert!.name}` }, r.warnings);
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Grid>
+        <DocPicker label="线性化载体（T 突出 / 平末端 / GTGG 突出）" value={vectorId} onChange={setVectorId} />
+        <DocPicker label="PCR 产物" value={insertId} onChange={setInsertId} />
+        <Field label="方法">
+          <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+            <option value="ta">TA 克隆（T4 连接酶）</option>
+            <option value="gc">GC 克隆（3′ G/C 突出）</option>
+            <option value="TA">TOPO TA</option>
+            <option value="blunt">Zero Blunt TOPO</option>
+            <option value="directional">定向 TOPO（CACC）</option>
+          </Select>
+        </Field>
+        <Field label="插入方向">
+          <Select value={orientation} onChange={(e) => setOrientation(e.target.value as typeof orientation)}>
+            <option value="">自动</option>
+            <option value="forward">正向</option>
+            <option value="reverse">反向</option>
+          </Select>
+        </Field>
+      </Grid>
+      {needsATail && (
+        <label className="flex items-center gap-1.5 text-xs">
+          <input type="checkbox" checked={aTail} onChange={(e) => setATail(e.target.checked)} /> 先为 PCR 产物加 3′ A 尾（Taq 产物）
+        </label>
+      )}
+      <div>
+        <Button variant="primary" disabled={busy || !vector || !insert} onClick={() => run(simulate)}>
+          <Play size={14} /> 模拟克隆
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+      <Warnings items={warnings} />
+    </div>
+  );
+}
+
+function LicTab() {
+  const activeId = useActiveId();
+  const doc = useWorkbench(selectActiveDoc)!;
+  const selection = useWorkbench((s) => s.selection);
+  const replaceDoc = useWorkbench((s) => s.replaceDoc);
+  const [vectorId, setVectorId] = useState(activeId);
+  const [insertId, setInsertId] = useState(activeId);
+  const [primers, setPrimers] = useState<Primer[] | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const vector = useDoc(vectorId);
+  const insert = useDoc(insertId);
+  const { busy, error, run } = useRun();
+  const range = selection && selection.start !== selection.end ? selection : null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="text-xs font-medium">1. 为当前序列选区设计 LIC 引物</div>
+      <div className="flex items-center gap-2">
+        <Button
+          disabled={busy || !range}
+          onClick={() =>
+            run(async () => {
+              const r = await callBio('designLICPrimers', doc, range!);
+              setPrimers([r.forward, r.reverse]);
+            })
+          }
+        >
+          <Play size={14} /> 设计 LIC 引物
+        </Button>
+        {!range && <span className="text-xs text-[var(--muted)]">先在图谱或序列中选择要扩增的区域</span>}
+        {primers && (
+          <Button onClick={() => replaceDoc(addPrimersToDoc(doc, primers, 'LIC 引物'))}>
+            <Plus size={14} /> 添加引物
+          </Button>
+        )}
+      </div>
+      {primers && <PrimerTable primers={primers} />}
+      <div className="mt-2 text-xs font-medium">2. 模拟 LIC 退火</div>
+      <Grid>
+        <DocPicker label="线性化 LIC 载体" value={vectorId} onChange={setVectorId} />
+        <DocPicker label="带 LIC 尾的插入片段" value={insertId} onChange={setInsertId} />
+      </Grid>
+      <div>
+        <Button
+          variant="primary"
+          disabled={busy || !vector || !insert}
+          onClick={() =>
+            run(async () => {
+              const r = await callBio('simulateLIC', vector!, insert!);
+              setWarnings(r.warnings);
+              openProduct(r.product && { ...r.product, name: `${vector!.name}::${insert!.name}` }, r.warnings);
+            })
+          }
+        >
+          <Play size={14} /> 模拟 LIC
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+      <Warnings items={warnings} />
+    </div>
+  );
+}
+
+function RecombinaseTab() {
+  const activeId = useActiveId();
+  const docs = useWorkbench((s) => s.docs);
+  const [ids, setIds] = useState<string[]>([activeId]);
+  const [recombinase, setRecombinase] = useState<'Cre' | 'Flp'>('Cre');
+  const [events, setEvents] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [sites, setSites] = useState<Record<string, string>>({});
+  const { busy, error, run } = useRun();
+  const picked = useMemo(() => ids.map((id) => docs.find((d) => d.id === id)).filter((d): d is PlasmidDocument => !!d), [ids, docs]);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all(picked.map((d) => callBio('findRecombinationSites', d))).then((all) => {
+      if (!alive) return;
+      const summary: Record<string, string> = {};
+      picked.forEach((d, i) => {
+        summary[d.id] = all[i].length ? all[i].map((x) => `${x.site}@${x.start + 1}${x.strand === 1 ? '→' : '←'}`).join(', ') : '无';
+      });
+      setSites(summary);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [picked]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Grid>
+        <Field label="重组酶">
+          <Select value={recombinase} onChange={(e) => setRecombinase(e.target.value as 'Cre' | 'Flp')}>
+            <option value="Cre">Cre（lox 位点）</option>
+            <option value="Flp">Flp（FRT 位点）</option>
+          </Select>
+        </Field>
+      </Grid>
+      <MultiDocPicker value={ids} onChange={setIds} />
+      <ul className="text-xs text-[var(--muted)]">
+        {picked.map((d) => (
+          <li key={d.id}>
+            <b className="text-[var(--text)]">{d.name}</b>：{sites[d.id] ?? '…'}
+          </li>
+        ))}
+      </ul>
+      <div>
+        <Button
+          variant="primary"
+          disabled={busy || !picked.length}
+          onClick={() =>
+            run(async () => {
+              const r = await callBio('simulateRecombinase', picked, recombinase);
+              setEvents(r.events);
+              setWarnings(r.warnings);
+              if (!r.products.length) openProduct(null, r.warnings.length ? r.warnings : ['未发生重组']);
+              r.products.forEach((p) => openProduct(p, r.events));
+            })
+          }
+        >
+          <Play size={14} /> 模拟重组
+        </Button>
+      </div>
+      <ErrorLine error={error} />
+      {events.length > 0 && (
+        <ul className="list-disc pl-5 text-xs">
+          {events.map((e, i) => (
+            <li key={i}>{e}</li>
+          ))}
+        </ul>
+      )}
+      <Warnings items={warnings} />
+    </div>
+  );
+}
+
+function InsertFragmentTab() {
+  const activeId = useActiveId();
+  const selection = useWorkbench((s) => s.selection);
+  const [vectorId, setVectorId] = useState(activeId);
+  const [insertId, setInsertId] = useState(activeId);
+  const vector = useDoc(vectorId);
+  const insert = useDoc(insertId);
+  const sel = selection && vectorId === activeId ? selection : null;
+  const [vStart, setVStart] = useState(sel ? sel.start + 1 : 1);
+  const [vEnd, setVEnd] = useState(sel ? sel.end : 0);
+  const [iStart, setIStart] = useState(1);
+  const [iEnd, setIEnd] = useState(0);
+  const [reverse, setReverse] = useState(false);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const { busy, error, run } = useRun();
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="text-xs text-[var(--muted)]">
+        把插入片段（全长或指定区间）放进载体的指定位置。载体区间为空（终点 = 起点 − 1）表示纯插入，否则替换该区间。坐标为 1-based 闭区间。
+      </div>
+      <Grid>
+        <DocPicker label="载体" value={vectorId} onChange={setVectorId} />
+        <DocPicker label="插入片段来源" value={insertId} onChange={setInsertId} />
+        <Field label="载体替换起点">
+          <Input type="number" value={vStart} onChange={(e) => setVStart(+e.target.value)} />
+        </Field>
+        <Field label="载体替换终点（含）" hint="填 起点−1 表示在起点前插入">
+          <Input type="number" value={vEnd} onChange={(e) => setVEnd(+e.target.value)} />
+        </Field>
+        <Field label="插入片段起点">
+          <Input type="number" value={iStart} onChange={(e) => setIStart(+e.target.value)} />
+        </Field>
+        <Field label="插入片段终点（含）" hint="0 = 到末尾">
+          <Input type="number" value={iEnd} onChange={(e) => setIEnd(+e.target.value)} />
+        </Field>
+      </Grid>
+      <label className="flex items-center gap-1.5 text-xs">
+        <input type="checkbox" checked={reverse} onChange={(e) => setReverse(e.target.checked)} /> 反向插入
+      </label>
+      <div>
+        <Button
+          variant="primary"
+          disabled={busy || !vector || !insert}
+          onClick={() =>
+            run(async () => {
+              const r = await callBio(
+                'simulateInsertFragment',
+                vector!,
+                { start: vStart - 1, end: Math.max(vStart - 1, vEnd) },
+                insert!,
+                { start: iStart - 1, end: iEnd > 0 ? iEnd : insert!.length },
+                { reverseInsert: reverse },
+              );
+              setWarnings(r.warnings);
+              openProduct({ ...r.product, name: `${vector!.name}::${insert!.name}` }, r.warnings);
+            })
+          }
+        >
+          <Play size={14} /> 插入
         </Button>
       </div>
       <ErrorLine error={error} />

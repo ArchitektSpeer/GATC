@@ -1,7 +1,7 @@
 // Browser functional evaluation against a running `vite preview` (default http://localhost:4173).
 // Usage: node scripts/e2e.mjs [outDir]
 import { chromium } from 'playwright';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const URL = process.env.E2E_URL ?? 'http://localhost:4173/';
 const out = process.argv[2] ?? 'e2e-report';
@@ -220,6 +220,110 @@ await check('导出 GenBank', async () => {
   const path = `${out}/${dl.suggestedFilename()}`;
   await dl.saveAs(path);
   return dl.suggestedFilename();
+});
+
+const downloadVia = async (label) => {
+  const [dl] = await Promise.all([page.waitForEvent('download'), (async () => {
+    await page.getByRole('button', { name: '导出' }).click();
+    await page.getByText(label).click();
+  })()]);
+  const path = `${out}/${dl.suggestedFilename()}`;
+  await dl.saveAs(path);
+  return path;
+};
+
+await check('导出 SnapGene .dna 并重新打开', async () => {
+  await closeDialogs();
+  await tab('pUC19');
+  const path = await downloadVia('SnapGene (.dna)');
+  const bytes = readFileSync(path);
+  if (bytes[0] !== 0x09 || bytes.subarray(5, 13).toString() !== 'SnapGene') throw new Error('missing SnapGene cookie');
+  await page.locator('input[type=file]').setInputFiles(path);
+  const t = await toast();
+  if (!/已打开 pUC19/.test(t)) throw new Error(t);
+  return `${bytes.length} bytes, reopened`;
+});
+
+await check('导出图谱 PDF（矢量）', async () => {
+  await closeDialogs();
+  await view('环形图谱');
+  await page.locator('svg').first().waitFor();
+  const path = await downloadVia('图谱 PDF');
+  const head = readFileSync(path).subarray(0, 5).toString();
+  if (head !== '%PDF-') throw new Error(`not a PDF: ${head}`);
+  return `${readFileSync(path).length} bytes`;
+});
+
+await check('查找序列（Ctrl+F, IUPAC）', async () => {
+  await closeDialogs();
+  await tab('pUC19');
+  await page.locator('main').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Control+f');
+  await page.getByPlaceholder('GAATTC').fill('GGATCC');
+  await page.getByText(/第 1 \/ \d+ 个命中/).waitFor({ timeout: 10000 });
+  const exact = (await page.getByText(/个命中/).textContent()) ?? '';
+  await page.getByPlaceholder('GAATTC').fill('GRATYC');
+  await page.waitForTimeout(600);
+  const iupac = (await page.getByText(/个命中|无命中/).textContent()) ?? '';
+  await shot('15-find');
+  return `BamHI ${exact}; GRATYC ${iupac}`;
+});
+
+await check('添加 / 编辑特征（可撤销）', async () => {
+  await closeDialogs();
+  await view('特征/引物');
+  const before = await page.locator('tbody tr').count();
+  await page.getByRole('button', { name: '添加特征' }).click();
+  await page.getByLabel('名称').fill('E2E test feature');
+  await page.getByLabel('起点 (1-based)').fill('100');
+  await page.getByLabel('终点 (含)').fill('250');
+  await page.getByRole('button', { name: '保存' }).click();
+  await page.getByText('E2E test feature').waitFor();
+  const after = await page.locator('tbody tr').count();
+  await page.locator('main').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  const undone = await page.getByText('E2E test feature').count();
+  if (after !== before + 1 || undone !== 0) throw new Error(`rows ${before}->${after}, after undo ${undone}`);
+  return `${before} → ${after} → undo ${before}`;
+});
+
+await check('酶集切换（预设 / 全部市售）', async () => {
+  await closeDialogs();
+  await view('酶');
+  const select = page.getByLabel('酶集');
+  const options = await select.locator('option').allTextContents();
+  const all = await page.locator('tbody tr').count();
+  await select.selectOption({ index: 1 });
+  await page.waitForTimeout(1200);
+  const preset = await page.locator('tbody tr').count();
+  await shot('16-enzyme-sets');
+  await select.selectOption({ index: 0 });
+  return `${options.length} sets; ${options[0]}: ${all} rows; ${options[1]}: ${preset} rows`;
+});
+
+await check('多序列比对', async () => {
+  await closeDialogs();
+  await view('多序列比对');
+  await page.getByRole('button', { name: '多序列比对', exact: true }).last().click();
+  await page.getByText(/同一性矩阵/).waitFor({ timeout: 60000 });
+  const info = (await page.getByText(/同一性矩阵/).textContent()) ?? '';
+  await shot('17-msa');
+  return info.trim();
+});
+
+await check('反向翻译 / 密码子优化', async () => {
+  await closeDialogs();
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('反向翻译');
+  await page.getByText('反向翻译 / 密码子优化').click();
+  await page.getByPlaceholder(/^MVSKGEEL/).fill('MVSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTLTYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK');
+  await page.getByRole('button', { name: '反向翻译', exact: true }).click();
+  const info = (await page.getByText(/CAI/).textContent({ timeout: 10000 })) ?? '';
+  await page.getByRole('button', { name: '作为新序列打开' }).click();
+  const t = await toast();
+  if (!/backtranslated/.test(t)) throw new Error(t);
+  return info.trim();
 });
 
 await browser.close();

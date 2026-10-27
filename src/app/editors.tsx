@@ -1,0 +1,241 @@
+// Manual feature and primer editing dialogs. Edits go through replaceDoc, so they are undoable.
+import { useEffect, useState } from 'react';
+import type { FeatureType, PlasmidDocument, Primer, SequenceFeature, StrandDirection } from '../types/schema';
+import { reverseComplement } from '../modules/seq-engine';
+import { evaluateOligoThermodynamics } from '../modules/cloning-primer';
+import { historyNode, uid } from './actions';
+import { useWorkbench } from './store';
+import { Button, Dialog, Field, Input, Select } from './ui';
+
+export const FEATURE_TYPES: FeatureType[] = [
+  'CDS',
+  'promoter',
+  'terminator',
+  'rep_origin',
+  'primer_bind',
+  'misc_feature',
+  'regulatory',
+  'enhancer',
+  'intron',
+  'protein_bind',
+  'oriT',
+  'attachment_site',
+];
+
+const TYPE_COLORS: Partial<Record<FeatureType, string>> = {
+  CDS: '#3b82f6',
+  promoter: '#22c55e',
+  terminator: '#ef4444',
+  rep_origin: '#f59e0b',
+  primer_bind: '#a855f7',
+  regulatory: '#14b8a6',
+  protein_bind: '#0ea5e9',
+  attachment_site: '#ec4899',
+};
+
+function edited(doc: PlasmidDocument, patch: Partial<PlasmidDocument>, description: string): PlasmidDocument {
+  return {
+    ...doc,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+    history: [...doc.history, historyNode('manual_edit', description)],
+  };
+}
+
+/** Add (feature = null) or edit a feature. Coordinates are shown 1-based inclusive. */
+export function FeatureEditor({
+  doc,
+  feature,
+  open,
+  onClose,
+}: {
+  doc: PlasmidDocument;
+  feature: SequenceFeature | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const replaceDoc = useWorkbench((s) => s.replaceDoc);
+  const selection = useWorkbench((s) => s.selection);
+  const [draft, setDraft] = useState({ name: '', type: 'misc_feature' as FeatureType, start: 1, end: 1, strand: 1 as StrandDirection, color: '', note: '' });
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    if (feature) {
+      setDraft({
+        name: feature.name,
+        type: feature.type,
+        start: feature.start + 1,
+        end: feature.end,
+        strand: feature.strand,
+        color: feature.color,
+        note: feature.notes?.note?.join('; ') ?? '',
+      });
+    } else {
+      const sel = selection && selection.start !== selection.end ? selection : { start: 0, end: Math.min(doc.length, 100) };
+      setDraft({ name: 'New feature', type: 'misc_feature', start: sel.start + 1, end: sel.end, strand: 1, color: '', note: '' });
+    }
+  }, [open, feature, selection, doc.length]);
+
+  const save = () => {
+    const start = Math.round(draft.start) - 1;
+    const end = Math.round(draft.end);
+    if (!draft.name.trim()) return setError('名称不能为空');
+    if (start < 0 || start >= doc.length || end < 1 || end > doc.length) return setError(`坐标必须在 1–${doc.length} 之间`);
+    if (start >= end && doc.topology === 'linear') return setError('线性序列的起点必须小于终点');
+    const next: SequenceFeature = {
+      ...(feature ?? { id: uid('f') }),
+      name: draft.name.trim(),
+      type: draft.type,
+      start,
+      end,
+      strand: draft.strand,
+      color: draft.color || TYPE_COLORS[draft.type] || '#64748b',
+      notes: draft.note.trim() ? { ...(feature?.notes ?? {}), note: [draft.note.trim()] } : feature?.notes,
+    };
+    const features = feature ? doc.features.map((f) => (f.id === feature.id ? next : f)) : [...doc.features, next];
+    replaceDoc(edited(doc, { features }, feature ? `编辑特征 ${next.name}` : `添加特征 ${next.name}`));
+    onClose();
+  };
+
+  const set = <K extends keyof typeof draft>(k: K, v: (typeof draft)[K]) => setDraft((d) => ({ ...d, [k]: v }));
+
+  return (
+    <Dialog open={open} onClose={onClose} title={feature ? `编辑特征：${feature.name}` : '添加特征'} width={520}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="名称">
+          <Input value={draft.name} onChange={(e) => set('name', e.target.value)} />
+        </Field>
+        <Field label="类型">
+          <Select value={draft.type} onChange={(e) => set('type', e.target.value as FeatureType)}>
+            {FEATURE_TYPES.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="起点 (1-based)" hint={doc.topology === 'circular' ? '起点 > 终点表示跨越零点' : undefined}>
+          <Input type="number" value={draft.start} onChange={(e) => set('start', Number(e.target.value))} />
+        </Field>
+        <Field label="终点 (含)">
+          <Input type="number" value={draft.end} onChange={(e) => set('end', Number(e.target.value))} />
+        </Field>
+        <Field label="方向">
+          <Select value={String(draft.strand)} onChange={(e) => set('strand', Number(e.target.value) as StrandDirection)}>
+            <option value="1">正向 →</option>
+            <option value="-1">反向 ←</option>
+            <option value="0">无方向</option>
+          </Select>
+        </Field>
+        <Field label="颜色">
+          <Input type="color" value={draft.color || TYPE_COLORS[draft.type] || '#64748b'} onChange={(e) => set('color', e.target.value)} />
+        </Field>
+        <div className="col-span-2">
+          <Field label="注释">
+            <Input value={draft.note} onChange={(e) => set('note', e.target.value)} />
+          </Field>
+        </div>
+      </div>
+      {error && <div className="mt-3 text-xs text-red-600">{error}</div>}
+      <div className="mt-4 flex justify-end gap-2">
+        <Button onClick={onClose}>取消</Button>
+        <Button variant="primary" onClick={save}>
+          保存
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Locates where an oligo anneals: the longest 3'-terminal stretch (>= 15 nt) found
+ * exactly on either strand. Bases 5' of that stretch become the tail.
+ */
+export function locatePrimer(doc: PlasmidDocument, oligo: string): { start: number; end: number; strand: 1 | -1; tail: string } | null {
+  const seq = doc.sequence.toUpperCase();
+  const hay = doc.topology === 'circular' ? seq + seq.slice(0, Math.min(oligo.length, seq.length - 1)) : seq;
+  const rcHay = reverseComplement(hay);
+  for (let len = oligo.length; len >= 15; len--) {
+    const anneal = oligo.slice(oligo.length - len);
+    const fwd = hay.indexOf(anneal);
+    if (fwd >= 0) return { start: fwd, end: (fwd + len) % seq.length || seq.length, strand: 1, tail: oligo.slice(0, oligo.length - len) };
+    const rev = rcHay.indexOf(anneal);
+    if (rev >= 0) {
+      // Position in the reverse complement maps back to the top strand.
+      const topEnd = hay.length - rev;
+      const topStart = topEnd - len;
+      return { start: topStart % seq.length, end: topEnd % seq.length || seq.length, strand: -1, tail: oligo.slice(0, oligo.length - len) };
+    }
+  }
+  return null;
+}
+
+export function PrimerEditor({ doc, open, onClose }: { doc: PlasmidDocument; open: boolean; onClose: () => void }) {
+  const replaceDoc = useWorkbench((s) => s.replaceDoc);
+  const [name, setName] = useState('Primer');
+  const [sequence, setSequence] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName(`Primer ${doc.primers.length + 1}`);
+      setSequence('');
+      setError(null);
+    }
+  }, [open, doc.primers.length]);
+
+  const oligo = sequence.toUpperCase().replace(/[^ACGT]/g, '');
+  const site = oligo.length >= 15 ? locatePrimer(doc, oligo) : null;
+
+  const save = () => {
+    if (oligo.length < 15) return setError('引物至少 15 nt');
+    if (!site) return setError('未在序列任一链上找到 ≥15 nt 的 3′ 端结合区');
+    const annealing = oligo.slice(site.tail.length);
+    const thermoAnneal = evaluateOligoThermodynamics(annealing);
+    const thermoFull = evaluateOligoThermodynamics(oligo);
+    const primer: Primer = {
+      id: uid('p'),
+      name: name.trim() || 'Primer',
+      sequence: oligo,
+      bindingStart: site.start,
+      bindingEnd: site.end,
+      strand: site.strand,
+      tailSequence: site.tail,
+      tmAnnealing: thermoAnneal.tm,
+      tmTotal: thermoFull.tm,
+      gcPercent: thermoFull.gcPercent,
+      has3PrimeGCClamp: /[GC]$/.test(oligo),
+      hairpinDeltaG: thermoFull.hairpinDeltaG,
+      selfDimerDeltaG: thermoFull.selfDimerDeltaG,
+    };
+    replaceDoc(edited(doc, { primers: [...doc.primers, primer] }, `添加引物 ${primer.name}`));
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="添加引物" width={560}>
+      <div className="flex flex-col gap-3">
+        <Field label="名称">
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="序列 5′→3′" hint="3′ 端 ≥15 nt 与模板完全互补即可，5′ 多出的碱基视为尾巴">
+          <Input className="mono" value={sequence} onChange={(e) => setSequence(e.target.value)} placeholder="ACGT…" />
+        </Field>
+        {oligo.length >= 15 && (
+          <div className="text-xs text-[var(--muted)]">
+            {site
+              ? `结合位置 ${site.start + 1}–${site.end}（${site.strand === 1 ? '正链' : '负链'}）${site.tail ? `，5′ 尾巴 ${site.tail.length} nt` : ''}`
+              : '未找到结合位点'}
+          </div>
+        )}
+        {error && <div className="text-xs text-red-600">{error}</div>}
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>取消</Button>
+          <Button variant="primary" onClick={save}>
+            添加
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}

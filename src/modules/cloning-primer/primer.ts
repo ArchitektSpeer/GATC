@@ -27,6 +27,7 @@ import {
   clamp,
   cloneFeature,
   clonePrimer,
+  complementBase,
   gcPercentOf,
   makeDocument,
   makeHistoryNode,
@@ -780,4 +781,202 @@ export function mutationSpecLength(doc: PlasmidDocument, mutation: MutationSpec)
 
 export function mutatedDocumentCopy(doc: PlasmidDocument): PlasmidDocument {
   return cloneDocument(doc);
+}
+
+export interface PrimerBindingHit {
+  start: number;
+  end: number;
+  strand: 1 | -1;
+  mismatches: number;
+  mismatchPositions: number[];
+  threePrimeMatchLength: number;
+  tmAnnealing: number;
+}
+
+/**
+ * Finds primer binding sites on both strands of a template.
+ *
+ * The 3'-terminal `minThreePrimeMatch` bases (default 10) must match exactly.
+ * A 5' tail does not have to match: the search reports the longest 3' suffix
+ * of the primer that stays within `maxMismatches` (default 2), so a
+ * non-annealing 5' extension is simply left out of the binding interval.
+ * Coordinates are 0-based half-open; on circular templates a site crossing
+ * the origin is returned with start > end.
+ */
+export function findPrimerBindingSites(
+  doc: PlasmidDocument,
+  primerSequence: string,
+  opts?: { maxMismatches?: number; minThreePrimeMatch?: number },
+): PrimerBindingHit[] {
+  const template = normalizeDNA(doc.sequence);
+  const primer = normalizeDNA(primerSequence);
+  const templateLength = template.length;
+  const primerLength = primer.length;
+  if (!templateLength || !primerLength) return [];
+  const circular = doc.topology === 'circular';
+  const maxMismatches = Math.max(0, Math.floor(opts?.maxMismatches ?? 2));
+  const minThreePrime = clamp(
+    Math.floor(opts?.minThreePrimeMatch ?? 10),
+    1,
+    primerLength,
+  );
+  const maxLength = Math.min(primerLength, templateLength);
+  if (maxLength < minThreePrime) return [];
+
+  const baseAt = (index: number): string =>
+    circular ? template[mod(index, templateLength)] : template[index] ?? 'N';
+
+  const hits: PrimerBindingHit[] = [];
+
+  const addHit = (
+    strand: 1 | -1,
+    bindingStart: number,
+    bindingEnd: number,
+    alignedLength: number,
+    entries: Array<{ length: number; templateIndex: number }>,
+  ): void => {
+    let start = bindingStart;
+    let end = bindingEnd;
+    let aligned = alignedLength;
+    const within = entries.filter((entry) => entry.length <= alignedLength);
+    // A 5' tail appears as a contiguous block of mismatches at the 5'-most
+    // end of the candidate alignment. Remove that block so the reported
+    // interval describes the annealing region rather than the tail.
+    let tailBlock = 0;
+    for (let length = alignedLength; length > 0; length -= 1) {
+      if (within.some((entry) => entry.length === length)) {
+        tailBlock += 1;
+      } else {
+        break;
+      }
+    }
+    if (tailBlock > 0) {
+      if (strand === 1) {
+        start += tailBlock;
+      } else {
+        end -= tailBlock;
+      }
+      aligned -= tailBlock;
+    }
+    const mismatchEntries = within.filter((entry) => entry.length <= aligned);
+    const mismatchPositions = mismatchEntries
+      .map((entry) => mod(entry.templateIndex, templateLength))
+      .sort((a, b) => a - b);
+    let threePrimeMatchLength = 0;
+    for (let offset = 0; offset < aligned; offset += 1) {
+      const primerBase = primer[primerLength - 1 - offset];
+      const templateBase =
+        strand === 1
+          ? baseAt(end - 1 - offset)
+          : baseAt(start + offset);
+      const matches =
+        strand === 1
+          ? primerBase === templateBase
+          : complementBase(primerBase) === templateBase;
+      if (!matches) break;
+      threePrimeMatchLength += 1;
+    }
+    const annealing = primer.slice(primerLength - aligned);
+    hits.push({
+      start: circular ? mod(start, templateLength) : start,
+      end: circular ? mod(end, templateLength) : end,
+      strand,
+      mismatches: mismatchEntries.length,
+      mismatchPositions,
+      threePrimeMatchLength,
+      tmAnnealing: evaluateOligoThermodynamics(annealing).tm,
+    });
+  };
+
+  // Plus strand: the primer 3' end is the right edge of the aligned region.
+  const plusFirst = circular ? 0 : minThreePrime;
+  const plusLast = circular ? templateLength - 1 : templateLength;
+  for (let anchor = plusFirst; anchor <= plusLast; anchor += 1) {
+    let exact = true;
+    for (let offset = 0; offset < minThreePrime; offset += 1) {
+      if (
+        primer[primerLength - minThreePrime + offset] !==
+        baseAt(anchor - minThreePrime + offset)
+      ) {
+        exact = false;
+        break;
+      }
+    }
+    if (!exact) continue;
+    const maxAligned = circular
+      ? maxLength
+      : Math.min(maxLength, anchor);
+    if (maxAligned < minThreePrime) continue;
+    let mismatches = 0;
+    let aligned = minThreePrime;
+    const entries: Array<{ length: number; templateIndex: number }> = [];
+    for (let length = minThreePrime + 1; length <= maxAligned; length += 1) {
+      const templateIndex = anchor - length;
+      const primerIndex = primerLength - length;
+      if (primer[primerIndex] !== baseAt(templateIndex)) {
+        mismatches += 1;
+        entries.push({ length, templateIndex });
+        if (mismatches > maxMismatches) break;
+      }
+      aligned = length;
+    }
+    addHit(1, anchor - aligned, anchor, aligned, entries);
+  }
+
+  // Minus strand: the primer 3' end is the left edge and the alignment
+  // extends to the right in template coordinates.
+  const minusFirst = 0;
+  const minusLast = circular ? templateLength - 1 : templateLength - minThreePrime;
+  for (let anchor = minusFirst; anchor <= minusLast; anchor += 1) {
+    let exact = true;
+    for (let offset = 0; offset < minThreePrime; offset += 1) {
+      if (
+        complementBase(primer[primerLength - 1 - offset]) !==
+        baseAt(anchor + offset)
+      ) {
+        exact = false;
+        break;
+      }
+    }
+    if (!exact) continue;
+    const maxAligned = circular
+      ? maxLength
+      : Math.min(maxLength, templateLength - anchor);
+    if (maxAligned < minThreePrime) continue;
+    let mismatches = 0;
+    let aligned = minThreePrime;
+    const entries: Array<{ length: number; templateIndex: number }> = [];
+    for (let length = minThreePrime + 1; length <= maxAligned; length += 1) {
+      const templateIndex = anchor + length - 1;
+      const primerIndex = primerLength - length;
+      if (complementBase(primer[primerIndex]) !== baseAt(templateIndex)) {
+        mismatches += 1;
+        entries.push({ length, templateIndex });
+        if (mismatches > maxMismatches) break;
+      }
+      aligned = length;
+    }
+    addHit(-1, anchor, anchor + aligned, aligned, entries);
+  }
+
+  const unique = new Map<string, PrimerBindingHit>();
+  for (const hit of hits) {
+    const key = `${hit.strand}:${hit.start}:${hit.end}`;
+    const existing = unique.get(key);
+    if (
+      !existing ||
+      hit.mismatches < existing.mismatches ||
+      (hit.mismatches === existing.mismatches &&
+        hit.threePrimeMatchLength > existing.threePrimeMatchLength)
+    ) {
+      unique.set(key, hit);
+    }
+  }
+  return Array.from(unique.values()).sort(
+    (a, b) =>
+      a.mismatches - b.mismatches ||
+      a.start - b.start ||
+      b.threePrimeMatchLength - a.threePrimeMatchLength ||
+      a.strand - b.strand,
+  );
 }

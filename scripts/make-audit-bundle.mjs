@@ -97,7 +97,7 @@ const critical = [
   ['浏览器直连流式请求', 'src/modules/ai-copilot/index.ts', 'streamChat'],
 ];
 
-const out = `# OpenSnapGene 跨模块审计包（AUDIT_BUNDLE）
+const out = `# GATC 跨模块审计包（AUDIT_BUNDLE）
 
 > 生成时间：${new Date().toISOString()}
 > 用途：连同第 1 节的审阅提示词一起发给外部审阅模型，做最终的代码与生信算法审计。

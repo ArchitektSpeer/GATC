@@ -18,11 +18,13 @@ export type {
   PrimerDesignOptions,
   MutationSpec,
   SilentSiteSuggestion,
+  PrimerBindingHit,
 } from './primer';
 export {
   buildPrimer,
   designPrimerPair,
   designMutagenesisPrimers,
+  findPrimerBindingSites,
 } from './primer';
 
 export type {
@@ -58,10 +60,37 @@ export {
   designGoldenGatePrimers,
   simulateGatewayBP,
   simulateGatewayLR,
+  simulateMultiSiteGatewayLR,
   simulatePCR,
   simulateOverlapExtensionPCR,
   GATEWAY_ATT_SITES,
 } from './cloning';
+
+export type {
+  CloningProductResult,
+} from './assembly';
+export {
+  LIC_DEFAULT_TAILS,
+  addATailing,
+  designLICPrimers,
+  simulateGCCloning,
+  simulateLIC,
+  simulateTACloning,
+  simulateTOPOCloning,
+} from './assembly';
+
+export type { HomologyAssemblyKit } from './fragment-assembly';
+export {
+  designHomologyAssemblyPrimers,
+  simulateInsertFragment,
+} from './fragment-assembly';
+
+export type { RecombinationSite } from './recombination';
+export {
+  RECOMBINATION_SITES,
+  findRecombinationSites,
+  simulateRecombinase,
+} from './recombination';
 
 export type {
   SlicedDocumentData,

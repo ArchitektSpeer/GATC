@@ -7,7 +7,7 @@ import { createSyntheticTrace } from '../../modules/alignment-gel';
 import pUC19Gb from './pUC19.gb?raw';
 import pEGFPGb from './pEGFP-N1.gb?raw';
 
-async function loadSample(gbk: string, name: string): Promise<PlasmidDocument> {
+export async function loadSample(gbk: string, name: string): Promise<PlasmidDocument> {
   const parsed = await parseGenBankString(gbk);
   const base: PlasmidDocument = {
     ...parsed,
@@ -16,7 +16,7 @@ async function loadSample(gbk: string, name: string): Promise<PlasmidDocument> {
     // Drop the whole-record 'source' feature and misc_feature duplicates of typed features.
     features: parsed.features.filter(
       (f, _, all) =>
-        f.end - f.start < parsed.length &&
+        (f.end - f.start < parsed.length || f.type === 'CDS') &&
         !(f.type === 'misc_feature' && all.some((g) => g !== f && g.type !== 'misc_feature' && g.start === f.start && g.end === f.end)),
     ),
   };

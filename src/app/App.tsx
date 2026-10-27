@@ -1,25 +1,44 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Command } from 'cmdk';
 import {
+  BookMarked,
   Bot,
   Download,
+  Globe,
+  SlidersHorizontal,
   FileUp,
   FlaskConical,
   Moon,
+  MonitorPlay,
   Redo2,
   Search,
   Sun,
   Undo2,
   X,
 } from 'lucide-react';
-import type { PlasmidDocument, VirtualGelLane } from '../types/schema';
-import { parseBioFile, exportPlasmidToFasta, exportPlasmidToGenBank, exportPlasmidToSnapGeneJson } from '../modules/io-adapter';
+import type { ORF, PlasmidDocument, VirtualGelLane } from '../types/schema';
+import {
+  parseBioFile,
+  parseFastq,
+  parseProteinFile,
+  isProteinFile,
+  exportPlasmidToFasta,
+  exportPlasmidToGenBank,
+  exportPlasmidToSnapGene,
+  exportPlasmidToSnapGeneJson,
+} from '../modules/io-adapter';
+import { DNA_LADDERS, type LadderName } from '../modules/alignment-gel';
 import {
   CircularPlasmidMap,
-  CloningHistoryTree,
+  LinearPlasmidMap,
+  MapDisplayOptionsPanel,
+  ProteinSequenceView,
+  printSequenceText,
+  printSvg,
   LinearSequenceEditor,
   SangerAlignmentViewer,
   VirtualGelSimulator,
+  exportSvgToPdf,
   exportSvgToPng,
   exportSvgToPublicationFile,
 } from '../modules/canvas-ui';
@@ -28,9 +47,13 @@ import { callBio } from './bio-client';
 import { applyAIAction, digestToGel, historyNode, refreshCutSites, uncutPlasmidSample, uid } from './actions';
 import { CloningWizard } from './CloningWizard';
 import { EnzymePanel, FeaturePanel, Inspector } from './panels';
+import { AlignView, BackTranslateDialog, FindDialog } from './tools';
+import { HistoryView } from './history';
+import { DemoPlayer, startDemo } from './demo';
+import { NcbiDialog, PrimerLibraryDialog } from './library';
 import { loadSampleLibrary } from './samples';
 import { selectActiveDoc, useWorkbench, type ViewMode, type WizardKind } from './store';
-import { Button, Tabs, cn } from './ui';
+import { Button, Select, Tabs, cn } from './ui';
 import type { SequenceEdit } from '../modules/seq-engine';
 
 // The gel model takes field strength (V/cm); the UI shows volts across a standard 20 cm tank.
@@ -44,10 +67,16 @@ const VIEWS: Array<{ value: ViewMode; label: string }> = [
   { value: 'features', label: '特征/引物' },
   { value: 'gel', label: '虚拟电泳' },
   { value: 'sanger', label: 'Sanger 比对' },
+  { value: 'align', label: '多序列比对' },
   { value: 'history', label: '历史树' },
 ];
 
-function download(name: string, content: string, type = 'text/plain') {
+type ExportFormat = 'gbk' | 'dna' | 'fasta' | 'json' | 'svg' | 'png' | 'pdf' | 'print-map' | 'print-seq';
+
+// FASTQ reads beyond this are not shown as traces; aligning thousands in the viewer is not useful.
+const MAX_FASTQ_TRACES = 200;
+
+function download(name: string, content: string | Uint8Array<ArrayBuffer>, type = 'text/plain') {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement('a');
   a.href = url;
@@ -85,13 +114,14 @@ export default function App() {
       st.openDocs(docs);
       Object.entries(traces).forEach(([id, t]) => st.setTraces(id, t));
       temporal.getState().clear();
+      if (new URLSearchParams(window.location.search).has('demo')) startDemo();
     });
   }, [temporal]);
 
-  // Cut sites follow the active document (computed off the main thread).
+  // Cut sites follow the active document and enzyme set (computed off the main thread).
   useEffect(() => {
     if (doc) refreshCutSites(doc);
-  }, [doc]);
+  }, [doc, s.enzymeSetId, s.customEnzymeSets]);
 
   // Align any unaligned Sanger reads against their plasmid.
   useEffect(() => {
@@ -139,8 +169,25 @@ export default function App() {
           st.setView('sanger');
           continue;
         }
-        const binary = /\.(dna|prot)$/i.test(file.name);
-        const docs = await parseBioFile(file.name, binary ? await file.arrayBuffer() : await file.text());
+        if (/\.(fastq|fq)$/i.test(file.name)) {
+          const active = selectActiveDoc(useWorkbench.getState());
+          if (!active) throw new Error('请先打开参考序列');
+          const reads = parseFastq(await file.text());
+          const traces = await callBio('readsToTraces', reads.slice(0, MAX_FASTQ_TRACES));
+          st.setTraces(active.id, [...(useWorkbench.getState().traces[active.id] ?? []), ...traces]);
+          st.setView('sanger');
+          st.notify(`已载入 ${Math.min(reads.length, MAX_FASTQ_TRACES)} / ${reads.length} 条读长，正在比对到 ${active.name}`);
+          continue;
+        }
+        const binary = /\.(dna|prot|xdna|cm5)$/i.test(file.name);
+        const data = binary ? await file.arrayBuffer() : await file.text();
+        if (isProteinFile(file.name, data)) {
+          const proteins = await parseProteinFile(file.name, data);
+          st.openProteins(proteins);
+          st.notify(`已打开蛋白 ${proteins.map((p) => p.name).join(', ')}`);
+          continue;
+        }
+        const docs = await parseBioFile(file.name, data);
         st.openDocs(docs);
         st.notify(`已打开 ${docs.map((d) => d.name).join(', ')}`);
       } catch (e) {
@@ -176,15 +223,20 @@ export default function App() {
     if (kind === 'topology') st.replaceDoc({ ...doc, topology: doc.topology === 'circular' ? 'linear' : 'circular' });
   };
 
-  const exportAs = (fmt: 'gbk' | 'fasta' | 'json' | 'svg' | 'png') => {
+  const exportAs = (fmt: ExportFormat) => {
     if (!doc) return;
     if (fmt === 'gbk') download(`${doc.name}.gbk`, exportPlasmidToGenBank(doc));
+    if (fmt === 'dna') download(`${doc.name}.dna`, exportPlasmidToSnapGene(doc) as Uint8Array<ArrayBuffer>, 'application/octet-stream');
     if (fmt === 'fasta') download(`${doc.name}.fasta`, exportPlasmidToFasta(doc));
     if (fmt === 'json') download(`${doc.name}.json`, exportPlasmidToSnapGeneJson(doc), 'application/json');
-    if ((fmt === 'svg' || fmt === 'png') && mapRef.current) {
+    if (fmt === 'print-seq') return printSequenceText(doc, { bpPerLine: 60, showFeatures: true });
+    const figure = fmt === 'svg' || fmt === 'png' || fmt === 'pdf' || fmt === 'print-map';
+    if (figure && mapRef.current) {
       if (fmt === 'svg') exportSvgToPublicationFile(mapRef.current, `${doc.name}.svg`);
-      else exportSvgToPng(mapRef.current, `${doc.name}.png`, 300);
-    } else if (fmt === 'svg' || fmt === 'png') {
+      else if (fmt === 'png') exportSvgToPng(mapRef.current, `${doc.name}.png`, 300);
+      else if (fmt === 'pdf') exportSvgToPdf(mapRef.current, `${doc.name}.pdf`, { title: `${doc.name} (${doc.length} bp)` });
+      else printSvg(mapRef.current, { title: `${doc.name} (${doc.length} bp)` });
+    } else if (figure) {
       s.setView('map');
       s.notify('请在环形图谱视图中再次导出');
     }
@@ -210,6 +262,9 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'o') {
         e.preventDefault();
         fileRef.current?.click();
+      } else if (e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        useWorkbench.getState().setTool('find');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -217,20 +272,55 @@ export default function App() {
   }, [temporal]);
 
   const vizTheme = s.theme;
-  // Like SnapGene's default enzyme set, the map shows unique cutters only.
-  const uniqueCutters = useMemo(() => cutSites.filter((c) => c.totalCutsInPlasmid === 1), [cutSites]);
-  const mapView = doc && (
-    <CircularPlasmidMap
-      doc={doc}
-      cutSites={uniqueCutters}
-      selection={s.selection}
-      onSelectionChange={s.setSelection}
-      onFeatureClick={(f) => s.setSelection({ start: f.start, end: f.end })}
-      theme={vizTheme}
-      showPrimers
-      svgRef={mapRef}
-    />
+  // Like SnapGene's default, the map shows unique cutters with 6+ bp specific recognition sites.
+  const uniqueCutters = useMemo(
+    () => cutSites.filter((c) => c.totalCutsInPlasmid === 1 && c.enzyme.recognitionSeq.replace(/N/gi, '').length >= 6),
+    [cutSites],
   );
+  const [orfs, setOrfs] = useState<ORF[]>([]);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  useEffect(() => {
+    if (!doc || !s.mapOptions.showOrfs) return setOrfs([]);
+    let alive = true;
+    callBio('findAllORFs', doc, 75).then((r) => alive && setOrfs(r));
+    return () => {
+      alive = false;
+    };
+  }, [doc, s.mapOptions.showOrfs]);
+  const linearMap = doc && (s.mapShape === 'linear' || (s.mapShape === 'auto' && doc.topology === 'linear'));
+  const featureTypes = useMemo(() => [...new Set(doc?.features.map((f) => f.type) ?? [])], [doc]);
+  const mapProps = doc && {
+    doc,
+    cutSites: uniqueCutters,
+    orfs,
+    selection: s.selection,
+    onSelectionChange: s.setSelection,
+    onFeatureClick: (f: { start: number; end: number }) => s.setSelection({ start: f.start, end: f.end }),
+    theme: vizTheme,
+    displayOptions: s.mapOptions,
+    svgRef: mapRef,
+  };
+  const mapView = mapProps && (
+    <div className="relative flex h-full w-full items-center justify-center">
+      <div className="absolute right-2 top-2 z-10 flex gap-1">
+        <Select aria-label="图谱形状" value={s.mapShape} onChange={(e) => s.setMapShape(e.target.value as typeof s.mapShape)}>
+          <option value="auto">自动</option>
+          <option value="circular">环形</option>
+          <option value="linear">线性</option>
+        </Select>
+        <Button size="sm" onClick={() => setOptionsOpen(!optionsOpen)} title="图谱显示选项">
+          <SlidersHorizontal size={13} /> 显示
+        </Button>
+      </div>
+      {optionsOpen && (
+        <div className="absolute right-2 top-11 z-20 w-72 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 shadow-xl">
+          <MapDisplayOptionsPanel value={s.mapOptions} onChange={(v) => s.setMapOptions(v)} featureTypes={featureTypes} />
+        </div>
+      )}
+      {linearMap ? <LinearPlasmidMap {...mapProps} width={Math.max(640, mainHeight * 1.4)} /> : <CircularPlasmidMap {...mapProps} showPrimers={s.mapOptions.showPrimers !== false} />}
+    </div>
+  );
+  const protein = s.proteins.find((p) => p.id === s.activeProteinId) ?? null;
   const seqView = doc && (
     <LinearSequenceEditor
       doc={doc}
@@ -258,9 +348,14 @@ export default function App() {
     >
       {/* Top bar */}
       <header className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2">
-        <div className="mr-2 flex items-center gap-2 font-semibold">
-          <span className="inline-block h-5 w-5 rounded-full border-[3px] border-blue-600" />
-          OpenSnapGene
+        <div className="mr-2 flex items-baseline gap-2" title="GATC — Gene Assembly & Toolkit for Cloning">
+          <span className="mono text-[17px] font-bold tracking-[0.12em]" aria-label="GATC">
+            <span className="text-slate-800 dark:text-slate-200">G</span>
+            <span className="text-emerald-600">A</span>
+            <span className="text-red-600">T</span>
+            <span className="text-blue-600">C</span>
+          </span>
+          <span className="hidden text-[11px] text-[var(--muted)] lg:inline">Gene Assembly &amp; Toolkit for Cloning</span>
         </div>
         <Button size="sm" onClick={() => fileRef.current?.click()} title="打开文件 (Ctrl+O)">
           <FileUp size={14} /> 打开
@@ -270,10 +365,19 @@ export default function App() {
           type="file"
           multiple
           hidden
-          accept=".dna,.gb,.gbk,.genbank,.fasta,.fa,.fas,.embl,.gff,.ab1,.abi,.json,.xml,.geneious"
+          accept=".dna,.prot,.gb,.gbk,.gp,.genbank,.ape,.seq,.xdna,.cm5,.fasta,.fa,.fas,.faa,.embl,.gff,.ab1,.abi,.fastq,.fq,.json,.xml,.sbol,.txt,.geneious"
           onChange={(e) => e.target.files && openFiles(e.target.files)}
         />
         <ExportMenu onExport={exportAs} disabled={!doc} />
+        <Button size="sm" onClick={() => s.setTool('ncbi')} title="按登录号从 NCBI 导入">
+          <Globe size={14} /> NCBI
+        </Button>
+        <Button size="sm" onClick={() => s.setTool('primerlib')} title="引物库">
+          <BookMarked size={14} /> 引物库
+        </Button>
+        <Button size="sm" onClick={() => s.setTool('find')} disabled={!doc} title="查找 (Ctrl+F)">
+          <Search size={14} /> 查找
+        </Button>
         <Button size="sm" variant="primary" onClick={() => s.setWizard('restriction')} disabled={!doc}>
           <FlaskConical size={14} /> 克隆向导
         </Button>
@@ -284,6 +388,9 @@ export default function App() {
           <Redo2 size={15} />
         </Button>
         <div className="flex-1" />
+        <Button size="sm" variant={s.demo ? 'primary' : 'default'} onClick={() => (s.demo ? s.setDemo(null) : startDemo())} disabled={!doc} title="自动演示主要功能">
+          <MonitorPlay size={14} /> 演示
+        </Button>
         <Button size="sm" variant="ghost" onClick={() => s.setPaletteOpen(true)}>
           <Search size={14} /> 命令 <kbd className="rounded border border-[var(--border)] px-1 text-[10px]">Ctrl K</kbd>
         </Button>
@@ -323,6 +430,22 @@ export default function App() {
               </button>
             </div>
           ))}
+          {s.proteins.map((p) => (
+            <div
+              key={p.id}
+              className={cn(
+                'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs',
+                p.id === s.activeProteinId ? 'bg-emerald-50 font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'hover:bg-slate-100 dark:hover:bg-slate-800',
+              )}
+              onClick={() => s.setActiveProtein(p.id)}
+            >
+              {p.name}
+              <span className="text-[var(--muted)]">{p.sequence.length} aa</span>
+              <button className="opacity-40 hover:opacity-100" onClick={(e) => (e.stopPropagation(), s.closeProtein(p.id))} aria-label="关闭">
+                <X size={12} />
+              </button>
+            </div>
+          ))}
         </div>
         <div className="max-w-full overflow-x-auto">
           <Tabs value={s.view} onChange={s.setView} items={VIEWS} />
@@ -332,7 +455,9 @@ export default function App() {
       {/* Main */}
       <div className="flex min-h-0 flex-1">
         <main ref={mainRef} className="min-w-0 flex-1 overflow-hidden">
-          {!doc ? (
+          {protein ? (
+            <ProteinSequenceView protein={protein} theme={vizTheme} height={Math.max(320, mainHeight - 20)} />
+          ) : !doc ? (
             <div className="flex h-full items-center justify-center text-[var(--muted)]">正在加载示例质粒… 也可以拖入 .dna / .gb / .fasta / .ab1 文件</div>
           ) : (
             <div className="h-full">
@@ -361,9 +486,21 @@ export default function App() {
                     <Button size="sm" onClick={() => s.addGelSample(uncutPlasmidSample(doc))}>
                       + 未酶切 {doc.name}
                     </Button>
-                    <Button size="sm" onClick={() => s.addGelSample({ id: uid('lane'), label: 'NEB 100bp', ladder: 'NEB 100bp' })}>
-                      + 100bp Ladder
-                    </Button>
+                    <Select
+                      aria-label="添加 Ladder"
+                      value=""
+                      onChange={(e) => {
+                        const ladder = e.target.value as LadderName;
+                        if (ladder) s.addGelSample({ id: uid('lane'), label: ladder, ladder });
+                      }}
+                    >
+                      <option value="">+ Ladder…</option>
+                      {(Object.keys(DNA_LADDERS) as LadderName[]).map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
                   <div className="min-h-0 flex-1 overflow-auto p-3">
                     <VirtualGelSimulator
@@ -378,16 +515,13 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {s.view === 'sanger' && <SangerAlignmentViewer doc={doc} traces={traces} theme={vizTheme} />}
-              {s.view === 'history' && (
-                <div className="h-full overflow-auto p-3">
-                  <CloningHistoryTree history={doc.history} theme={vizTheme} />
-                </div>
-              )}
+              {s.view === 'sanger' && <SangerAlignmentViewer doc={doc} traces={traces} theme={vizTheme} showCoverage={traces.length > 1} />}
+              {s.view === 'align' && <AlignView theme={vizTheme} />}
+              {s.view === 'history' && <HistoryView doc={doc} theme={vizTheme} />}
             </div>
           )}
         </main>
-        {doc && (
+        {doc && !protein && (
           <aside className="hidden w-72 shrink-0 overflow-auto border-l border-[var(--border)] bg-[var(--panel)] xl:block">
             <Inspector doc={doc} />
           </aside>
@@ -417,6 +551,11 @@ export default function App() {
       )}
 
       <CloningWizard />
+      <DemoPlayer />
+      <FindDialog />
+      <NcbiDialog />
+      <PrimerLibraryDialog />
+      <BackTranslateDialog />
       <CommandPalette
         doc={doc}
         onOpen={() => fileRef.current?.click()}
@@ -427,7 +566,7 @@ export default function App() {
   );
 }
 
-function ExportMenu({ onExport, disabled }: { onExport: (f: 'gbk' | 'fasta' | 'json' | 'svg' | 'png') => void; disabled: boolean }) {
+function ExportMenu({ onExport, disabled }: { onExport: (f: ExportFormat) => void; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
@@ -438,11 +577,15 @@ function ExportMenu({ onExport, disabled }: { onExport: (f: 'gbk' | 'fasta' | 'j
         <div className="absolute left-0 top-9 z-30 w-48 rounded-md border border-[var(--border)] bg-[var(--panel)] p-1 shadow-lg" onMouseLeave={() => setOpen(false)}>
           {(
             [
+              ['dna', 'SnapGene (.dna)'],
               ['gbk', 'GenBank (.gbk, SnapGene/ApE)'],
               ['fasta', 'FASTA'],
               ['json', 'JSON'],
               ['svg', '图谱 SVG（出版级）'],
               ['png', '图谱 PNG 300 dpi'],
+              ['pdf', '图谱 PDF（矢量）'],
+              ['print-map', '打印图谱…'],
+              ['print-seq', '打印序列…'],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -467,7 +610,7 @@ function CommandPalette({
 }: {
   doc: PlasmidDocument | null;
   onOpen: () => void;
-  onExport: (f: 'gbk' | 'fasta' | 'json' | 'svg' | 'png') => void;
+  onExport: (f: ExportFormat) => void;
   onTransform: (k: 'revcomp' | 'origin' | 'annotate' | 'topology') => void;
 }) {
   const open = useWorkbench((s) => s.paletteOpen);
@@ -493,6 +636,10 @@ function CommandPalette({
     ['golden_gate', 'Golden Gate 组装'],
     ['mutagenesis', '定点突变'],
     ['gateway', 'Gateway BP/LR'],
+    ['ta_topo', 'TA / TOPO 克隆'],
+    ['lic', 'LIC 克隆'],
+    ['recombinase', 'Cre/Lox · Flp/FRT 重组'],
+    ['insert', '插入片段'],
   ];
 
   return (
@@ -524,6 +671,8 @@ function CommandPalette({
               ))}
             </Command.Group>
             <Command.Group heading="序列">
+              <Command.Item onSelect={run(() => st().setTool('find'))}>查找序列 / 蛋白模式</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('backtranslate'))}>反向翻译 / 密码子优化</Command.Item>
               <Command.Item onSelect={run(() => onTransform('annotate'))}>自动注释特征</Command.Item>
               <Command.Item onSelect={run(() => onTransform('revcomp'))}>反向互补整条序列</Command.Item>
               <Command.Item onSelect={run(() => onTransform('origin'))}>将选区起点设为新原点</Command.Item>
@@ -531,12 +680,19 @@ function CommandPalette({
             </Command.Group>
             <Command.Group heading="文件">
               <Command.Item onSelect={run(onOpen)}>打开文件…</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('ncbi'))}>从 NCBI 导入（登录号）</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('primerlib'))}>引物库</Command.Item>
+              <Command.Item onSelect={run(() => onExport('print-map'))}>打印图谱</Command.Item>
+              <Command.Item onSelect={run(() => onExport('print-seq'))}>打印序列</Command.Item>
+              <Command.Item onSelect={run(() => onExport('dna'))}>导出 SnapGene .dna</Command.Item>
               <Command.Item onSelect={run(() => onExport('gbk'))}>导出 GenBank</Command.Item>
               <Command.Item onSelect={run(() => onExport('fasta'))}>导出 FASTA</Command.Item>
               <Command.Item onSelect={run(() => onExport('svg'))}>导出图谱 SVG</Command.Item>
               <Command.Item onSelect={run(() => onExport('png'))}>导出图谱 PNG</Command.Item>
+              <Command.Item onSelect={run(() => onExport('pdf'))}>导出图谱 PDF</Command.Item>
             </Command.Group>
             <Command.Group heading="其他">
+              <Command.Item onSelect={run(startDemo)}>演示模式（自动演示主要功能）</Command.Item>
               <Command.Item onSelect={run(() => st().setCopilotOpen(true))}>打开 AI 实验导师</Command.Item>
               <Command.Item onSelect={run(() => useWorkbench.temporal.getState().undo())}>撤销</Command.Item>
               <Command.Item onSelect={run(() => useWorkbench.temporal.getState().redo())}>重做</Command.Item>

@@ -1,12 +1,17 @@
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import type * as React from 'react';
 import { Dna, FileDown, ImageDown } from 'lucide-react';
-import type { CutSite, PlasmidDocument, SelectionRange, SequenceFeature } from '../../types/schema';
+import type {
+  CutSite,
+  ORF,
+  PlasmidDocument,
+  SelectionRange,
+  SequenceFeature,
+} from '../../types/schema';
 import type { VizTheme } from './theme';
 import { getTheme } from './theme';
 import {
   annularSectorPath,
-  assignFeatureTracks,
   clamp,
   contrastText,
   describeArc,
@@ -29,6 +34,18 @@ import {
 } from './layout/circularLayout';
 import type { EnzymeLabelSource, PrimerLabelSource } from './layout/circularLayout';
 import { exportSvgToPng, exportSvgToPublicationFile } from './exportSvg';
+import {
+  assignSegmentTracks,
+  segmentGapRanges,
+  type FeaturePiece,
+  type FeatureSegmentPlan,
+} from './segments';
+import {
+  filterVisibleFeatures,
+  resolveMapDisplayOptions,
+  type MapDisplayOptions,
+} from './mapDisplayOptions';
+import { computeGcProfile } from './layout/linearMapLayout';
 
 interface DragState {
   anchor: number;
@@ -69,9 +86,11 @@ function baseNameOf(doc: PlasmidDocument): string {
 export interface CircularPlasmidMapProps {
   doc: PlasmidDocument;
   cutSites: CutSite[];
+  orfs?: ORF[];
   selection: SelectionRange | null;
   onSelectionChange?: (sel: SelectionRange | null) => void;
   onFeatureClick?: (f: SequenceFeature) => void;
+  displayOptions?: MapDisplayOptions;
   theme?: VizTheme;
   size?: number;
   showPrimers?: boolean;
@@ -81,6 +100,8 @@ export interface CircularPlasmidMapProps {
 interface FeatureArc {
   key: string;
   feature: SequenceFeature;
+  plan: FeatureSegmentPlan;
+  piece: FeaturePiece;
   radius: number;
   start: number;
   end: number;
@@ -99,9 +120,11 @@ interface FeatureLabel {
 export function CircularPlasmidMap({
   doc,
   cutSites,
+  orfs = [],
   selection,
   onSelectionChange,
   onFeatureClick,
+  displayOptions,
   theme = 'light',
   size: requestedSize = 760,
   showPrimers = true,
@@ -118,6 +141,18 @@ export function CircularPlasmidMap({
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
 
+  const resolvedDisplay = useMemo(
+    () => (displayOptions ? resolveMapDisplayOptions(displayOptions) : null),
+    [displayOptions],
+  );
+  const visibleFeatures = useMemo(
+    () =>
+      resolvedDisplay
+        ? filterVisibleFeatures(doc.features, resolvedDisplay)
+        : doc.features,
+    [doc.features, resolvedDisplay],
+  );
+
   const setSvgNode = useCallback(
     (node: SVGSVGElement | null) => {
       svgNodeRef.current = node;
@@ -131,8 +166,8 @@ export function CircularPlasmidMap({
   );
 
   const assignment = useMemo(
-    () => assignFeatureTracks(doc.features, length, circular),
-    [doc.features, length, circular],
+    () => assignSegmentTracks(visibleFeatures, length, circular),
+    [visibleFeatures, length, circular],
   );
   const geometry = useMemo(
     () => computeCircularGeometry(size, assignment.lanes.length),
@@ -144,18 +179,22 @@ export function CircularPlasmidMap({
     Math.floor((geometry.featureInner * 1.4) / (centerFontSize * 0.58)),
   );
 
-  const cutGroups = useMemo(() => groupCutSites(cutSites), [cutSites]);
+  const activeCutSites = resolvedDisplay && !resolvedDisplay.showEnzymes ? [] : cutSites;
+  const primerVisible = showPrimers && (resolvedDisplay ? resolvedDisplay.showPrimers : true);
+  const cutGroups = useMemo(() => groupCutSites(activeCutSites), [activeCutSites]);
   const cutSources = useMemo(
     () => buildCutLabelSources(cutGroups, length),
     [cutGroups, length],
   );
   const primerSources = useMemo(
-    () => (showPrimers ? buildPrimerLabelSources(doc.primers, length) : []),
-    [doc.primers, length, showPrimers],
+    () => (primerVisible ? buildPrimerLabelSources(doc.primers, length) : []),
+    [doc.primers, length, primerVisible],
   );
 
   const leaderLayout = useMemo(() => {
-    const all = [...cutSources, ...primerSources];
+    const cutLabelSources =
+      resolvedDisplay && !resolvedDisplay.showEnzymeLabels ? [] : cutSources;
+    const all = [...cutLabelSources, ...primerSources];
     if (all.length === 0) return [];
     const sources = all.sort((a, b) => a.anchorIndex - b.anchorIndex);
     const textOffset = Math.max(30, Math.min(52, size * 0.055));
@@ -170,76 +209,96 @@ export function CircularPlasmidMap({
       elbowOffset: Math.max(18, textOffset * 0.5),
       textOffset,
     });
-  }, [cutSources, primerSources, geometry, length, size]);
+  }, [cutSources, primerSources, geometry, length, size, resolvedDisplay]);
+
+  const tickStep =
+    resolvedDisplay && resolvedDisplay.tickInterval !== 'auto'
+      ? resolvedDisplay.tickInterval
+      : niceTickStep(length, 16);
+  const showTicks = resolvedDisplay ? resolvedDisplay.showTicks : true;
 
   const featureArcs = useMemo(() => {
     const arcs: FeatureArc[] = [];
     const labels: FeatureLabel[] = [];
+    const showLabels = resolvedDisplay ? resolvedDisplay.showFeatureLabels : true;
     for (let lane = 0; lane < assignment.lanes.length; lane += 1) {
       const radius =
         geometry.featureOuter -
         lane * (geometry.bandHeight + geometry.bandGap) -
         geometry.bandHeight / 2;
-      for (const feature of assignment.lanes[lane]) {
-        const segments = assignment.segmentsById.get(feature.id) ?? [];
-        const rawStart = mod(feature.start, length || 1);
-        const rawEnd = mod(feature.end, length || 1);
-        let widest: { start: number; end: number; span: number } | null = null;
-        for (let index = 0; index < segments.length; index += 1) {
-          const segment = segments[index];
-          const span = segment.end - segment.start;
-          if (!widest || span > widest.span) {
-            widest = { start: segment.start, end: segment.end, span };
-          }
+      for (const entry of assignment.lanes[lane]) {
+        const feature = entry.feature;
+        const plan = entry.plan;
+        const lastSegmentIndex =
+          plan.pieces.length > 0
+            ? plan.pieces[plan.pieces.length - 1].segmentIndex
+            : -1;
+        let widest: FeaturePiece | null = null;
+        for (const piece of plan.pieces) {
+          const span = piece.end - piece.start;
+          if (!widest || span > widest.end - widest.start) widest = piece;
           const full = length > 0 && span >= length - 0.5;
-          const isTrueEnd =
-            rawEnd === 0 ? segment.end === length : segment.end === rawEnd;
-          const isTrueStart = segment.start === rawStart;
           let arrow: FeatureArc['arrow'] = null;
-          if (!full) {
-            if (feature.strand === 1 && isTrueEnd) {
-              arrow = { index: segment.end, direction: 1 };
-            } else if (feature.strand === -1 && isTrueStart) {
-              arrow = { index: segment.start, direction: -1 };
+          if (
+            plan.arrowIndex !== null &&
+            !full &&
+            piece.segmentIndex === lastSegmentIndex
+          ) {
+            if (feature.strand === 1 && piece.isSegmentEnd) {
+              arrow = { index: plan.arrowIndex, direction: 1 };
+            } else if (feature.strand === -1 && piece.isSegmentStart) {
+              arrow = { index: plan.arrowIndex, direction: -1 };
             }
           }
           arcs.push({
-            key: `${feature.id}:${index}`,
+            key: `${feature.id}:${piece.segmentIndex}:${piece.pieceIndex}`,
             feature,
+            plan,
+            piece,
             radius,
-            start: segment.start,
-            end: segment.end,
+            start: piece.start,
+            end: piece.end,
             full,
             arrow,
           });
         }
-        if (widest && widest.span < length - 0.5) {
-          const spanDeg = (widest.span / Math.max(1, length)) * 360;
-          const arcLength = (widest.span / Math.max(1, length)) * 2 * Math.PI * radius;
-          const fontSize = Math.min(10, Math.max(8, geometry.bandHeight * 0.58));
-          const needed = textWidthEstimate(feature.name, fontSize) + 12;
-          if (spanDeg >= 8 && spanDeg <= 300 && arcLength > needed) {
-            const pathId = `osg-feature-${uid}-${safeId(feature.id)}`;
-            labels.push({
-              feature,
-              pathId,
-              path: describeArc(
-                geometry.cx,
-                geometry.cy,
+        if (showLabels && widest && length > 0) {
+          const span = widest.end - widest.start;
+          if (span < length - 0.5) {
+            const spanDeg = (span / Math.max(1, length)) * 360;
+            const arcLength = (span / Math.max(1, length)) * 2 * Math.PI * radius;
+            const labelScale = resolvedDisplay
+              ? resolvedDisplay.labelFontSize / 11
+              : 1;
+            const fontSize = clamp(
+              Math.min(10, Math.max(8, geometry.bandHeight * 0.58)) * labelScale,
+              6.5,
+              16,
+            );
+            const needed = textWidthEstimate(feature.name, fontSize) + 12;
+            if (spanDeg >= 8 && spanDeg <= 300 && arcLength > needed) {
+              const pathId = `osg-feature-${uid}-${safeId(feature.id)}`;
+              labels.push({
+                feature,
+                pathId,
+                path: describeArc(
+                  geometry.cx,
+                  geometry.cy,
+                  radius,
+                  widest.start,
+                  widest.end,
+                  Math.max(1, length),
+                ),
                 radius,
-                widest.start,
-                widest.end,
-                Math.max(1, length),
-              ),
-              radius,
-              fontSize,
-            });
+                fontSize,
+              });
+            }
           }
         }
       }
     }
     return { arcs, labels };
-  }, [assignment, geometry, length, uid]);
+  }, [assignment, geometry, length, uid, resolvedDisplay]);
 
   const liveSelection = useMemo<SelectionRange | null>(() => {
     if (drag) return dragSelection(drag.anchor, drag.endUnwrapped, length);
@@ -270,11 +329,24 @@ export function CircularPlasmidMap({
     }
     return {
       gc: counted > 0 ? (gc / counted) * 100 : 0,
-      features: doc.features.length,
-      primers: doc.primers.length,
-      cuts: cutSites.length,
+      features: visibleFeatures.length,
+      primers: primerVisible ? doc.primers.length : 0,
+      cuts: activeCutSites.length,
     };
-  }, [doc.sequence, doc.features.length, doc.primers.length, cutSites.length]);
+  }, [doc.sequence, visibleFeatures.length, doc.primers.length, primerVisible, activeCutSites.length]);
+
+  const gcSamples = useMemo(
+    () =>
+      resolvedDisplay?.showGcPlot
+        ? computeGcProfile(doc.sequence.toUpperCase(), {
+            circular,
+            maxSamples: 240,
+            windowSize: Math.max(10, Math.round(length / 40)),
+          })
+        : [],
+    [resolvedDisplay, doc.sequence, circular, length],
+  );
+  const showOrfs = orfs.length > 0 && (!resolvedDisplay || resolvedDisplay.showOrfs);
 
   const pointerToLocal = useCallback(
     (event: React.PointerEvent<SVGSVGElement>) => {
@@ -385,6 +457,9 @@ export function CircularPlasmidMap({
   );
 
   const fileBase = baseNameOf(doc);
+  const centerTitle =
+    (resolvedDisplay?.title ?? '').trim() || doc.name || 'Untitled plasmid';
+  const centerShowLength = resolvedDisplay ? resolvedDisplay.showLength : true;
   const dragBubble = useMemo(() => {
     if (!drag) return null;
     const next = dragSelection(drag.anchor, drag.endUnwrapped, length);
@@ -561,36 +636,40 @@ export function CircularPlasmidMap({
             strokeWidth={1}
           />
 
-          {Array.from({ length: Math.max(1, Math.floor(length / niceTickStep(length, 16))) }, (_, i) => {
-            const step = niceTickStep(length, 16);
-            const index = i * step;
-            if (index >= length) return null;
-            const angle = -90 + (360 * index) / Math.max(1, length);
-            const major = i % 5 === 0;
-            const outer = pointOnCircle(
-              geometry.cx,
-              geometry.cy,
-              geometry.outerRadius + (major ? 7 : 4),
-              angle,
-            );
-            const inner = pointOnCircle(
-              geometry.cx,
-              geometry.cy,
-              geometry.outerRadius + 1,
-              angle,
-            );
-            return (
-              <line
-                key={`tick-${index}`}
-                x1={inner.x}
-                y1={inner.y}
-                x2={outer.x}
-                y2={outer.y}
-                stroke={major ? tokens.faint : tokens.grid}
-                strokeWidth={major ? 1.2 : 0.8}
-              />
-            );
-          })}
+          {showTicks
+            ? Array.from(
+                { length: Math.max(1, Math.floor(length / tickStep)) },
+                (_, i) => {
+                  const index = i * tickStep;
+                  if (index >= length) return null;
+                  const angle = -90 + (360 * index) / Math.max(1, length);
+                  const major = i % 5 === 0;
+                  const outer = pointOnCircle(
+                    geometry.cx,
+                    geometry.cy,
+                    geometry.outerRadius + (major ? 7 : 4),
+                    angle,
+                  );
+                  const inner = pointOnCircle(
+                    geometry.cx,
+                    geometry.cy,
+                    geometry.outerRadius + 1,
+                    angle,
+                  );
+                  return (
+                    <line
+                      key={`tick-${index}`}
+                      x1={inner.x}
+                      y1={inner.y}
+                      x2={outer.x}
+                      y2={outer.y}
+                      stroke={major ? tokens.faint : tokens.grid}
+                      strokeWidth={major ? 1.2 : 0.8}
+                    />
+                  );
+                },
+              )
+            : null}
 
           <circle
             cx={geometry.cx}
@@ -675,6 +754,27 @@ export function CircularPlasmidMap({
                   onMouseLeave={() => setHoveredFeature(null)}
                   style={{ cursor: onFeatureClick ? 'pointer' : 'default' }}
                 >
+                  {arc.piece.segmentIndex === 0 && arc.piece.pieceIndex === 0
+                    ? segmentGapRanges(arc.plan, length, circular).map((gap, index) => (
+                        <path
+                          key={`feature-gap-${arc.feature.id}-${index}`}
+                          d={describeArc(
+                            geometry.cx,
+                            geometry.cy,
+                            arc.radius,
+                            gap.start,
+                            gap.end,
+                            Math.max(1, length),
+                          )}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth={1.1}
+                          strokeDasharray="2.5 2.5"
+                          opacity={0.5}
+                          pointerEvents="none"
+                        />
+                      ))
+                    : null}
                   {arc.full ? (
                     <circle
                       cx={geometry.cx}
@@ -763,7 +863,7 @@ export function CircularPlasmidMap({
             </text>
           ))}
 
-          {showPrimers
+          {primerVisible
             ? doc.primers.map((primer) => {
                 const segments = splitRange(
                   primer.bindingStart,
@@ -806,7 +906,7 @@ export function CircularPlasmidMap({
               })
             : null}
 
-          {showPrimers
+          {primerVisible
             ? doc.primers.flatMap((primer) => {
                 const tailLength = primer.tailSequence.length;
                 if (tailLength <= 0) return [];
@@ -836,7 +936,56 @@ export function CircularPlasmidMap({
               })
             : null}
 
-          {cutSites.map((cut) => {
+          {showOrfs ? (
+            <g pointerEvents="none">
+              {orfs.map((orf) => {
+                const radius = Math.max(
+                  10,
+                  geometry.primerRadius - Math.max(9, size * 0.026),
+                );
+                return splitRange(orf.start, orf.end, length, circular).map(
+                  (segment, index) => {
+                    const arrowIndex =
+                      orf.strand === 1 ? segment.end : segment.start;
+                    const arrow = directionalArrow(
+                      arrowIndex,
+                      radius,
+                      Math.max(1, length),
+                      orf.strand,
+                      Math.max(4, size * 0.011),
+                      geometry.cx,
+                      geometry.cy,
+                    );
+                    return (
+                      <g key={`orf-${orf.id}-${index}`}>
+                        <path
+                          d={describeArc(
+                            geometry.cx,
+                            geometry.cy,
+                            radius,
+                            segment.start,
+                            segment.end,
+                            Math.max(1, length),
+                          )}
+                          fill="none"
+                          stroke={tokens.enzymeMulti}
+                          strokeWidth={2}
+                          strokeDasharray="4 2"
+                          opacity={0.55}
+                        />
+                        <polygon points={arrow.points} fill={tokens.enzymeMulti} opacity={0.7} />
+                        <title>
+                          {`ORF ${orf.id} · frame ${orf.frame}\n${orf.lengthBp} bp · ${trimNumber(orf.mwKda, 1)} kDa · pI ${trimNumber(orf.pI, 2)}`}
+                        </title>
+                      </g>
+                    );
+                  },
+                );
+              })}
+            </g>
+          ) : null}
+
+          {activeCutSites.map((cut) => {
             const angle = -90 + (360 * mod(cut.position, Math.max(1, length))) / Math.max(1, length);
             const blocked = cut.isMethylationBlocked;
             const single = cut.totalCutsInPlasmid === 1;
@@ -887,7 +1036,10 @@ export function CircularPlasmidMap({
               label.item.kind === 'enzyme'
                 ? `${label.item.enzymeName} · recognition at ${label.item.position + 1}\nOverhang: ${label.item.overhangType} ${label.item.overhangSeq || '—'}\nTotal cuts: ${label.item.totalCuts}`
                 : `${label.item.primerId}\nTm ${label.item.tm.toFixed(1)} °C · tail ${label.item.tailLength} nt`;
-            const fontSize = label.emphasis ? 10.6 : 10;
+            const labelScale = resolvedDisplay
+              ? resolvedDisplay.labelFontSize / 11
+              : 1;
+            const fontSize = (label.emphasis ? 10.6 : 10) * labelScale;
             const available =
               label.side === 'right' ? size - label.textX - 8 : label.textX - 8;
             const maxChars = Math.max(5, Math.floor(available / (fontSize * 0.58)));
@@ -914,7 +1066,7 @@ export function CircularPlasmidMap({
                   y={label.textY + 3.4}
                   textAnchor={label.textAnchor}
                   fill={stroke}
-                  fontSize={label.emphasis ? 10.6 : 10}
+                  fontSize={fontSize}
                   fontWeight={label.emphasis ? 700 : 500}
                   fontFamily={isPrimer ? tokens.fontMono : tokens.fontSans}
                   letterSpacing="0.01em"
@@ -930,6 +1082,49 @@ export function CircularPlasmidMap({
             );
           })}
 
+          {resolvedDisplay?.showGcPlot && gcSamples.length > 0 ? (
+            (() => {
+              const baseRadius = geometry.featureInner * 0.55;
+              const amplitude = geometry.featureInner * 0.16;
+              const points = gcSamples
+                .filter((sample) => sample.gc !== null)
+                .map((sample) => {
+                  const angle = -90 + (360 * sample.position) / Math.max(1, length);
+                  const point = pointOnCircle(
+                    geometry.cx,
+                    geometry.cy,
+                    baseRadius + (sample.gc ?? 0) * amplitude,
+                    angle,
+                  );
+                  return `${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+                })
+                .join(' ');
+              return (
+                <g pointerEvents="none">
+                  <circle
+                    cx={geometry.cx}
+                    cy={geometry.cy}
+                    r={baseRadius}
+                    fill="none"
+                    stroke={tokens.faint}
+                    strokeWidth={0.7}
+                    strokeDasharray="2 3"
+                    opacity={0.7}
+                  />
+                  <polyline
+                    points={points}
+                    fill="none"
+                    stroke={tokens.accent}
+                    strokeWidth={1.3}
+                    strokeLinejoin="round"
+                    opacity={0.82}
+                  />
+                  <title>GC content, sliding window</title>
+                </g>
+              );
+            })()
+          ) : null}
+
           <g pointerEvents="none">
             <text
               x={geometry.cx}
@@ -941,19 +1136,21 @@ export function CircularPlasmidMap({
               fontWeight={700}
               letterSpacing="-0.015em"
             >
-              {truncate(doc.name || 'Untitled plasmid', centerNameChars)}
+              {truncate(centerTitle, centerNameChars)}
             </text>
-            <text
-              x={geometry.cx}
-              y={geometry.cy + 4}
-              textAnchor="middle"
-              fill={tokens.muted}
-              fontFamily={tokens.fontMono}
-              fontSize={Math.max(9.5, Math.min(12.5, centerFontSize * 0.82))}
-              letterSpacing="0.02em"
-            >
-              {formatBp(length)} bp
-            </text>
+            {centerShowLength ? (
+              <text
+                x={geometry.cx}
+                y={geometry.cy + 4}
+                textAnchor="middle"
+                fill={tokens.muted}
+                fontFamily={tokens.fontMono}
+                fontSize={Math.max(9.5, Math.min(12.5, centerFontSize * 0.82))}
+                letterSpacing="0.02em"
+              >
+                {formatBp(length)} bp
+              </text>
+            ) : null}
             <line
               x1={geometry.cx - 42}
               y1={geometry.cy + 15}

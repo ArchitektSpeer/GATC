@@ -7,7 +7,7 @@ MODS=("$@")
 [ ${#MODS[@]} -eq 0 ] && MODS=(mod-1-io mod-2-seq-engine mod-3-cloning-primer mod-4-alignment-gel mod-5-canvas-ui mod-6-ai-copilot)
 mkdir -p .build-logs
 for m in "${MODS[@]}"; do
-  ( opencode run --model "$MODEL" --auto --title "OpenSnapGene $m" "$(cat ".prompts/$m.md")" > ".build-logs/$m.log" 2>&1
+  ( opencode run --model "$MODEL" --auto --title "GATC $m" "$(cat ".prompts/$m.md")" > ".build-logs/$m.log" 2>&1
     echo "EXIT $?" >> ".build-logs/$m.log" ) &
 done
 wait

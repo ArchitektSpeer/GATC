@@ -2,6 +2,7 @@ import type * as React from 'react';
 import type {
   CloningHistoryNode,
   CutSite,
+  ORF,
   PlasmidDocument,
   SangerTraceData,
   SelectionRange,
@@ -9,19 +10,56 @@ import type {
   VirtualGelLane,
 } from '../../types/schema';
 import type { VizTheme } from './theme';
+import type { MapDisplayOptions } from './mapDisplayOptions';
+import type { ProteinDocument } from './layout/proteinLayout';
 
 export type { VizTheme };
 
 export interface CircularPlasmidMapProps {
   doc: PlasmidDocument;
   cutSites: CutSite[];
+  orfs?: ORF[];
   selection: SelectionRange | null;
   onSelectionChange?: (sel: SelectionRange | null) => void;
   onFeatureClick?: (f: SequenceFeature) => void;
+  displayOptions?: MapDisplayOptions;
   theme?: VizTheme;
   size?: number;
   showPrimers?: boolean;
   svgRef?: React.Ref<SVGSVGElement>;
+}
+
+export interface LinearPlasmidMapProps {
+  doc: PlasmidDocument;
+  cutSites: CutSite[];
+  orfs?: ORF[];
+  selection: SelectionRange | null;
+  onSelectionChange: (s: SelectionRange | null) => void;
+  onFeatureClick?: (f: SequenceFeature) => void;
+  displayOptions?: MapDisplayOptions;
+  theme?: VizTheme;
+  width?: number;
+  svgRef?: React.Ref<SVGSVGElement>;
+}
+
+export interface MapDisplayOptionsPanelProps {
+  value: MapDisplayOptions;
+  onChange: (value: MapDisplayOptions) => void;
+  featureTypes: string[];
+}
+
+export interface ProteinSelection {
+  start: number;
+  end: number;
+}
+
+export interface ProteinSequenceViewProps {
+  protein: ProteinDocument;
+  selection?: ProteinSelection | null;
+  onSelectionChange?: (selection: ProteinSelection | null) => void;
+  theme?: VizTheme;
+  residuesPerRow?: number;
+  height?: number;
 }
 
 export interface LinearSequenceEditorProps {
@@ -47,6 +85,8 @@ export interface SangerAlignmentViewerProps {
   traces: SangerTraceData[];
   theme?: VizTheme;
   height?: number;
+  showCoverage?: boolean;
+  onCoverageClick?: (position: number) => void;
 }
 
 export interface VirtualGelSimulatorProps {
