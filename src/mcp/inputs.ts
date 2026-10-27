@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { PlasmidDocument, SequenceFeature } from '../types/schema';
 import { isProjectFile, loadProject, parseBioFile, parseProjectFile } from '../modules/io-adapter';
 import { calcGcPercent } from '../modules/seq-engine';
+import { rangeLabel } from '../lib/ranges';
 
 /** Largest file the server reads, and the longest sequence it accepts inline. */
 export const MAX_FILE_BYTES = 64 * 1024 * 1024;
@@ -140,11 +141,8 @@ export async function resolveDoc(files: FileAccess, input: DocInput): Promise<Pl
 
 /* --------------------------------- Output --------------------------------- */
 
-/** 1-based inclusive text for a 0-based half-open range, as GenBank writes it. */
-export function range1(start: number, end: number, length: number): string {
-  if (start === end) return `^${start}`;
-  return start < end ? `${start + 1}..${end}` : `${start + 1}..${length},1..${end}`;
-}
+/** 1-based inclusive GenBank text of a model range (see rangeLabel). */
+export const range1 = rangeLabel;
 
 function featureSummary(f: SequenceFeature, length: number) {
   return { name: f.name, type: f.type, start: f.start, end: f.end, location: range1(f.start, f.end, length), strand: f.strand };

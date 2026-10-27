@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Command } from 'cmdk';
 import {
-  BookMarked,
   Bot,
   Download,
-  Globe,
   SlidersHorizontal,
   FileUp,
   FlaskConical,
   Moon,
-  MonitorPlay,
   Redo2,
   Save,
   Search,
   Sun,
   Undo2,
+  Wrench,
   X,
 } from 'lucide-react';
 import type { ORF, PlasmidDocument, SangerTraceData, VirtualGelLane } from '../types/schema';
@@ -57,30 +55,21 @@ import { NcbiDialog, PrimerLibraryDialog } from './library';
 import { loadSampleLibrary } from './samples';
 import { download, openProject, recordSave, saveFile, saveProject } from './files';
 import { SessionManager, requestCloseDoc } from './session';
-import { isDirty, isDocCurrent, selectActiveDoc, selectDirtyIds, selectCutSites, tracesAlignedToCurrent, useWorkbench, type ViewMode, type WizardKind } from './store';
+import { DocTabs, Menu, StatusBar, UNDO_SCOPE, VIEWS, ViewRail, Welcome } from './shell';
+import { isDirty, isDocCurrent, selectActiveDoc, selectCutSites, tracesAlignedToCurrent, useWorkbench, type WizardKind } from './store';
 import { Button, Select, Tabs, cn } from './ui';
 import type { SequenceEdit } from '../modules/seq-engine';
 
 // The gel model takes field strength (V/cm); the UI shows volts across a standard 20 cm tank.
 const GEL_BOX_CM = 20;
 
-const VIEWS: Array<{ value: ViewMode; label: string }> = [
-  { value: 'split', label: '双视图' },
-  { value: 'map', label: '环形图谱' },
-  { value: 'sequence', label: '序列' },
-  { value: 'enzymes', label: '酶' },
-  { value: 'features', label: '特征/引物' },
-  { value: 'gel', label: '虚拟电泳' },
-  { value: 'sanger', label: 'Sanger 比对' },
-  { value: 'align', label: '多序列比对' },
-  { value: 'history', label: '历史树' },
-];
 
 type ExportFormat = 'project' | 'gbk' | 'dna' | 'fasta' | 'json' | 'svg' | 'png' | 'pdf' | 'print-map' | 'print-seq';
 
 const NO_TRACES: SangerTraceData[] = [];
 
-const UNDO_SCOPE = '撤销范围：序列文档的内容与打开/关闭（序列、特征、引物、历史、甲基化设置）。不含测序数据、电泳设置、视图与选区。';
+const THEME_NAMES = { light: '浅色', publication: '出版白底', dark: '深色' } as const;
+
 
 // FASTQ reads beyond this are not shown as traces; aligning thousands in the viewer is not useful.
 const MAX_FASTQ_TRACES = 200;
@@ -113,16 +102,25 @@ export default function App() {
   const dark = s.theme === 'dark';
 
   // Initial sample library.
+  const [samplesLoading, setSamplesLoading] = useState(true);
+  const openSamples = useCallback(
+    () =>
+      loadSampleLibrary().then(({ docs, traces }) => {
+        const st = useWorkbench.getState();
+        st.openDocs(docs, true, { saved: true });
+        Object.entries(traces).forEach(([id, t]) => !st.traces[id]?.length && st.setTraces(id, t));
+      }),
+    [],
+  );
   useEffect(() => {
-    if (useWorkbench.getState().docs.length) return;
-    loadSampleLibrary().then(({ docs, traces }) => {
-      const st = useWorkbench.getState();
-      st.openDocs(docs, true, { saved: true });
-      Object.entries(traces).forEach(([id, t]) => st.setTraces(id, t));
-      temporal.getState().clear();
-      if (new URLSearchParams(window.location.search).has('demo')) startDemo();
-    });
-  }, [temporal]);
+    if (useWorkbench.getState().docs.length) return setSamplesLoading(false);
+    openSamples()
+      .then(() => {
+        temporal.getState().clear();
+        if (new URLSearchParams(window.location.search).has('demo')) startDemo();
+      })
+      .finally(() => setSamplesLoading(false));
+  }, [temporal, openSamples]);
 
   // Cut sites follow the active document and enzyme set (computed off the main thread).
   useEffect(() => {
@@ -343,23 +341,33 @@ export default function App() {
     svgRef: mapRef,
   };
   const mapView = mapProps && (
-    <div className="relative flex h-full w-full items-center justify-center">
-      <div className="absolute right-2 top-2 z-10 flex gap-1">
-        <Select aria-label="图谱形状" value={s.mapShape} onChange={(e) => s.setMapShape(e.target.value as typeof s.mapShape)}>
-          <option value="auto">自动</option>
-          <option value="circular">环形</option>
-          <option value="linear">线性</option>
-        </Select>
-        <Button size="sm" onClick={() => setOptionsOpen(!optionsOpen)} title="图谱显示选项">
+    <div className="flex h-full w-full flex-col">
+      <div className="relative flex shrink-0 items-center justify-end gap-2 border-b border-[var(--border)] px-2 py-1">
+        <span className="text-[11px] text-[var(--muted)]">形状</span>
+        <Tabs
+          value={s.mapShape}
+          onChange={s.setMapShape}
+          items={[
+            { value: 'auto', label: '自动' },
+            { value: 'circular', label: '环形' },
+            { value: 'linear', label: '线性' },
+          ]}
+        />
+        <Button size="sm" variant={optionsOpen ? 'primary' : 'default'} onClick={() => setOptionsOpen(!optionsOpen)} title="图谱显示选项">
           <SlidersHorizontal size={13} /> 显示
         </Button>
+        {optionsOpen && (
+          <div className="absolute right-2 top-10 z-20 w-72 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 shadow-xl">
+            <MapDisplayOptionsPanel value={s.mapOptions} onChange={(v) => s.setMapOptions(v)} featureTypes={featureTypes} />
+          </div>
+        )}
       </div>
-      {optionsOpen && (
-        <div className="absolute right-2 top-11 z-20 w-72 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 shadow-xl">
-          <MapDisplayOptionsPanel value={s.mapOptions} onChange={(v) => s.setMapOptions(v)} featureTypes={featureTypes} />
+      {/* m-auto centres the map while keeping all of it reachable by scrolling when it is larger than the pane. */}
+      <div className="flex min-h-0 flex-1 overflow-auto">
+        <div className="m-auto">
+          {linearMap ? <LinearPlasmidMap {...mapProps} width={Math.max(640, mainHeight * 1.4)} /> : <CircularPlasmidMap {...mapProps} showPrimers={s.mapOptions.showPrimers !== false} />}
         </div>
-      )}
-      {linearMap ? <LinearPlasmidMap {...mapProps} width={Math.max(640, mainHeight * 1.4)} /> : <CircularPlasmidMap {...mapProps} showPrimers={s.mapOptions.showPrimers !== false} />}
+      </div>
     </div>
   );
   const protein = s.proteins.find((p) => p.id === s.activeProteinId) ?? null;
@@ -388,16 +396,15 @@ export default function App() {
         openFiles(e.dataTransfer.files);
       }}
     >
-      {/* Top bar */}
-      <header className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--panel)] px-3 py-2">
-        <div className="mr-2 flex items-baseline gap-2" title="GATC — Gene Assembly & Toolkit for Cloning">
+      {/* Top bar: file, edit, build, tools; search and assistant on the right */}
+      <header className="flex items-center gap-1.5 border-b border-[var(--border)] bg-[var(--panel)] px-3 py-1.5">
+        <div className="mr-3 flex items-baseline gap-2" title="GATC — Gene Assembly & Toolkit for Cloning">
           <span className="mono text-[17px] font-bold tracking-[0.12em]" aria-label="GATC">
             <span className="text-slate-800 dark:text-slate-200">G</span>
             <span className="text-emerald-600">A</span>
             <span className="text-red-600">T</span>
             <span className="text-blue-600">C</span>
           </span>
-          <span className="hidden text-[11px] text-[var(--muted)] lg:inline">Gene Assembly &amp; Toolkit for Cloning</span>
         </div>
         <Button size="sm" onClick={() => fileRef.current?.click()} title="打开文件 (Ctrl+O)">
           <FileUp size={14} /> 打开
@@ -413,112 +420,98 @@ export default function App() {
         <Button size="sm" onClick={() => saveProject()} disabled={!s.docs.length} title="保存全部文档为 GATC 项目 (Ctrl+S)">
           <Save size={14} /> 保存
         </Button>
-        <ExportMenu onExport={exportAs} disabled={!doc} />
-        <Button size="sm" onClick={() => s.setTool('ncbi')} title="按登录号从 NCBI 导入">
-          <Globe size={14} /> NCBI
-        </Button>
-        <Button size="sm" onClick={() => s.setTool('primerlib')} title="引物库">
-          <BookMarked size={14} /> 引物库
-        </Button>
-        <Button size="sm" onClick={() => s.setTool('find')} disabled={!doc} title="查找 (Ctrl+F)">
-          <Search size={14} /> 查找
-        </Button>
-        <Button size="sm" variant="primary" onClick={() => s.setWizard('restriction')} disabled={!doc}>
-          <FlaskConical size={14} /> 克隆向导
-        </Button>
-        <Button size="icon" variant="ghost" onClick={() => temporal.getState().undo()} title={`撤销 (Ctrl+Z)\n${UNDO_SCOPE}`}>
+        <Menu
+          label="导出"
+          icon={<Download size={14} />}
+          disabled={!doc}
+          entries={[
+            { label: 'GATC 项目 (.gatc，全部文档)', hint: 'Ctrl+S', onSelect: () => exportAs('project') },
+            { label: 'SnapGene (.dna)', onSelect: () => exportAs('dna') },
+            { label: 'GenBank (.gbk, SnapGene/ApE)', onSelect: () => exportAs('gbk') },
+            { label: 'FASTA', onSelect: () => exportAs('fasta') },
+            { label: 'JSON', onSelect: () => exportAs('json') },
+            { divider: true },
+            { label: '图谱 SVG（出版级）', onSelect: () => exportAs('svg') },
+            { label: '图谱 PNG 300 dpi', onSelect: () => exportAs('png') },
+            { label: '图谱 PDF（矢量）', onSelect: () => exportAs('pdf') },
+            { divider: true },
+            { label: '打印图谱…', onSelect: () => exportAs('print-map') },
+            { label: '打印序列…', onSelect: () => exportAs('print-seq') },
+          ]}
+        />
+        <div className="mx-1.5 h-5 w-px bg-[var(--border)]" />
+        <Button size="icon" variant="ghost" onClick={() => temporal.getState().undo()} title={`撤销 (Ctrl+Z)\n${UNDO_SCOPE}`} aria-label="撤销">
           <Undo2 size={15} />
         </Button>
-        <Button size="icon" variant="ghost" onClick={() => temporal.getState().redo()} title={`重做 (Ctrl+Shift+Z)\n${UNDO_SCOPE}`}>
+        <Button size="icon" variant="ghost" onClick={() => temporal.getState().redo()} title={`重做 (Ctrl+Shift+Z)\n${UNDO_SCOPE}`} aria-label="重做">
           <Redo2 size={15} />
         </Button>
-        <div className="flex-1" />
-        <SaveStatus />
-        <Button size="sm" variant={s.demo ? 'primary' : 'default'} onClick={() => (s.demo ? s.setDemo(null) : startDemo())} disabled={!doc} title="自动演示主要功能">
-          <MonitorPlay size={14} /> 演示
+        <div className="mx-1.5 h-5 w-px bg-[var(--border)]" />
+        <Button size="sm" variant="primary" onClick={() => s.setWizard('restriction')} disabled={!doc} title="PCR、酶切连接、Gibson、Golden Gate、定点突变等">
+          <FlaskConical size={14} /> 克隆向导
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => s.setPaletteOpen(true)}>
-          <Search size={14} /> 命令 <kbd className="rounded border border-[var(--border)] px-1 text-[10px]">Ctrl K</kbd>
+        <Menu
+          label="工具"
+          icon={<Wrench size={14} />}
+          entries={[
+            { label: '查找序列 / 蛋白模式', hint: 'Ctrl+F', disabled: !doc, onSelect: () => s.setTool('find') },
+            { label: '引物库', onSelect: () => s.setTool('primerlib') },
+            { label: '从 NCBI 导入（登录号）', onSelect: () => s.setTool('ncbi') },
+            { label: '反向翻译 / 密码子优化', onSelect: () => s.setTool('backtranslate') },
+            { divider: true },
+            { label: '自动注释特征', disabled: !doc, onSelect: () => transform('annotate') },
+            { label: '反向互补整条序列', disabled: !doc, onSelect: () => transform('revcomp') },
+            { label: '将选区起点设为新原点', disabled: !doc || !s.selection, onSelect: () => transform('origin') },
+            { label: '切换环状/线性', disabled: !doc, onSelect: () => transform('topology') },
+            { divider: true },
+            { label: s.demo ? '退出演示模式' : '演示模式（自动演示主要功能）', disabled: !doc && !s.demo, onSelect: () => (s.demo ? s.setDemo(null) : startDemo()) },
+          ]}
+        />
+        <div className="flex-1" />
+        <button
+          className="hidden h-7 w-60 items-center gap-2 whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--muted)] hover:border-blue-400 md:flex"
+          onClick={() => s.setPaletteOpen(true)}
+          title="命令面板 (Ctrl+K)：搜索命令、切换视图，或输入「酶切 EcoRI BamHI」"
+        >
+          <Search size={13} />
+          <span className="flex-1 truncate text-left">搜索命令…</span>
+          <kbd className="rounded border border-[var(--border)] px-1 text-[10px]">Ctrl K</kbd>
+        </button>
+        <Button size="icon" variant="ghost" className="md:hidden" onClick={() => s.setPaletteOpen(true)} aria-label="命令面板">
+          <Search size={15} />
         </Button>
         <Button
           size="icon"
           variant="ghost"
           onClick={() => s.setTheme(s.theme === 'dark' ? 'light' : s.theme === 'light' ? 'publication' : 'dark')}
-          title={`主题：${s.theme}`}
+          title={`主题：${THEME_NAMES[s.theme]}（点击切换）`}
         >
           {dark ? <Moon size={15} /> : <Sun size={15} />}
         </Button>
-        <Button size="sm" variant={s.copilotOpen ? 'primary' : 'default'} onClick={() => s.setCopilotOpen(!s.copilotOpen)}>
+        <Button size="sm" variant={s.copilotOpen ? 'primary' : 'default'} onClick={() => s.setCopilotOpen(!s.copilotOpen)} disabled={!doc}>
           <Bot size={14} /> AI 导师
         </Button>
       </header>
 
-      {/* Document tabs + view switcher */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--panel)] px-3 py-1.5">
-        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-          {s.docs.map((d) => (
-            <div
-              key={d.id}
-              className={cn(
-                'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs',
-                d.id === s.activeId ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300' : 'hover:bg-slate-100 dark:hover:bg-slate-800',
-              )}
-              onClick={() => s.setActive(d.id)}
-            >
-              {d.name}
-              {isDirty(s, d) && (
-                <span className="text-amber-500" title="有未保存的修改" aria-label="未保存">
-                  ●
-                </span>
-              )}
-              <span className="text-[var(--muted)]">{d.length} bp</span>
-              <button
-                className="opacity-40 hover:opacity-100"
-                onClick={(e) => (e.stopPropagation(), requestCloseDoc(d.id))}
-                aria-label="关闭"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-          {s.proteins.map((p) => (
-            <div
-              key={p.id}
-              className={cn(
-                'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs',
-                p.id === s.activeProteinId ? 'bg-emerald-50 font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'hover:bg-slate-100 dark:hover:bg-slate-800',
-              )}
-              onClick={() => s.setActiveProtein(p.id)}
-            >
-              {p.name}
-              <span className="text-[var(--muted)]">{p.sequence.length} aa</span>
-              <button className="opacity-40 hover:opacity-100" onClick={(e) => (e.stopPropagation(), s.closeProtein(p.id))} aria-label="关闭">
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="max-w-full overflow-x-auto">
-          <Tabs value={s.view} onChange={s.setView} items={VIEWS} />
-        </div>
-      </div>
+      <DocTabs onOpen={() => fileRef.current?.click()} onClose={requestCloseDoc} />
 
-      {/* Main */}
+      {/* Main: view rail, the active view, document inspector, assistant */}
       <div className="flex min-h-0 flex-1">
-        <main ref={mainRef} className="min-w-0 flex-1 overflow-hidden">
+        <ViewRail value={s.view} onChange={s.setView} disabled={!doc || !!protein} />
+        <main ref={mainRef} className="min-w-0 flex-1 overflow-hidden bg-[var(--bg)]">
           {protein ? (
             <ProteinSequenceView protein={protein} theme={vizTheme} height={Math.max(320, mainHeight - 20)} />
           ) : !doc ? (
-            <div className="flex h-full items-center justify-center text-[var(--muted)]">正在加载示例质粒… 也可以拖入 .dna / .gb / .fasta / .ab1 文件</div>
+            <Welcome loading={samplesLoading} onOpen={() => fileRef.current?.click()} onNcbi={() => s.setTool('ncbi')} onSamples={openSamples} />
           ) : (
             <div className="h-full">
               {s.view === 'split' && (
                 <div className="grid h-full grid-cols-1 lg:grid-cols-2">
-                  <div className="flex min-h-0 items-center justify-center overflow-auto border-r border-[var(--border)]">{mapView}</div>
-                  <div className="min-h-0 overflow-hidden">{seqView}</div>
+                  <div className="min-h-0 overflow-hidden border-r border-[var(--border)] bg-[var(--panel)]">{mapView}</div>
+                  <div className="min-h-0 overflow-hidden bg-[var(--panel)]">{seqView}</div>
                 </div>
               )}
-              {s.view === 'map' && <div className="flex h-full items-center justify-center overflow-auto">{mapView}</div>}
+              {s.view === 'map' && <div className="h-full bg-[var(--panel)]">{mapView}</div>}
               {s.view === 'sequence' && seqView}
               {s.view === 'enzymes' && <EnzymePanel doc={doc} sites={cutSites} />}
               {s.view === 'features' && <FeaturePanel doc={doc} />}
@@ -573,7 +566,7 @@ export default function App() {
           )}
         </main>
         {doc && !protein && (
-          <aside className="hidden w-72 shrink-0 overflow-auto border-l border-[var(--border)] bg-[var(--panel)] xl:block">
+          <aside className="hidden w-72 shrink-0 overflow-auto border-l border-[var(--border)] bg-[var(--panel)] xl:block" aria-label="文档信息">
             <Inspector doc={doc} />
           </aside>
         )}
@@ -592,8 +585,14 @@ export default function App() {
         )}
       </div>
 
+      <StatusBar doc={doc} cutSites={cutSites} uniqueCutters={uniqueCutters.length} selection={s.selection} />
+
       {s.toast && (
-        <div className="fixed bottom-4 left-1/2 z-50 max-w-[90vw] -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2 text-xs text-white shadow-lg dark:bg-slate-100 dark:text-slate-900">
+        <div
+          data-toast
+          role="status"
+          className="fixed bottom-10 left-1/2 z-50 max-w-[min(90vw,720px)] -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2 text-xs leading-relaxed text-white shadow-lg dark:bg-slate-100 dark:text-slate-900"
+        >
           {s.toast}
         </div>
       )}
@@ -616,101 +615,6 @@ export default function App() {
         onExport={exportAs}
         onTransform={transform}
       />
-    </div>
-  );
-}
-
-/** Unsaved count, autosave outcome and the save/undo settings. */
-function SaveStatus() {
-  const dirty = useWorkbench((s) => selectDirtyIds(s).length);
-  const autosave = useWorkbench((s) => s.autosave);
-  const settings = useWorkbench((s) => s.settings);
-  const setSettings = useWorkbench((s) => s.setSettings);
-  const [open, setOpen] = useState(false);
-  const text =
-    autosave.state === 'error'
-      ? '自动保存失败'
-      : dirty
-        ? `${dirty} 个未保存${autosave.state === 'saved' ? ` · 已自动备份 ${new Date(autosave.at).toLocaleTimeString()}` : ''}`
-        : '全部已保存';
-  return (
-    <div className="relative">
-      <button
-        className={cn(
-          'rounded px-1.5 py-0.5 text-[11px]',
-          autosave.state === 'error' ? 'bg-red-50 font-medium text-red-700 dark:bg-red-950/50 dark:text-red-300' : 'text-[var(--muted)] hover:bg-slate-100 dark:hover:bg-slate-800',
-        )}
-        title={autosave.state === 'error' ? autosave.error : '自动保存与撤销设置'}
-        onClick={() => setOpen(!open)}
-      >
-        {text}
-      </button>
-      {open && (
-        <div className="absolute right-0 top-8 z-30 w-72 space-y-2 rounded-md border border-[var(--border)] bg-[var(--panel)] p-3 text-xs shadow-lg" onMouseLeave={() => setOpen(false)}>
-          {autosave.state === 'error' && <div className="text-red-600">{autosave.error}</div>}
-          <div className="text-[var(--muted)]">
-            有未保存修改时，工作区会在停止操作后自动备份到本机（{'__TAURI_INTERNALS__' in window ? '应用数据目录' : '浏览器 IndexedDB'}），用于异常退出后恢复。它不替代保存：要交给他人或长期保留，请用 Ctrl+S 保存为 .gatc 项目。
-          </div>
-          <label className="flex items-center justify-between gap-2">
-            自动备份延迟
-            <Select value={settings.autosaveDelayMs} onChange={(e) => setSettings({ autosaveDelayMs: Number(e.target.value) })}>
-              {[1000, 3000, 5000, 10000, 30000].map((ms) => (
-                <option key={ms} value={ms}>
-                  {ms / 1000} 秒
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="flex items-center justify-between gap-2">
-            撤销步数（重启后生效）
-            <Select value={settings.undoLimit} onChange={(e) => setSettings({ undoLimit: Number(e.target.value) })}>
-              {[100, 500, 1000, 2000].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <div className="text-[var(--muted)]">{UNDO_SCOPE}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ExportMenu({ onExport, disabled }: { onExport: (f: ExportFormat) => void; disabled: boolean }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <Button size="sm" disabled={disabled} onClick={() => setOpen(!open)}>
-        <Download size={14} /> 导出
-      </Button>
-      {open && (
-        <div className="absolute left-0 top-9 z-30 w-48 rounded-md border border-[var(--border)] bg-[var(--panel)] p-1 shadow-lg" onMouseLeave={() => setOpen(false)}>
-          {(
-            [
-              ['project', 'GATC 项目 (.gatc，全部文档)'],
-              ['dna', 'SnapGene (.dna)'],
-              ['gbk', 'GenBank (.gbk, SnapGene/ApE)'],
-              ['fasta', 'FASTA'],
-              ['json', 'JSON'],
-              ['svg', '图谱 SVG（出版级）'],
-              ['png', '图谱 PNG 300 dpi'],
-              ['pdf', '图谱 PDF（矢量）'],
-              ['print-map', '打印图谱…'],
-              ['print-seq', '打印序列…'],
-            ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
-              onClick={() => (onExport(k), setOpen(false))}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

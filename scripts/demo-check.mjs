@@ -26,7 +26,7 @@ const state = () =>
       title: card.querySelector('.font-semibold')?.textContent ?? '',
       busy: card.textContent.includes('运行中'),
       error: card.querySelector('p.text-red-600')?.textContent ?? null,
-      toast: document.querySelector('.fixed.bottom-4')?.textContent ?? '',
+      toast: document.querySelector('[data-toast]')?.textContent ?? '',
     };
   });
 

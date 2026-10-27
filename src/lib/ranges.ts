@@ -44,3 +44,9 @@ export function fromUiRange(doc: Topo, start: number, end: number): Range | { er
 export function rangeSequence(doc: Pick<PlasmidDocument, 'sequence'>, { start, end }: Range): string {
   return start <= end ? doc.sequence.slice(start, end) : doc.sequence.slice(start) + doc.sequence.slice(0, end);
 }
+
+/** 1-based inclusive GenBank-style text for a model range: "101..250", "901..1000,1..50" across the origin, "^10" for an empty range. */
+export function rangeLabel(start: number, end: number, length: number): string {
+  if (start === end) return `^${start}`;
+  return start < end ? `${start + 1}..${end}` : `${start + 1}..${length},1..${end}`;
+}

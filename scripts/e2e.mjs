@@ -30,10 +30,10 @@ const shot = (name) => page.screenshot({ path: `${out}/${name}.png` });
 const view = (label) => page.getByRole('button', { name: label, exact: true }).click();
 let lastToast = '';
 const toast = async () => {
-  const loc = page.locator('.fixed.bottom-4').first();
+  const loc = page.locator('[data-toast]').first();
   await page.waitForFunction(
     (prev) => {
-      const el = document.querySelector('.fixed.bottom-4');
+      const el = document.querySelector('[data-toast]');
       return !!el && el.textContent !== prev;
     },
     lastToast,
@@ -75,7 +75,7 @@ await check('线性序列视图', async () => {
 
 await check('酶列表 + 过滤（单切点）', async () => {
   await view('酶');
-  await page.getByText('单切点').click();
+  await page.getByText('单切点', { exact: true }).click();
   const rows = await page.locator('tbody tr').count();
   if (!rows) throw new Error('no enzymes listed');
   await shot('04-enzymes');
