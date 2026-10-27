@@ -3,8 +3,8 @@ title: "GATC — Gene Assembly & Toolkit for Cloning"
 message: "If you use GATC in work you publish, please cite it as below."
 type: software
 authors:
-  - family-names: Qiu
-    given-names: Shui
+  - family-names: Xu
+    given-names: Zhonghe
     alias: ArchitektSpeer
 repository-code: "https://github.com/ArchitektSpeer/GATC"
 url: "https://github.com/ArchitektSpeer/GATC"

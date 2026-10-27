@@ -1,5 +1,7 @@
 # GATC
 
+![GATC — the open-source SnapGene alternative](docs/promo/hero-en.png)
+
 **G**ene **A**ssembly & **T**oolkit for **C**loning — the four DNA bases, and what the tool does.
 
 An open-source, offline-first molecular biology workbench: plasmid maps, sequence editing,
@@ -124,6 +126,8 @@ A build also contains third-party packages under their own permissive licences, 
 ---
 
 ## 中文
+
+![GATC — 开源的 SnapGene 替代品](docs/promo/hero-zh.png)
 
 GATC 是开源、离线优先的分子生物学工作台：质粒图谱、序列编辑、酶切与克隆模拟、引物设计、
 Sanger 比对、虚拟电泳，以及自带密钥（BYOK）的 AI 助手。一套代码同时构建纯静态 Web/PWA 与
