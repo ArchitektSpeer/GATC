@@ -584,7 +584,7 @@ export function ProteinSequenceView({
           Drag across residues to select · {formatBp(length)} aa
         </span>
         <span style={{ fontFamily: tokens.fontMono }}>
-          Row {Math.min(rowCount, Math.floor(scrollTop / ROW_HEIGHT) + 1)} / {rowCount || 1}
+          第 {Math.min(rowCount, Math.floor(scrollTop / ROW_HEIGHT) + 1)} / {rowCount || 1} 行
         </span>
       </div>
     </div>

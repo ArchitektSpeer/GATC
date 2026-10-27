@@ -55,11 +55,11 @@ await check('加载示例 pUC19 / pEGFP-N1', async () => {
 });
 
 await check('Web Worker 计算酶切位点', async () => {
-  await page.waitForFunction(() => !/\b0 cut sites\b/.test(document.body.innerText), null, { timeout: 20000 });
-  const m = (await page.locator('body').innerText()).match(/(\d+) cut sites/);
+  await page.waitForFunction(() => !/(^|[^\d])0 个切点/.test(document.body.innerText), null, { timeout: 20000 });
+  const m = (await page.locator('body').innerText()).match(/(\d+) 个切点/);
   if (!m || +m[1] === 0) throw new Error('no cut sites');
   await shot('01-split');
-  return `${m[1]} cut sites`;
+  return `${m[1]} 个切点`;
 });
 
 await check('环形图谱视图', async () => {

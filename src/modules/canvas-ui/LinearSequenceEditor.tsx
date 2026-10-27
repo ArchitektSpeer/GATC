@@ -468,10 +468,10 @@ export function LinearSequenceEditor({
               textOverflow: 'ellipsis',
             }}
           >
-            {doc.name || 'Untitled sequence'}
+            {doc.name || '未命名序列'}
           </div>
           <div style={{ fontSize: 11, color: tokens.muted }}>
-            {formatBp(length)} bp · {bpPerRow} bp per row · {totalRows} rows
+            {formatBp(length)} bp · 每行 {bpPerRow} bp · 共 {totalRows} 行
           </div>
         </div>
       </div>
@@ -486,10 +486,10 @@ export function LinearSequenceEditor({
         }}
       >
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <MousePointer2 size={12} /> drag to select
+          <MousePointer2 size={12} /> 拖动选择
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Keyboard size={12} /> {onEdit ? 'type ACGT to edit' : 'read only'}
+          <Keyboard size={12} /> {onEdit ? '输入 ACGT 编辑' : '只读'}
         </span>
         {liveSelection ? (
           <span style={{ fontFamily: tokens.fontMono, color: tokens.accent }}>
@@ -1045,11 +1045,11 @@ export function LinearSequenceEditor({
         }}
       >
         <span>
-          Row {Math.min(totalRows, Math.floor(scrollTop / layout.rowHeight) + 1)} / {totalRows}
+          第 {Math.min(totalRows, Math.floor(scrollTop / layout.rowHeight) + 1)} / {totalRows} 行
           {' · '}
           {trimNumber((Math.min(length, scrollTop / layout.rowHeight * bpPerRow + bpPerRow) / Math.max(1, length)) * 100)}% · {formatBp(length)} bp
         </span>
-        <span>Selection {liveSelection ? `${formatBp(liveSelectionLength)} bp` : 'none'}</span>
+        <span>选区 {liveSelection ? `${formatBp(liveSelectionLength)} bp` : '无'}</span>
       </div>
     </div>
   );

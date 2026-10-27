@@ -1,49 +1,174 @@
 # GATC
 
-**G**ene **A**ssembly & **T**oolkit for **C**loning：名字既是 DNA 的四种碱基，也是这个工具要做的事。
+**G**ene **A**ssembly & **T**oolkit for **C**loning — the four DNA bases, and what the tool does.
 
-GATC 是开源、离线优先的分子生物学工作台：质粒图谱、序列编辑、酶切/克隆模拟、引物设计、Sanger 比对、虚拟电泳与 BYOK AI 实验导师。一套代码同时构建纯静态 Web/PWA 与 Tauri 桌面客户端。
+An open-source, offline-first molecular biology workbench: plasmid maps, sequence editing,
+restriction and cloning simulation, primer design, Sanger alignment, virtual gels and a
+bring-your-own-key AI assistant. One codebase builds both a static web app (PWA) and a Tauri
+desktop app.
 
-## 快速开始
+[English](#english) · [中文](#中文)
+
+---
+
+## English
+
+### Quick start
 
 ```bash
 npm install
 npm run dev          # http://localhost:5173
-npm run build        # 生产构建 → dist/（可直接部署到 GitHub Pages）
+npm run build        # production build → dist/ (deployable as a static site)
+npm run tauri:dev    # desktop app (needs Rust and a system WebView)
+npm run tauri:build
+```
+
+It opens with two real NCBI sequences, **pUC19 (L09137)** and **pEGFP-N1 (U55762)**, plus a
+simulated Sanger read covering EGFP. Drop in `.dna`, `.prot`, `.gb`, `.ape`, `.fasta`, `.embl`,
+`.gff`, `.ab1` or `.fastq` files, or fetch by accession from NCBI.
+
+Shortcuts: `Ctrl/Cmd+K` command palette, `Ctrl/Cmd+F` find, `Ctrl/Cmd+Z` undo,
+`Ctrl/Cmd+Shift+Z` redo, `Ctrl/Cmd+O` open.
+
+### What it does
+
+| Area | Capabilities |
+|---|---|
+| Saving | `.gatc` project files (all documents, raw sequencing data and workspace, versioned with migrations); unsaved-change marker and close prompt; automatic local backup while there are unsaved changes (IndexedDB in the browser, app data directory on desktop, atomic writes with rotation) and recovery after a crash — see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
+| Files | Read and write SnapGene `.dna` (primers, methylation, construction history tree, multi-segment features); read GenBank, ApE, Vector NTI, Benchling, FASTA, EMBL, GFF, DNASTAR `.seq`, Serial Cloner `.xdna`, Geneious, SBOL; protein `.prot`, GenPept and protein FASTA; FASTQ reads; fetch from NCBI by accession; export GenBank (joined multi-segment features, ApE colours), FASTA and JSON; export maps as SVG, 300 dpi PNG or vector PDF, and print maps and sequences |
+| Views | Circular and linear maps (multi-track features, collision-avoiding leader lines, multi-segment features, ORFs, GC curve, display options), virtualised double-stranded sequence (staggered cut marks, primers, CDS translation), protein view (property colouring, MW and pI), enzyme list, features/primers/ORFs, virtual gel, Sanger traces with coverage, multiple alignment, replayable cloning history tree; light, dark and publication themes |
+| Editing | Base-level editing, add/edit/delete features and primers (all undoable), ORF to CDS, auto-annotation, reverse complement, set origin, circular/linear toggle |
+| Finding | IUPAC degenerate patterns, mismatch tolerance, both strands, matches across the origin, six-frame protein search; primer library binding-site search across all open sequences (mismatches allowed, 3′ end must match) |
+| Enzymes | 580+ commercial enzymes and a 3000+ enzyme database with isoschizomer lookup, preset and custom enzyme sets, scanning across the origin, Dam/Dcm/CpG methylation blocking, NEB buffer recommendation for double digests with star-activity warnings |
+| Annotation | Local auto-annotation from 300+ common parts (exact and tolerant DNA matching, CDS parts also matched by protein translation), six-frame ORFs with MW and pI |
+| Cloning | Single and double digest ligation (compatible ends, fill-in/chew-back, dephosphorylation), insert fragment, Gibson / NEBuilder HiFi / In-Fusion, Golden Gate (fidelity score, internal-site warnings), Gateway BP/LR/MultiSite LR, TA / GC / TOPO (TA, blunt, directional), LIC, Cre/lox and Flp/FRT recombination (excision, inversion, integration), PCR, fusion PCR, site-directed mutagenesis (QuikChange and Q5 back-to-back, with silent restriction-site suggestions) |
+| Primers | SantaLucia 1998 nearest-neighbour with Owczarzy 2008 Mg²⁺/dNTP salt correction (Tm within 0.01 °C of 46 reference primers), SantaLucia & Hicks 2004 dynamic-programming hairpin and dimer ΔG (mean error 0.3–0.5 kcal/mol), restriction-site and homology-arm primer design, a primer library that persists across sessions |
+| Alignment | Sanger `.ab1` (Mott trimming, heterozygous double peaks, alignment across the origin, amino-acid impact, multi-read consensus and coverage), FASTQ read alignment, multiple sequence alignment (guide tree plus progressive profile alignment, DNA and protein BLOSUM62), pairwise global/local/semi-global alignment |
+| Protein | Back-translation and codon optimisation for 8 hosts (optionally avoiding named restriction sites), CAI |
+| Gels | 36 commercial ladders, 0.5–3% agarose, voltage and run time, supercoiled/nicked/linear conformations, mass-weighted band intensity |
+| AI | Bring your own key: OpenAI, Anthropic, DeepSeek, Gemini or any compatible endpoint; the key stays in the browser; compressed plasmid context; structured action cards you can run with one click |
+
+### Architecture
+
+```
+src/
+├── types/schema.ts          the single data contract
+├── modules/                 six isolated modules (they import the schema and open-source libraries, never each other)
+│   ├── io-adapter/          @teselagen/bio-parsers plus a SnapGene TLV enrichment pass
+│   ├── seq-engine/          digestion, ORFs, edit-coordinate bookkeeping, auto-annotation
+│   ├── cloning-primer/      thermodynamics and every cloning simulation
+│   ├── alignment-gel/       ABIF parsing, alignment, virtual gel
+│   ├── canvas-ui/           purely controlled visual components
+│   └── ai-copilot/          BYOK adapters and the sidebar
+└── app/                     integration: zustand+zundo store, Web Worker pool, workbench
+```
+
+Heavy computations run in a Web Worker pool through `src/app/bio.worker.ts`, so the main thread
+is never blocked.
+
+### MCP server
+
+The deterministic sequence tools (read files, cut sites, primer design, PCR/Gibson/Golden Gate
+simulation, mutagenesis, ORFs, auto-annotation, Sanger alignment, write files) are available to
+other agents as a local MCP server:
+
+```bash
+npm run mcp:build
+claude mcp add gatc -- node "$PWD/dist-mcp/gatc-mcp.mjs" --root ~/plasmids
+```
+
+File access is confined to `--root`; only `write_sequence_file` writes, and it does not
+overwrite by default. See [docs/MCP.md](docs/MCP.md) for the tool list and coordinate
+conventions.
+
+### Verification
+
+```bash
+npm run typecheck                     # tsc --noEmit
+npm run test                          # vitest: unit, cross-module and real-file tests
+npm run build && npx vite preview &   # then:
+node scripts/e2e.mjs e2e-report       # Playwright walkthrough with screenshots and report.json
+npm run check:session                 # browser run: edit → force quit → recover → save → reopen
+npm run mcp:build && node scripts/mcp-check.mjs   # start the MCP server over stdio and call it
+node scripts/make-audit-bundle.mjs    # write AUDIT_BUNDLE.md for an external review
+npm run crosscheck                    # compare with Biopython, REBASE, primer3 and pydna (needs Python 3)
+```
+
+`npm run crosscheck` runs every computation against an independent implementation, using `.dna`
+files written by SnapGene itself:
+
+| Stage | GATC | Reference |
+|---|---|---|
+| 1 | `.dna` read and write | Biopython's SnapGene parser, both directions |
+| 2 | Cut sites, primer Tm, CDS translation | REBASE, primer3, the protein stored in the file |
+| 3 | Digests, PCR, restriction cloning; Gibson, Golden Gate | pydna; known answers |
+| 4 | Gateway BP/LR; Cre/lox | pydna `gateway_assembly`, `recombinase_assembly` |
+| 5 | Pairwise alignment; TA/TOPO/LIC/GC; mutagenesis; gel read-back | Biopython `PairwiseAligner`; known answers; Biopython translation and primer3 |
+
+Results, and the defects this found and fixed, are in [docs/CROSSCHECK.md](docs/CROSSCHECK.md).
+
+### Licence
+
+Copyright (C) 2026 Qiu Shui
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3 of
+the License, or (at your option) any later version. It is distributed in the hope that it will
+be useful, but **WITHOUT ANY WARRANTY**. See [LICENSE](LICENSE) for the full terms.
+
+SPDX-License-Identifier: `GPL-3.0-or-later`
+
+---
+
+## 中文
+
+GATC 是开源、离线优先的分子生物学工作台：质粒图谱、序列编辑、酶切与克隆模拟、引物设计、
+Sanger 比对、虚拟电泳，以及自带密钥（BYOK）的 AI 助手。一套代码同时构建纯静态 Web/PWA 与
+Tauri 桌面客户端。
+
+### 快速开始
+
+```bash
+npm install
+npm run dev          # http://localhost:5173
+npm run build        # 生产构建 → dist/（可直接作为静态站点部署）
 npm run tauri:dev    # 桌面客户端（需 Rust 与系统 WebView）
 npm run tauri:build
 ```
 
-打开后自动加载 NCBI 真实序列 **pUC19 (L09137)** 与 **pEGFP-N1 (U55762)**，以及一条覆盖 EGFP 的模拟 Sanger 读长。可直接拖入 `.dna / .prot / .gb / .ape / .fasta / .embl / .gff / .ab1 / .fastq` 等文件，或点击「NCBI」按登录号导入。
+打开后自动加载 NCBI 真实序列 **pUC19 (L09137)** 与 **pEGFP-N1 (U55762)**，以及一条覆盖 EGFP
+的模拟 Sanger 读长。可直接拖入 `.dna`、`.prot`、`.gb`、`.ape`、`.fasta`、`.embl`、`.gff`、
+`.ab1`、`.fastq` 等文件，或按登录号从 NCBI 导入。
 
-快捷键：`Ctrl/Cmd+K` 命令面板（支持「酶切 EcoRI BamHI」直接跑胶）、`Ctrl/Cmd+F` 查找、`Ctrl/Cmd+Z` 撤销、`Ctrl/Cmd+Shift+Z` 重做、`Ctrl/Cmd+O` 打开文件。
+快捷键：`Ctrl/Cmd+K` 命令面板、`Ctrl/Cmd+F` 查找、`Ctrl/Cmd+Z` 撤销、`Ctrl/Cmd+Shift+Z` 重做、
+`Ctrl/Cmd+O` 打开文件。
 
-## 功能
+### 功能
 
 | 领域 | 能力 |
 |---|---|
-| 保存 | `.gatc` 项目文件（全部文档 + 原始测序数据 + 工作区，带版本号与迁移）；未保存标记与关闭提醒；有未保存修改时自动备份到本机（IndexedDB / 桌面应用数据目录，原子写入与轮换备份），异常退出后可恢复。见 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
-| 文件 | 读写 SnapGene `.dna`（含引物、甲基化、构建历史树、多段特征）；读取 GenBank / ApE / Vector NTI / Benchling、FASTA、EMBL、GFF、DNASTAR `.seq`、Serial Cloner `.xdna`、Geneious、SBOL；蛋白文件 `.prot` / GenPept / 蛋白 FASTA；FASTQ 读长；按登录号从 NCBI 导入；导出 GenBank（join 多段特征、ApE 颜色）/ FASTA / JSON；图谱导出 SVG、300 dpi PNG、矢量 PDF，图谱与序列可直接打印 |
-| 视图 | 环形与线性图谱（多轨道特征、防碰撞引线、多段特征、ORF、GC 曲线、可配置显示选项）、虚拟滚动双链序列（酶切阶梯切口、引物、CDS 翻译）、蛋白序列视图（按理化性质着色、分子量/pI）、酶列表、特征/引物/ORF、虚拟电泳、Sanger 峰图与覆盖度、多序列比对、可重放的克隆历史树；浅色/深色/出版白底主题 |
-| 编辑 | 碱基级编辑、特征与引物的手动添加/编辑/删除（均可撤销）、ORF 一键转为 CDS、自动注释、反向互补、重设原点、环状/线性切换 |
-| 查找 | IUPAC 简并模式、允许错配、双链与跨零点命中、6 框蛋白模式查找；引物库在所有打开序列中查找结合位点（允许错配，3′ 端需完全匹配） |
-| 酶 | 580+ 种市售酶、3000+ 酶数据库（含同裂酶/异裂酶查询），预设酶集与自定义酶集，跨零点扫描，Dam/Dcm/CpG 甲基化阻断判定，双酶切 NEB 缓冲液推荐与星号活性提示 |
-| 注释 | 300+ 常用元件的本地自动注释（DNA 精确/容错匹配，CDS 元件可按蛋白翻译匹配），6 框 ORF + 分子量/等电点 |
-| 克隆 | 单/双酶切连接（同尾酶、补平/削平、去磷酸化）、插入片段、Gibson / NEBuilder HiFi / In-Fusion、Golden Gate（保真度评分、内部位点预警）、Gateway BP/LR/MultiSite LR、TA / GC / TOPO（TA、平端、定向）、LIC、Cre/Lox 与 Flp/FRT 重组（切除、倒位、整合）、PCR、融合 PCR、定点突变（QuikChange / Q5 背靠背 + 静默酶切位点推荐） |
-| 引物 | SantaLucia 1998 最邻近 + Owczarzy 2008 Mg²⁺/dNTP 盐校正（46 条参考引物 Tm 误差 < 0.01 °C），SantaLucia & Hicks 2004 动态规划发夹/二聚体 ΔG（平均误差 0.3–0.5 kcal/mol），酶切位点 + 保护碱基 / 同源臂引物设计，跨会话保存的引物库（批量导入） |
-| 比对 | Sanger `.ab1`（Mott 修剪、杂合双峰、跨零点比对、氨基酸影响注释、多读长一致性与覆盖度）、FASTQ 读长比对、多序列比对（引导树 + 渐进式 profile 比对，DNA/蛋白 BLOSUM62）、双序列全局/局部/半全局比对 |
+| 保存 | `.gatc` 项目文件（全部文档 + 原始测序数据 + 工作区，带版本号与迁移）；未保存标记与关闭提醒；有未保存修改时自动备份到本机（浏览器用 IndexedDB，桌面用应用数据目录，原子写入与轮换备份），异常退出后可恢复。见 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
+| 文件 | 读写 SnapGene `.dna`（含引物、甲基化、构建历史树、多段特征）；读取 GenBank、ApE、Vector NTI、Benchling、FASTA、EMBL、GFF、DNASTAR `.seq`、Serial Cloner `.xdna`、Geneious、SBOL；蛋白文件 `.prot`、GenPept、蛋白 FASTA；FASTQ 读长；按登录号从 NCBI 导入；导出 GenBank（join 多段特征、ApE 颜色）、FASTA、JSON；图谱导出 SVG、300 dpi PNG、矢量 PDF，图谱与序列可直接打印 |
+| 视图 | 环形与线性图谱（多轨道特征、防碰撞引线、多段特征、ORF、GC 曲线、可配置显示项）、虚拟滚动双链序列（酶切阶梯切口、引物、CDS 翻译）、蛋白序列视图（按理化性质着色、分子量与 pI）、酶列表、特征/引物/ORF、虚拟电泳、Sanger 峰图与覆盖度、多序列比对、可重放的克隆历史树；浅色/深色/出版白底主题 |
+| 编辑 | 碱基级编辑，特征与引物的添加、编辑、删除（均可撤销），ORF 一键转 CDS，自动注释，反向互补，重设原点，环状/线性切换 |
+| 查找 | IUPAC 简并模式、允许错配、双链与跨原点命中、6 框蛋白查找；引物库可在所有已打开序列中查找结合位点（允许错配，3′ 端须完全匹配） |
+| 酶 | 580+ 种市售酶、3000+ 酶数据库（含同裂酶查询），预设与自定义酶集，跨原点扫描，Dam/Dcm/CpG 甲基化阻断判定，双酶切 NEB 缓冲液推荐与星号活性提示 |
+| 注释 | 300+ 常用元件的本地自动注释（DNA 精确与容错匹配，CDS 元件可按蛋白翻译匹配），6 框 ORF 与分子量/等电点 |
+| 克隆 | 单双酶切连接（同尾酶、补平/削平、去磷酸化）、插入片段、Gibson / NEBuilder HiFi / In-Fusion、Golden Gate（保真度评分、内部位点预警）、Gateway BP/LR/MultiSite LR、TA / GC / TOPO（TA、平端、定向）、LIC、Cre/lox 与 Flp/FRT 重组（切除、倒位、整合）、PCR、融合 PCR、定点突变（QuikChange 与 Q5 背靠背，附静默酶切位点推荐） |
+| 引物 | SantaLucia 1998 最邻近 + Owczarzy 2008 Mg²⁺/dNTP 盐校正（46 条参考引物 Tm 误差 < 0.01 °C），SantaLucia & Hicks 2004 动态规划发夹与二聚体 ΔG（平均误差 0.3–0.5 kcal/mol），酶切位点加保护碱基、同源臂引物设计，跨会话保存的引物库 |
+| 比对 | Sanger `.ab1`（Mott 修剪、杂合双峰、跨原点比对、氨基酸影响、多读长一致性与覆盖度）、FASTQ 读长比对、多序列比对（引导树 + 渐进式 profile 比对，DNA 与蛋白 BLOSUM62）、双序列全局/局部/半全局比对 |
 | 蛋白 | 反向翻译与 8 种宿主密码子优化（可避开指定酶切位点）、CAI 计算 |
 | 电泳 | 36 种商业 Ladder、0.5–3% 胶浓度、电压与时间、超螺旋/开环/线性构象、按质量计算亮度 |
-| AI | BYOK：OpenAI / Anthropic / DeepSeek / Gemini / 自定义兼容端点；密钥仅存于浏览器本地；质粒上下文压缩；一键执行的结构化动作卡片（设计引物、酶切跑胶、高亮、添加特征、启动克隆向导） |
+| AI | 自带密钥：OpenAI、Anthropic、DeepSeek、Gemini 或任意兼容端点；密钥仅存于本地浏览器；质粒上下文压缩；可一键执行的结构化动作卡片 |
 
-## 架构
+### 架构
 
 ```
 src/
 ├── types/schema.ts          全局唯一数据契约
 ├── modules/                 6 个互不引用的独立模块（只依赖 schema 与开源库）
 │   ├── io-adapter/          @teselagen/bio-parsers + SnapGene TLV 增强解析
-│   ├── seq-engine/          酶切 / ORF / 编辑坐标联动 / 自动注释
+│   ├── seq-engine/          酶切、ORF、编辑坐标联动、自动注释
 │   ├── cloning-primer/      热力学与全部克隆模拟
 │   ├── alignment-gel/       ABIF 解析、比对、虚拟电泳
 │   ├── canvas-ui/           纯受控可视化组件
@@ -51,45 +176,75 @@ src/
 └── app/                     集成层：zustand+zundo 状态总线、Web Worker 池、工作台
 ```
 
-计算密集函数通过 `src/app/bio.worker.ts` 在 Web Worker 池中执行，主线程不被阻塞。
+计算密集的函数通过 `src/app/bio.worker.ts` 在 Web Worker 池中执行，主线程不被阻塞。
 
-## MCP 接口
+### MCP 接口
 
-GATC 的确定性序列工具（读文件、酶切位点、引物设计、PCR/Gibson/Golden Gate 模拟、定点突变、ORF、自动注释、Sanger 比对、写文件）可作为本地 MCP 服务器供其他 Agent 或 harness 调用：
+GATC 的确定性序列工具（读文件、酶切位点、引物设计、PCR/Gibson/Golden Gate 模拟、定点突变、
+ORF、自动注释、Sanger 比对、写文件）可作为本地 MCP 服务器供其他 Agent 调用：
 
 ```bash
 npm run mcp:build
 claude mcp add gatc -- node "$PWD/dist-mcp/gatc-mcp.mjs" --root ~/plasmids
 ```
 
-文件访问限制在 `--root` 指定的目录内；只有 `write_sequence_file` 会写文件，且默认不覆盖已有文件。工具列表、坐标约定和各客户端的配置见 [docs/MCP.md](docs/MCP.md)。
+文件访问限制在 `--root` 指定的目录内；只有 `write_sequence_file` 会写文件，且默认不覆盖已有
+文件。工具列表、坐标约定与各客户端配置见 [docs/MCP.md](docs/MCP.md)。
 
-## 验证
+### 验证
 
 ```bash
 npm run typecheck                     # tsc --noEmit
-npm run test                          # vitest：单元 + 跨模块集成 + 真实文件
+npm run test                          # vitest：单元、跨模块与真实文件测试
 npm run build && npx vite preview &   # 然后：
-node scripts/e2e.mjs e2e-report       # Playwright 浏览器功能评测，输出截图与 report.json
+node scripts/e2e.mjs e2e-report       # Playwright 浏览器走查，输出截图与 report.json
 npm run check:session                 # 浏览器走查：编辑 → 强制关闭 → 恢复 → 保存 → 重新打开
 npm run mcp:build && node scripts/mcp-check.mjs   # 以 stdio 启动 MCP 服务器并调用工具
 node scripts/make-audit-bundle.mjs    # 生成 AUDIT_BUNDLE.md 供外部审计
 npm run crosscheck                    # 与 Biopython / REBASE / primer3 / pydna 交叉验证（需 Python 3）
 ```
 
-交叉验证使用 SnapGene 自身生成的真实 `.dna` 文件，结果与发现并修复的问题见 [docs/CROSSCHECK.md](docs/CROSSCHECK.md)。
+`npm run crosscheck` 用 **SnapGene 自身生成的真实 `.dna` 文件**，把每一项计算与独立实现逐项对比：
 
-## 许可
+| 阶段 | GATC | 参考实现 |
+|---|---|---|
+| 1 | `.dna` 读写 | Biopython 的 SnapGene 解析器（双向） |
+| 2 | 酶切位点、引物 Tm、CDS 翻译 | REBASE、primer3、文件内自带的蛋白序列 |
+| 3 | 酶切片段、PCR、酶切连接；Gibson、Golden Gate | pydna；已知答案 |
+| 4 | Gateway BP/LR；Cre/lox | pydna 的 `gateway_assembly`、`recombinase_assembly` |
+| 5 | 双序列比对；TA/TOPO/LIC/GC；定点突变；电泳读数 | Biopython `PairwiseAligner`；已知答案；Biopython 翻译与 primer3 |
 
-Copyright (C) 2026 Qiu Shui
+结果，以及据此发现并修复的缺陷，记录在 [docs/CROSSCHECK.md](docs/CROSSCHECK.md)。
 
-本程序是自由软件：你可以依据自由软件基金会发布的 GNU 通用公共许可证（GPL）第 3 版，或（按你的选择）任何更新的版本，重新发布和/或修改它。本程序的发布是希望它有用，但**不提供任何担保**。完整条款见 [LICENSE](LICENSE)。
+### 许可
+
+版权所有 (C) 2026 Qiu Shui
+
+本程序是自由软件：你可以依据自由软件基金会发布的 GNU 通用公共许可证第 3 版，或（按你的选择）
+任何更新的版本，重新发布和/或修改它。本程序的发布是希望它有用，但**不提供任何担保**。完整条款
+见 [LICENSE](LICENSE)。
 
 SPDX-License-Identifier: `GPL-3.0-or-later`
 
-## 致谢与第三方资料
+---
 
-- 解析与序列工具：[TeselaGen tg-oss](https://github.com/TeselaGen/tg-oss)（MIT）、[SeqViz](https://github.com/Lattice-Automation/seqviz)（MIT）。
-- SnapGene `.dna` 二进制格式的公开描述参考了 [SnapGeneReader](https://github.com/Edinburgh-Genome-Foundry/SnapGeneReader)（MIT）、[autosnapgene](https://github.com/kalekundert/autosnapgene)（MIT）、[snapgene-deepreader](https://github.com/karlYei/snapgene-deepreader)（MIT）与 Biopython `SnapGeneIO`（Biopython License）。
-- 热力学模型依据 SantaLucia (1998)、SantaLucia & Hicks (2004)、Owczarzy et al. (2004, 2008) 实现；`test-data/primer3-reference.json` 为 [Primer3](https://github.com/primer3-org/primer3)（GPL-2.0）的输出数值，用于精度回归。
-- 示例序列来自 NCBI GenBank：L09137 (pUC19)、U55762 (pEGFP-N1)。
+## Acknowledgements / 致谢与第三方资料
+
+- Parsing and sequence utilities: [TeselaGen tg-oss](https://github.com/TeselaGen/tg-oss) (MIT),
+  [SeqViz](https://github.com/Lattice-Automation/seqviz) (MIT).
+- The public description of the SnapGene `.dna` binary format draws on
+  [SnapGeneReader](https://github.com/Edinburgh-Genome-Foundry/SnapGeneReader) (MIT),
+  [autosnapgene](https://github.com/kalekundert/autosnapgene) (MIT),
+  [snapgene-deepreader](https://github.com/karlYei/snapgene-deepreader) (MIT) and
+  Biopython `SnapGeneIO` (Biopython License).
+- Thermodynamics follow SantaLucia (1998), SantaLucia & Hicks (2004) and Owczarzy et al. (2004,
+  2008); `test-data/primer3-reference.json` holds values produced by
+  [Primer3](https://github.com/primer3-org/primer3) (GPL-2.0) and is used for accuracy
+  regression.
+- Cross-check references: [Biopython](https://biopython.org/) (Biopython License),
+  [primer3-py](https://github.com/libnano/primer3-py) (GPL-2.0),
+  [pydna](https://github.com/pydna-group/pydna) (BSD-3-Clause),
+  [REBASE](http://rebase.neb.com/) via Biopython's restriction tables.
+- Sample sequences from NCBI GenBank: L09137 (pUC19), U55762 (pEGFP-N1); Gateway and cloning
+  vectors from the SnapGene plasmid library are downloaded at cross-check time and not
+  redistributed here.

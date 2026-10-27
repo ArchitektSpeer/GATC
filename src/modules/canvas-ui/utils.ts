@@ -159,6 +159,36 @@ export function describeArc(
   return `M ${p0.x.toFixed(3)} ${p0.y.toFixed(3)} A ${radius.toFixed(3)} ${radius.toFixed(3)} 0 ${largeArc} 1 ${p1.x.toFixed(3)} ${p1.y.toFixed(3)}`;
 }
 
+/**
+ * Arc drawn in whichever direction keeps text on it upright: clockwise over the top of the
+ * circle, counter-clockwise under the bottom. Text on a plain clockwise arc reads upside down
+ * once the arc passes the six o'clock position.
+ */
+export function describeTextArc(
+  cx: number,
+  cy: number,
+  radius: number,
+  start: number,
+  end: number,
+  length: number,
+  startAngle = -90,
+): string {
+  if (length <= 0 || end <= start) return '';
+  const midAngle = indexToAngle((start + end) / 2, length, startAngle);
+  // Screen angles run clockwise from twelve o'clock; the lower half is 0°..180°.
+  const normalized = ((midAngle % 360) + 360) % 360;
+  if (normalized <= 10 || normalized >= 170) {
+    return describeArc(cx, cy, radius, start, end, length, startAngle);
+  }
+  const a0 = indexToAngle(start, length, startAngle);
+  const a1 = indexToAngle(end, length, startAngle);
+  const p0 = pointOnCircle(cx, cy, radius, a0);
+  const p1 = pointOnCircle(cx, cy, radius, a1);
+  const span = ((end - start) / length) * 360;
+  const largeArc = span > 180 ? 1 : 0;
+  return `M ${p1.x.toFixed(3)} ${p1.y.toFixed(3)} A ${radius.toFixed(3)} ${radius.toFixed(3)} 0 ${largeArc} 0 ${p0.x.toFixed(3)} ${p0.y.toFixed(3)}`;
+}
+
 export function annularSectorPath(
   cx: number,
   cy: number,

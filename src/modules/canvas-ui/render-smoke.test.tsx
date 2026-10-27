@@ -176,7 +176,7 @@ describe('canvas-ui render smoke tests', () => {
         height={500}
       />,
     );
-    expect(html).toContain('bp per row');
+    expect(html).toContain('每行');
     expect(html).toContain('EGFP');
   });
 

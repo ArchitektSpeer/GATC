@@ -351,7 +351,7 @@ export function LinearPlasmidMap({
   if (resolved.showLength) subtitleParts.push(`${formatBp(length)} bp`);
   subtitleParts.push(doc.topology);
   if (resolved.showFeatures) subtitleParts.push(`${visibleFeatures.length} features`);
-  if (cutItems.length > 0) subtitleParts.push(`${cutSites.length} cut sites`);
+  if (cutItems.length > 0) subtitleParts.push(`${cutSites.length} 个切点`);
 
   const css = `
     .osg-linear-map text { user-select: none; }

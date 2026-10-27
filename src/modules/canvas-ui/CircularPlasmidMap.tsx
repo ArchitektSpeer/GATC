@@ -15,6 +15,7 @@ import {
   clamp,
   contrastText,
   describeArc,
+  describeTextArc,
   directionalArrow,
   formatBp,
   layoutLeaderLabels,
@@ -132,6 +133,9 @@ export function CircularPlasmidMap({
 }: CircularPlasmidMapProps) {
   const tokens = getTheme(theme);
   const size = Math.max(360, requestedSize);
+  // The ring is square but the enzyme and primer names need a column either side, so the
+  // canvas is wider than tall. Without the gutters the names are clipped to an ellipsis.
+  const width = Math.round(size * 1.3);
   const length = doc.length || doc.sequence.length;
   const circular = doc.topology === 'circular';
   const rawUid = useId();
@@ -170,8 +174,8 @@ export function CircularPlasmidMap({
     [visibleFeatures, length, circular],
   );
   const geometry = useMemo(
-    () => computeCircularGeometry(size, assignment.lanes.length),
-    [size, assignment.lanes.length],
+    () => computeCircularGeometry(size, assignment.lanes.length, width),
+    [size, width, assignment.lanes.length],
   );
   const centerFontSize = clamp(geometry.featureInner * 0.14, 9.5, 17);
   const centerNameChars = Math.max(
@@ -281,7 +285,7 @@ export function CircularPlasmidMap({
               labels.push({
                 feature,
                 pathId,
-                path: describeArc(
+                path: describeTextArc(
                   geometry.cx,
                   geometry.cy,
                   radius,
@@ -351,11 +355,11 @@ export function CircularPlasmidMap({
   const pointerToLocal = useCallback(
     (event: React.PointerEvent<SVGSVGElement>) => {
       const rect = event.currentTarget.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * size;
+      const x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * width;
       const y = ((event.clientY - rect.top) / Math.max(1, rect.height)) * size;
       return { x, y };
     },
-    [size],
+    [size, width],
   );
 
   const notifySelection = useCallback(
@@ -467,20 +471,20 @@ export function CircularPlasmidMap({
     const angle = (Math.abs(delta) / Math.max(1, length)) * 360;
     const bp = selectionBp(next, length);
     if (bp <= 0) return null;
-    const width = 166;
+    const bubbleWidth = 166;
     const height = 52;
-    const flipX = drag.pointer.x > size - width - 18;
+    const flipX = drag.pointer.x > width - bubbleWidth - 18;
     const flipY = drag.pointer.y < 90;
     return {
-      x: drag.pointer.x + (flipX ? -16 - width : 16),
+      x: drag.pointer.x + (flipX ? -16 - bubbleWidth : 16),
       y: drag.pointer.y + (flipY ? 18 : -height - 18),
-      width,
+      width: bubbleWidth,
       height,
       bp,
       angle,
       label: `${Math.round(next.start) + 1}–${Math.round(next.end)}`,
     };
-  }, [drag, length, size]);
+  }, [drag, length, width]);
 
   const css = `
     .osg-circular-root button { font-family: ${tokens.fontSans}; }
@@ -541,7 +545,7 @@ export function CircularPlasmidMap({
               {doc.name || 'Untitled plasmid'}
             </div>
             <div style={{ fontSize: 11.5, color: tokens.muted }}>
-              {formatBp(length)} bp · {doc.topology} · {trimNumber(stats.gc)}% GC · {stats.features} features
+              {formatBp(length)} bp · {circular ? '环状' : '线性'} · GC {trimNumber(stats.gc)}% · {stats.features} 个特征
             </div>
           </div>
         </div>
@@ -575,12 +579,12 @@ export function CircularPlasmidMap({
         </div>
       </div>
 
-      <div style={{ position: 'relative', width: '100%', maxWidth: size, margin: '0 auto' }}>
+      <div style={{ position: 'relative', width: '100%', maxWidth: width, margin: '0 auto' }}>
         <svg
           ref={setSvgNode}
-          width={size}
+          width={width}
           height={size}
-          viewBox={`0 0 ${size} ${size}`}
+          viewBox={`0 0 ${width} ${size}`}
           role="img"
           aria-label={`Circular map of ${doc.name}, ${length} base pairs`}
           style={{
@@ -613,12 +617,12 @@ export function CircularPlasmidMap({
             ))}
           </defs>
 
-          <rect width={size} height={size} rx={18} fill={`url(#osg-bg-${uid})`} />
+          <rect width={width} height={size} rx={18} fill={`url(#osg-bg-${uid})`} />
           {theme === 'publication' ? (
             <rect
               x={0.75}
               y={0.75}
-              width={size - 1.5}
+              width={width - 1.5}
               height={size - 1.5}
               rx={17}
               fill="none"
@@ -1041,7 +1045,7 @@ export function CircularPlasmidMap({
               : 1;
             const fontSize = (label.emphasis ? 10.6 : 10) * labelScale;
             const available =
-              label.side === 'right' ? size - label.textX - 8 : label.textX - 8;
+              label.side === 'right' ? width - label.textX - 8 : label.textX - 8;
             const maxChars = Math.max(5, Math.floor(available / (fontSize * 0.58)));
             const displayText = truncate(label.item.text, maxChars);
             return (
@@ -1168,8 +1172,8 @@ export function CircularPlasmidMap({
               fontSize={10.5}
             >
               {selectedBp > 0
-                ? `${formatBp(selectedBp)} bp selected`
-                : `${stats.cuts} cut sites · ${stats.primers} primers`}
+                ? `已选 ${formatBp(selectedBp)} bp`
+                : `${stats.cuts} 个切点 · ${stats.primers} 条引物`}
             </text>
             <text
               x={geometry.cx}
@@ -1180,7 +1184,7 @@ export function CircularPlasmidMap({
               fontSize={9.5}
               letterSpacing="0.08em"
             >
-              {doc.topology.toUpperCase()}
+              {circular ? '环状' : '线性'}
             </text>
           </g>
 
@@ -1269,9 +1273,9 @@ export function CircularPlasmidMap({
           padding: '0 4px',
         }}
       >
-        <span>Drag around the ring to select; click a feature to inspect it.</span>
+        <span>在环上拖动可选择区段，点击特征查看详情。</span>
         <span style={{ fontFamily: tokens.fontMono }}>
-          {stats.cuts} cuts · {stats.primers} primers · {stats.features} annotations
+          {stats.cuts} 个切点 · {stats.primers} 条引物 · {stats.features} 个特征
         </span>
       </div>
     </div>

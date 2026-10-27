@@ -167,8 +167,10 @@ export interface CircularGeometry {
 export function computeCircularGeometry(
   size: number,
   trackCount: number,
+  /** Canvas width when it is wider than tall, so the label gutters get real room. */
+  width = size,
 ): CircularGeometry {
-  const cx = size / 2;
+  const cx = width / 2;
   const cy = size / 2;
   const outerRadius = size * 0.315;
   const featureOuter = outerRadius;
