@@ -9,7 +9,7 @@ import { bioApi } from './bio-api';
 import { remapDocIds } from './doc-ids';
 import { withNote } from './editors';
 import { recordSave, saveFile } from './files';
-import { fromUiRange, rangeError, rangeSequence } from './ranges';
+import { fromUiRange, rangeError, rangeSequence } from '../lib/ranges';
 import { recoverRecord, sortOutCleanExits } from './session';
 import { selectActiveDoc, selectCutSites, selectDirtyIds, useWorkbench } from './store';
 

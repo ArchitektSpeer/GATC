@@ -53,6 +53,17 @@ src/
 
 计算密集函数通过 `src/app/bio.worker.ts` 在 Web Worker 池中执行，主线程不被阻塞。
 
+## MCP 接口
+
+GATC 的确定性序列工具（读文件、酶切位点、引物设计、PCR/Gibson/Golden Gate 模拟、定点突变、ORF、自动注释、Sanger 比对、写文件）可作为本地 MCP 服务器供其他 Agent 或 harness 调用：
+
+```bash
+npm run mcp:build
+claude mcp add gatc -- node "$PWD/dist-mcp/gatc-mcp.mjs" --root ~/plasmids
+```
+
+文件访问限制在 `--root` 指定的目录内；只有 `write_sequence_file` 会写文件，且默认不覆盖已有文件。工具列表、坐标约定和各客户端的配置见 [docs/MCP.md](docs/MCP.md)。
+
 ## 验证
 
 ```bash
@@ -61,6 +72,7 @@ npm run test                          # vitest：单元 + 跨模块集成 + 真�
 npm run build && npx vite preview &   # 然后：
 node scripts/e2e.mjs e2e-report       # Playwright 浏览器功能评测，输出截图与 report.json
 npm run check:session                 # 浏览器走查：编辑 → 强制关闭 → 恢复 → 保存 → 重新打开
+npm run mcp:build && node scripts/mcp-check.mjs   # 以 stdio 启动 MCP 服务器并调用工具
 node scripts/make-audit-bundle.mjs    # 生成 AUDIT_BUNDLE.md 供外部审计
 npm run crosscheck                    # 与 Biopython / REBASE / primer3 / pydna 交叉验证（需 Python 3）
 ```

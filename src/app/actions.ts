@@ -5,7 +5,7 @@ import { COMMERCIAL_ENZYMES, ENZYME_SETS, getEnzymeByName } from '../modules/seq
 import type { GelSampleInput } from '../modules/alignment-gel';
 import { callBio, callBioForDoc } from './bio-client';
 import { docRevision } from './revision';
-import { rangeError } from './ranges';
+import { rangeError } from '../lib/ranges';
 import { ALL_COMMERCIAL_SET, enzymeSetKey, isDocCurrent, selectActiveDoc, useWorkbench, type WizardKind } from './store';
 
 export const uid = (prefix = 'id') => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;

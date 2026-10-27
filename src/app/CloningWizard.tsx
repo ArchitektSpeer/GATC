@@ -4,7 +4,7 @@ import type { PlasmidDocument, Primer } from '../types/schema';
 import { COMMERCIAL_ENZYMES } from '../modules/seq-engine';
 import { callBio } from './bio-client';
 import { addPrimersToDoc, openProduct, replaceIfCurrent, resolveEnzymes } from './actions';
-import { fromUiRange, rangeSequence } from './ranges';
+import { fromUiRange, rangeSequence } from '../lib/ranges';
 import { selectActiveDoc, useWorkbench, type WizardKind } from './store';
 import { Badge, Button, Dialog, Field, Input, Select, Tabs } from './ui';
 
