@@ -1,0 +1,128 @@
+LOCUS       SYNTRC99A               4176 bp    DNA     linear   SYN 29-JUN-1995
+DEFINITION  Cloning vector pTrc99A, complete sequence.
+ACCESSION   M22744
+VERSION     M22744.1
+KEYWORDS    cloning vector.
+SOURCE      Cloning vector pTrc99A
+  ORGANISM  Cloning vector pTrc99A
+            other sequences; artificial sequences; vectors.
+REFERENCE   1  (sites)
+  AUTHORS   Amann,E. and Brosius,J.
+  TITLE     'ATG vectors' for regulated high-level expression of cloned genes
+            in Escherichia coli
+  JOURNAL   Gene 40 (2-3), 183-190 (1985)
+   PUBMED   3007288
+REFERENCE   2  (bases 1 to 4176)
+  AUTHORS   Amann,E., Ochs,B. and Abel,K.J.
+  TITLE     Tightly regulated tac promoter vectors useful for the expression of
+            unfused and fused proteins in Escherichia coli
+  JOURNAL   Gene 69 (2), 301-315 (1988)
+   PUBMED   3069586
+FEATURES             Location/Qualifiers
+     source          1..4176
+                     /organism="Cloning vector pTrc99A"
+                     /mol_type="genomic DNA"
+                     /db_xref="taxon:40992"
+                     /lab_host="Escherichia coli"
+                     /note="derived from pKK233-2"
+     misc_feature    1..17
+                     /note="derived from cloning vector pBR322"
+     regulatory      18..263
+                     /regulatory_class="promoter"
+                     /note="trc promoter from pKK233-2"
+                     /citation=[1]
+     misc_feature    264..270
+                     /note="NcoI/EcoRI linker"
+     misc_feature    271..321
+                     /note="derived from cloning vector pUC18"
+     misc_feature    329..753
+                     /note="5S RNA, T1, T2, rrnB"
+     misc_feature    754..2932
+                     /note="derived from cloning vector pBR322"
+     misc_feature    2933..2940
+                     /note="BglII linker"
+     misc_feature    2933..2938
+                     /note="BglII linker"
+     misc_feature    2939..2945
+                     /note="EcoRI linker"
+     misc_feature    2946..2976
+                     /note="derived from plasmid RP4"
+     misc_feature    2977..4163
+                     /note="lacI-q region"
+     misc_feature    4164..4170
+                     /note="EcoRI linker"
+     misc_feature    4171..4176
+                     /note="BglII linker"
+ORIGIN      
+        1 gtttgacagc ttatcatcga ctgcacggtg caccaatgct tctggcgtca ggcagccatc
+       61 ggaagctgtg gtatggctgt gcaggtcgta aatcactgca taattcgtgt cgctcaaggc
+      121 gcactcccgt tctggataat gttttttgcg ccgacatcat aacggttctg gcaaatattc
+      181 tgaaatgagc tgttgacaat taatcatccg gctcgtataa tgtgtggaat tgtgagcgga
+      241 taacaatttc acacaggaaa cagaccatgg aattcgagct cggtacccgg ggatcctcta
+      301 gagtcgacct gcaggcatgc aagcttggct gttttggcgg atgagagaag attttcagcc
+      361 tgatacagat taaatcagaa cgcagaagcg gtctgataaa acagaatttg cctggcggca
+      421 gtagcgcggt ggtcccacct gaccccatgc cgaactcaga agtgaaacgc cgtagcgccg
+      481 atggtagtgt ggggtctccc catgcgagag tagggaactg ccaggcatca aataaaacga
+      541 aaggctcagt cgaaagactg ggcctttcgt tttatctgtt gtttgtcggt gaacgctctc
+      601 ctgagtagga caaatccgcc gggagcggat ttgaacgttg cgaagcaacg gcccggaggg
+      661 tggcgggcag gacgcccgcc ataaactgcc aggcatcaaa ttaagcagaa ggccatcctg
+      721 acggatggcc tttttgcgtt tctacaaact ctttttgttt atttttctaa atacattcaa
+      781 atatgtatcc gctcatgaga caataaccct gataaatgct tcaataatat tgaaaaagga
+      841 agagtatgag tattcaacat ttccgtgtcg cccttattcc cttttttgcg gcattttgcc
+      901 ttcctgtttt tgctcaccca gaaacgctgg tgaaagtaaa agatgctgaa gatcagttgg
+      961 gtgcacgagt gggttacatc gaactggatc tcaacagcgg taagatcctt gagagttttc
+     1021 gccccgaaga acgttttcca atgatgagca cttttaaagt tctgctatgt ggcgcggtat
+     1081 tatcccgtgt tgacgccggg caagagcaac tcggtcgccg catacactat tctcagaatg
+     1141 acttggttga gtactcacca gtcacagaaa agcatcttac ggatggcatg acagtaagag
+     1201 aattatgcag tgctgccata accatgagtg ataacactgc ggccaactta cttctgacaa
+     1261 cgatcggagg accgaaggag ctaaccgctt ttttgcacaa catgggggat catgtaactc
+     1321 gccttgatcg ttgggaaccg gagctgaatg aagccatacc aaacgacgag cgtgacacca
+     1381 cgatgcctac agcaatggca acaacgttgc gcaaactatt aactggcgaa ctacttactc
+     1441 tagcttcccg gcaacaatta atagactgga tggaggcgga taaagttgca ggaccacttc
+     1501 tgcgctcggc ccttccggct ggctggttta ttgctgataa atctggagcc ggtgagcgtg
+     1561 ggtctcgcgg tatcattgca gcactggggc cagatggtaa gccctcccgt atcgtagtta
+     1621 tctacacgac ggggagtcag gcaactatgg atgaacgaaa tagacagatc gctgagatag
+     1681 gtgcctcact gattaagcat tggtaactgt cagaccaagt ttactcatat atactttaga
+     1741 ttgatttaaa acttcatttt taatttaaaa ggatctaggt gaagatcctt tttgataatc
+     1801 tcatgaccaa aatcccttaa cgtgagtttt cgttccactg agcgtcagac cccgtagaaa
+     1861 agatcaaagg atcttcttga gatccttttt ttctgcgcgt aatctgctgc ttgcaaacaa
+     1921 aaaaaccacc gctaccagcg gtggtttgtt tgccggatca agagctacca actctttttc
+     1981 cgaaggtaac tggcttcagc agagcgcaga taccaaatac tgtccttcta gtgtagccgt
+     2041 agttaggcca ccacttcaag aactctgtag caccgcctac atacctcgct ctgctaatcc
+     2101 tgttaccagt ggctgctgcc agtggcgata agtcgtgtct taccgggttg gactcaagac
+     2161 gatagttacc ggataaggcg cagcggtcgg gctgaacggg gggttcgtgc acacagccca
+     2221 gcttggagcg aacgacctac accgaactga gatacctaca gcgtgagcta tgagaaagcg
+     2281 ccacgcttcc cgaagggaga aaggcggaca ggtatccggt aagcggcagg gtcggaacag
+     2341 gagagcgcac gagggagctt ccagggggaa acgcctggta tctttatagt cctgtcgggt
+     2401 ttcgccacct ctgacttgag cgtcgatttt tgtgatgctc gtcagggggg cggagcctat
+     2461 ggaaaaacgc cagcaacgcg gcctttttac ggttcctggc cttttgctgg ccttttgctc
+     2521 acatgttctt tcctgcgtta tcccctgatt ctgtggataa ccgtattacc gcctttgagt
+     2581 gagctgatac cgctcgccgc agccgaacga ccgagcgcag cgagtcagtg agcgaggaag
+     2641 cggaagagcg cctgatgcgg tattttctcc ttacgcatct gtgcggtatt tcacaccgca
+     2701 tatggtgcac tctcagtaca atctgctctg atgccgcata gttaagccag tatacactcc
+     2761 gctatcgcta cgtgactggg tcatggctgc gccccgacac ccgccaacac ccgctgacgc
+     2821 gccctgacgg gcttgtctgc tcccggcatc cgcttacaga caagctgtga ccgtctccgg
+     2881 gagctgcatg tgtcagaggt tttcaccgtc atcaccgaaa cgcgcgaggc agcagatcaa
+     2941 ttcgcgcgcg aaggcgaagc ggcatgcatt tacgttgaca ccatcgaatg gtgcaaaacc
+     3001 tttcgcggta tggcatgata gcgcccggaa gagagtcaat tcagggtggt gaatgtgaaa
+     3061 ccagtaacgt tatacgatgt cgcagagtat gccggtgtct cttatcagac cgtttcccgc
+     3121 gtggtgaacc aggccagcca cgtttctgcg aaaacgcggg aaaaagtgga agcggcgatg
+     3181 gcggagctga attacattcc caaccgcgtg gcacaacaac tggcgggcaa acagtcgttg
+     3241 ctgattggcg ttgccacctc cagtctggcc ctgcacgcgc cgtcgcaaat tgtcgcggcg
+     3301 attaaatctc gcgccgatca actgggtgcc agcgtggtgg tgtcgatggt agaacgaagc
+     3361 ggcgtcgaag cctgtaaagc ggcggtgcac aatcttctcg cgcaacgcgt cagtgggctg
+     3421 atcattaact atccgctgga tgaccaggat gccattgctg tggaagctgc ctgcactaat
+     3481 gttccggcgt tatttcttga tgtctctgac cagacaccca tcaacagtat tattttctcc
+     3541 catgaagacg gtacgcgact gggcgtggag catctggtcg cattgggtca ccagcaaatc
+     3601 gcgctgttag cgggcccatt aagttctgtc tcggcgcgtc tgcgtctggc tggctggcat
+     3661 aaatatctca ctcgcaatca aattcagccg atagcggaac gggaaggcga ctggagtgcc
+     3721 atgtccggtt ttcaacaaac catgcaaatg ctgaatgagg gcatcgttcc cactgcgatg
+     3781 ctggttgcca acgatcagat ggcgctgggc gcaatgcgcg ccattaccga gtccgggctg
+     3841 cgcgttggtg cggatatctc ggtagtggga tacgacgata ccgaagacag ctcatgttat
+     3901 atcccgccgt caaccaccat caaacaggat tttcgcctgc tggggcaaac cagcgtggac
+     3961 cgcttgctgc aactctctca gggccaggcg gtgaagggca atcagctgtt gcccgtctca
+     4021 ctggtgaaaa gaaaaaccac cctggcgccc aatacgcaaa ccgcctctcc ccgcgcgttg
+     4081 gccgattcat taatgcagct ggcacgacag gtttcccgac tggaaagcgg gcagtgagcg
+     4141 caacgcaatt aatgtgagtt agcgcgaatt gatctg
+//
+

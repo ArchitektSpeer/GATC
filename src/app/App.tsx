@@ -55,6 +55,7 @@ import { AlignView, BackTranslateDialog, FindDialog } from './tools';
 import { HistoryView } from './history';
 import { DemoPlayer, startDemo } from './demo';
 import { NcbiDialog, PrimerLibraryDialog } from './library';
+import { VectorLibraryDialog } from './VectorLibrary';
 import { loadSampleLibrary } from './samples';
 import { download, openProject, recordSave, saveFile, saveProject } from './files';
 import { SessionManager, requestCloseDoc } from './session';
@@ -458,6 +459,7 @@ export default function App() {
           icon={<Wrench size={14} />}
           entries={[
             { label: '查找序列 / 蛋白模式', hint: 'Ctrl+F', disabled: !doc, onSelect: () => s.setTool('find') },
+            { label: '载体库', hint: '32 个内置载体', onSelect: () => s.setTool('vectors') },
             { label: '引物库', onSelect: () => s.setTool('primerlib') },
             { label: '从 NCBI 导入（登录号）', onSelect: () => s.setTool('ncbi') },
             { label: '反向翻译 / 密码子优化', onSelect: () => s.setTool('backtranslate') },
@@ -611,6 +613,7 @@ export default function App() {
       <FindDialog />
       <NcbiDialog />
       <PrimerLibraryDialog />
+      <VectorLibraryDialog />
       <BackTranslateDialog />
       <CommandPalette
         doc={doc}
@@ -702,6 +705,7 @@ function CommandPalette({
               <Command.Item onSelect={run(onOpen)}>打开文件…</Command.Item>
               <Command.Item onSelect={run(() => onExport('project'))}>保存项目 (.gatc)</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('ncbi'))}>从 NCBI 导入（登录号）</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('vectors'))}>载体库（内置质粒）</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('primerlib'))}>引物库</Command.Item>
               <Command.Item onSelect={run(() => onExport('print-map'))}>打印图谱</Command.Item>
               <Command.Item onSelect={run(() => onExport('print-seq'))}>打印序列</Command.Item>

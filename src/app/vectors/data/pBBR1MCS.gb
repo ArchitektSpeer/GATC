@@ -1,0 +1,136 @@
+LOCUS       XXU02374                4707 bp    DNA     circular SYN 10-JAN-2005
+DEFINITION  Cloning vector pBBR1MCS plasmid pBBR1MCS, complete sequence.
+ACCESSION   U02374
+VERSION     U02374.1
+KEYWORDS    .
+SOURCE      Cloning vector pBBR1MCS
+  ORGANISM  Cloning vector pBBR1MCS
+            other sequences; artificial sequences; vectors.
+REFERENCE   1  (bases 1 to 4707)
+  AUTHORS   Kovach,M.E., Phillips,R.W., Elzer,P.H., Roop,R.M. II and
+            Peterson,K.M.
+  TITLE     pBBR1MCS: a broad-host-range cloning vector
+  JOURNAL   BioTechniques 16 (5), 800-802 (1994)
+   PUBMED   8068328
+REFERENCE   2  (bases 1 to 4707)
+  AUTHORS   Kovach,M.E., Elzer,P.H., Hill,D.S., Robertson,G.T., Farris,M.A.,
+            Roop,R.M. II and Peterson,K.M.
+  TITLE     Four new derivatives of the broad-host-range cloning vector
+            pBBR1MCS, carrying different antibiotic-resistance cassettes
+  JOURNAL   Gene 166 (1), 175-176 (1995)
+   PUBMED   8529885
+REFERENCE   3  (bases 1 to 4707)
+  AUTHORS   Kovach,M.E.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (05-OCT-1993) Michael E. Kovach, Microbiology &
+            Immunology, Louisiana State University Medical Center-Shreveport,
+            1501 Kings Highway, Shreveport, LA 71130, USA
+COMMENT     On Dec 11, 1993 this sequence version replaced gi:407280.
+FEATURES             Location/Qualifiers
+     source          1..4707
+                     /organism="Cloning vector pBBR1MCS"
+                     /mol_type="genomic DNA"
+                     /db_xref="taxon:31789"
+                     /lab_host="Bordetella bronchiseptica"
+                     /plasmid="pBBR1MCS"
+     misc_feature    1..2517
+                     /note="bp 1 to 2517 of pBBR1 GenBank Accession Number
+                     X66730"
+     misc_feature    2516..2943
+                     /note="complement of bp 4108 to 4535 of pBR328 GenBank
+                     Accession Number L08858"
+     misc_feature    2943..3593
+                     /note="bp 381 to 1031 of pBluescript II KS- GenBank
+                     Accession Number X52329"
+     misc_feature    3604..4543
+                     /note="complement of bp 3168 to 4107 of pBR328 Genbank
+                     Accession Number L08858"
+     misc_feature    3604..3613
+                     /note="complement of 5' end of PCR primer (5'
+                     TTTTATGCATgcgcccaatacgcaaa 3') used to amplify
+                     pBlusescript II KS- polylinker"
+     misc_feature    4540..4707
+                     /note="bp 2520 to 2687 of pBBR1 GenBank Accession Number
+                     X66730"
+ORIGIN      
+        1 ctcgggccgt ctcttgggct tgatcggcct tcttgcgcat ctcacgcgct cctgcggcgg
+       61 cctgtagggc aggctcatac ccctgccgaa ccgcttttgt cagccggtcg gccacggctt
+      121 ccggcgtctc aacgcgcttt gagattccca gcttttcggc caatccctgc ggtgcatagg
+      181 cgcgtggctc gaccgcttgc gggctgatgg tgacgtggcc cactggtggc cgctccaggg
+      241 cctcgtagaa cgcctgaatg cgcgtgtgac gtgccttgct gccctcgatg ccccgttgca
+      301 gccctagatc ggccacagcg gccgcaaacg tggtctggtc gcgggtcatc tgcgctttgt
+      361 tgccgatgaa ctccttggcc gacagcctgc cgtcctgcgt cagcggcacc acgaacgcgg
+      421 tcatgtgcgg gctggtttcg tcacggtgga tgctggccgt cacgatgcga tccgccccgt
+      481 acttgtccgc cagccacttg tgcgccttct cgaagaacgc cgcctgctgt tcttggctgg
+      541 ccgacttcca ccattccggg ctggccgtca tgacgtactc gaccgccaac acagcgtcct
+      601 tgcgccgctt ctctggcagc aactcgcgca gtcggcccat cgcttcatcg gtgctgctgg
+      661 ccgcccagtg ctcgttctct ggcgtcctgc tggcgtcagc gttgggcgtc tcgcgctcgc
+      721 ggtaggcgtg cttgagactg gccgccacgt tgcccatttt cgccagcttc ttgcatcgca
+      781 tgatcgcgta tgccgccatg cctgcccctc ccttttggtg tccaaccggc tcgacggggg
+      841 cagcgcaagg cggtgcctcc ggcgggccac tcaatgcttg agtatactca ctagactttg
+      901 cttcgcaaag tcgtgaccgc ctacggcggc tgcggcgccc tacgggcttg ctctccgggc
+      961 ttcgccctgc gcggtcgctg cgctcccttg ccagcccgtg gatatgtgga cgatggccgc
+     1021 gagcggccac cggctggctc gcttcgctcg gcccgtggac aaccctgctg gacaagctga
+     1081 tggacaggct gcgcctgccc acgagcttga ccacagggat tgcccaccgg ctacccagcc
+     1141 ttcgaccaca tacccaccgg ctccaactgc gcggcctgcg gccttgcccc atcaattttt
+     1201 ttaattttct ctggggaaaa gcctccggcc tgcggcctgc gcgcttcgct tgccggttgg
+     1261 acaccaagtg gaaggcgggt caaggctcgc gcagcgaccg cgcagcggct tggccttgac
+     1321 gcgcctggaa cgacccaagc ctatgcgagt gggggcagtc gaaggcgaag cccgcccgcc
+     1381 tgccccccga gcctcacggc ggcgagtgcg ggggttccaa gggggcagcg ccaccttggg
+     1441 caaggccgaa ggccgcgcag tcgatcaaca agccccggag gggccacttt ttgccggagg
+     1501 gggagccgcg ccgaaggcgt gggggaaccc cgcaggggtg cccttctttg ggcaccaaag
+     1561 aactagatat agggcgaaat gcgaaagact taaaaatcaa caacttaaaa aaggggggta
+     1621 cgcaacagct cattgcggca ccccccgcaa tagctcattg cgtaggttaa agaaaatctg
+     1681 taattgactg ccacttttac gcaacgcata attgttgtcg cgctgccgaa aagttgcagc
+     1741 tgattgcgca tggtgccgca accgtgcggc accctaccgc atggagataa gcatggccac
+     1801 gcagtccaga gaaatcggca ttcaagccaa gaacaagccc ggtcactggg tgcaaacgga
+     1861 acgcaaagcg catgaggcgt gggccgggct tattgcgagg aaacccacgg cggcaatgct
+     1921 gctgcatcac ctcgtggcgc agatgggcca ccagaacgcc gtggtggtca gccagaagac
+     1981 actttccaag ctcatcggac gttctttgcg gacggtccaa tacgcagtca aggacttggt
+     2041 ggccgagcgc tggatctccg tcgtgaagct caacggcccc ggcaccgtgt cggcctacgt
+     2101 ggtcaatgac cgcgtggcgt ggggccagcc ccgcgaccag ttgcgcctgt cggtgttcag
+     2161 tgccgccgtg gtggttgatc acgacgacca ggacgaatcg ctgttggggc atggcgacct
+     2221 gcgccgcatc ccgaccctgt atccgggcga gcagcaacta ccgaccggcc ccggcgagga
+     2281 gccgcccagc cagcccggca ttccgggcat ggaaccagac ctgccagcct tgaccgaaac
+     2341 ggaggaatgg gaacggcgcg ggcagcagcg cctgccgatg cccgatgagc cgtgttttct
+     2401 ggacgatggc gagccgttgg agccgccgac acgggtcacg ctgccgcgcc ggtagcactt
+     2461 gggttgcgca gcaacccgta agtgcgctgt tccagactat cggctgtagc cgcctcgccg
+     2521 ccctatacct tgtctgcctc cccgcgttgc gtcgcggtgc atggagccgg gccacctcga
+     2581 cctgaatgga agccggcggc acctcgctaa cggattcacc gtttttatca ggctctggga
+     2641 ggcagaataa atgatcatat cgtcaattat tacctccacg gggagagcct gagcaaactg
+     2701 gcctcaggca tttgagaagc acacggtcac actgcttccg gtagtcaata aaccggtaaa
+     2761 ccagcaatag acataagcgg ctatttaacg accctgccct gaaccgacga ccgggtcgaa
+     2821 tttgctttcg aatttctgcc attcatccgc ttattatcac ttattcaggc gtagcaccag
+     2881 gcgtttaagg gcaccaataa ctgccttaaa aaaattacgc cccgccctgc cactcatcgc
+     2941 agtcggccta ttggttaaaa aatgagctga tttaacaaaa atttaacgcg aattttaaca
+     3001 aaatattaac gcttacaatt tccattcgcc attcaggctg cgcaactgtt gggaagggcg
+     3061 atcggtgcgg gcctcttcgc tattacgcca gctggcgaaa gggggatgtg ctgcaaggcg
+     3121 attaagttgg gtaacgccag ggttttccca gtcacgacgt tgtaaaacga cggccagtga
+     3181 gcgcgcgtaa tacgactcac tatagggcga attggagctc caccgcggtg gcggccgctc
+     3241 tagaactagt ggatcccccg ggctgcagga attcgatatc aagcttatcg ataccgtcga
+     3301 cctcgagggg gggcccggta cccagctttt gttcccttta gtgagggtta attgcgcgct
+     3361 tggcgtaatc atggtcatag ctgtttcctg tgtgaaattg ttatccgctc acaattccac
+     3421 acaacatacg agccggaagc ataaagtgta aagcctgggg tgcctaatga gtgagctaac
+     3481 tcacattaat tgcgttgcgc tcactgcccg ctttccagtc gggaaacctg tcgtgccagc
+     3541 tgcattaatg aatcggccaa cgcgcgggga gaggcggttt gcgtattggg cgcatgcata
+     3601 aaaactgttg taattcatta agcattctgc cgacatggaa gccatcacaa acggcatgat
+     3661 gaacctgaat cgccagcggc atcagcacct tgtcgccttg cgtataatat ttgcccatgg
+     3721 tgaaaacggg ggcgaagaag ttgtccatat tggccacgtt taaatcaaaa ctggtgaaac
+     3781 tcacccaggg attggctgag acgaaaaaca tattctcaat aaacccttta gggaaatagg
+     3841 ccaggttttc accgtaacac gccacatctt gcgaatatat gtgtagaaac tgccggaaat
+     3901 cgtcgtggta ttcactccag agcgatgaaa acgtttcagt ttgctcatgg aaaacggtgt
+     3961 aacaagggtg aacactatcc catatcacca gctcaccgtc tttcattgcc atacggaatt
+     4021 ccggatgagc attcatcagg cgggcaagaa tgtgaataaa ggccggataa aacttgtgct
+     4081 tatttttctt tacggtcttt aaaaaggccg taatatccag ctgaacggtc tggttatagg
+     4141 tacattgagc aactgactga aatgcctcaa aatgttcttt acgatgccat tgggatatat
+     4201 caacggtggt atatccagtg atttttttct ccattttagc ttccttagct cctgaaaatc
+     4261 tcgataactc aaaaaatacg cccggtagtg atcttatttc attatggtga aagttggaac
+     4321 ctcttacgtg ccgatcaacg tctcattttc gccaaaagtt ggcccagggc ttcccggtat
+     4381 caacagggac accaggattt atttattctg cgaagtgatc ttccgtcaca ggtatttatt
+     4441 cgaagacgaa agggcctcgt gatacgccta tttttatagg ttaatgtcat gataataatg
+     4501 gtttcttaga cgtcaggtgg cacttttcgg ggaaatgtgc gcgcccgcgt tcctgctggc
+     4561 gctgggcctg tttctggcgc tggacttccc gctgttccgt cagcagcttt tcgcccacgg
+     4621 ccttgatgat cgcggcggcc ttggcctgca tatcccgatt caacggcccc agggcgtcca
+     4681 gaacgggctt caggcgctcc cgaaggt
+//
+

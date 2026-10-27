@@ -65,6 +65,7 @@ Shortcuts: `Ctrl/Cmd+K` command palette, `Ctrl/Cmd+F` find, `Ctrl/Cmd+Z` undo,
 | Editing | Base-level editing, add/edit/delete features and primers (all undoable), ORF to CDS, auto-annotation, reverse complement, set origin, circular/linear toggle |
 | Finding | IUPAC degenerate patterns, mismatch tolerance, both strands, matches across the origin, six-frame protein search; primer library binding-site search across all open sequences (mismatches allowed, 3′ end must match) |
 | Enzymes | 580+ commercial enzymes and a 3000+ enzyme database with isoschizomer lookup, preset and custom enzyme sets, scanning across the origin, Dam/Dcm/CpG methylation blocking, NEB buffer recommendation for double digests with star-activity warnings |
+| Vector library | 32 common vectors bundled as GenBank records and opened offline — cloning, bacterial expression, mammalian, yeast, plant and broad-host — plus the 105 SEVA standard vectors catalogued by accession and fetched on demand. Every entry names an authoritative GenBank accession |
 | Annotation | Local auto-annotation from 300+ common parts (exact and tolerant DNA matching, CDS parts also matched by protein translation), six-frame ORFs with MW and pI |
 | Cloning | Single and double digest ligation (compatible ends, fill-in/chew-back, dephosphorylation), insert fragment, Gibson / NEBuilder HiFi / In-Fusion, Golden Gate (fidelity score, internal-site warnings), Gateway BP/LR/MultiSite LR, TA / GC / TOPO (TA, blunt, directional), LIC, Cre/lox and Flp/FRT recombination (excision, inversion, integration), PCR, fusion PCR, site-directed mutagenesis (QuikChange and Q5 back-to-back, with silent restriction-site suggestions) |
 | Primers | SantaLucia 1998 nearest-neighbour with Owczarzy 2008 Mg²⁺/dNTP salt correction (Tm within 0.01 °C of 46 reference primers), SantaLucia & Hicks 2004 dynamic-programming hairpin and dimer ΔG (mean error 0.3–0.5 kcal/mol), restriction-site and homology-arm primer design, a primer library that persists across sessions |
@@ -209,6 +210,7 @@ npm run tauri:build
 | 编辑 | 碱基级编辑，特征与引物的添加、编辑、删除（均可撤销），ORF 一键转 CDS，自动注释，反向互补，重设原点，环状/线性切换 |
 | 查找 | IUPAC 简并模式、允许错配、双链与跨原点命中、6 框蛋白查找；引物库可在所有已打开序列中查找结合位点（允许错配，3′ 端须完全匹配） |
 | 酶 | 580+ 种市售酶、3000+ 酶数据库（含同裂酶查询），预设与自定义酶集，跨原点扫描，Dam/Dcm/CpG 甲基化阻断判定，双酶切 NEB 缓冲液推荐与星号活性提示 |
+| 载体库 | 内置 32 个常用载体的 GenBank 记录，离线即开——通用克隆、原核表达、哺乳动物、酵母、植物与广宿主——另有 105 个 SEVA 标准载体按登录号收录、按需获取。每个条目都对应一条权威 GenBank 记录 |
 | 注释 | 300+ 常用元件的本地自动注释（DNA 精确与容错匹配，CDS 元件可按蛋白翻译匹配），6 框 ORF 与分子量/等电点 |
 | 克隆 | 单双酶切连接（同尾酶、补平/削平、去磷酸化）、插入片段、Gibson / NEBuilder HiFi / In-Fusion、Golden Gate（保真度评分、内部位点预警）、Gateway BP/LR/MultiSite LR、TA / GC / TOPO（TA、平端、定向）、LIC、Cre/lox 与 Flp/FRT 重组（切除、倒位、整合）、PCR、融合 PCR、定点突变（QuikChange 与 Q5 背靠背，附静默酶切位点推荐） |
 | 引物 | SantaLucia 1998 最邻近 + Owczarzy 2008 Mg²⁺/dNTP 盐校正（46 条参考引物 Tm 误差 < 0.01 °C），SantaLucia & Hicks 2004 动态规划发夹与二聚体 ΔG（平均误差 0.3–0.5 kcal/mol），酶切位点加保护碱基、同源臂引物设计，跨会话保存的引物库 |
@@ -320,6 +322,12 @@ document the SnapGene `.dna` and Vector NTI `.xdna` binary layouts; the parsers 
 Biopython `SnapGeneIO` and `XdnaIO` (Biopython License) and the Xdna format notes published by
 incenp.org. A file format is a fact rather than an expression of it, so this is attribution for
 honesty rather than a licence obligation.
+
+**Catalogue data.** The SEVA half of the built-in vector library is a name-to-accession
+mapping taken from [OpenCloning](https://github.com/OpenCloning/OpenCloning_backend) (MIT,
+`packages/opencloning/src/opencloning/catalogs/seva.tsv`, read 2026-10-27); only the 105 entries
+that name a GenBank accession are used. The sequences themselves are not redistributed — GATC
+fetches them from NCBI, as OpenCloning does.
 
 **Used only as an independent reference.** None of this enters a GATC build; `npm run crosscheck`
 checks GATC's output against it, and the results are in [docs/CROSSCHECK.md](docs/CROSSCHECK.md):

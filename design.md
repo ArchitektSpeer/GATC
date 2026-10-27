@@ -66,6 +66,7 @@
 | 克隆与引物 | 引物设计、PCR/融合 PCR、酶切连接、Gibson、Golden Gate、定点突变、Gateway、TA/TOPO、LIC、Cre/Flp | `src/modules/cloning-primer/`、`src/app/CloningWizard.tsx` |
 | 测序与比对 | AB1 峰图读取、质量处理、环状参考比对、突变影响注释、多序列比对 | `src/modules/alignment-gel/` |
 | 输出 | `.dna`、GenBank、FASTA、JSON；图谱 SVG、PNG、PDF | `src/app/App.tsx` |
+| 载体库 | 32 个内置载体（GenBank 记录随应用分发，离线可开）+ 105 个 SEVA 标准载体（按登录号从 NCBI 获取）；按分类、名称、登录号、抗性标记检索 | `src/app/vectors/`、`src/app/VectorLibrary.tsx` |
 | AI | 用户自带 API 配置、上下文摘要、流式回答、可点击动作卡片 | `src/modules/ai-copilot/` |
 | 运行形态 | Vite Web、PWA 配置、Tauri 桌面壳、Worker 计算接口 | `vite.config.ts`、`src-tauri/`、`src/app/bio-*` |
 
@@ -97,6 +98,9 @@
 - 记录每个依赖的版本、来源和实际使用范围。依赖清单以 `package.json` 与锁文件为准。
 - 逐项核实许可证与 GPL-3.0-or-later 的兼容性。`aioli` 本身的许可证不代表它加载的各个 WASM 工具的许可证，需要分别确认。
 - 内置数据（酶库、特征库、Ladder 条带、连接保真度数据等）同样记录来源、版本与许可。
+- 载体库只收录有权威 GenBank 登录号的载体：NCBI 记录可自由再分发，而 pET-28a、pcDNA3.1、pQE 等
+  仅有厂商发布的序列，没有这样的记录，因此不内置，由用户用「从 NCBI 导入」或直接打开厂商文件。
+  新增条目由 `node scripts/fetch-vector-library.mjs` 抓取，测试校验目录声明的长度与记录一致。
 - 只有实际计算路径调用了某个库，才能在文档或界面中宣称使用了该算法。
 - 区分三类使用方式，README 致谢按此分节：**随发行包分发的依赖**（必须附带许可证全文）、**参考过公开格式文档但独立实现的部分**（不复制代码，注明参考来源与 commit）、**仅作为交叉验证参照、从不进入构建的工具**。改动依赖后重跑 `node scripts/gen-third-party-notices.mjs`。
 
