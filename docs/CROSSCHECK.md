@@ -3,7 +3,9 @@
 `npm run crosscheck` (needs Python 3 and network access for the first run) compares GATC with
 independent implementations on real files written by SnapGene itself: 7 plasmids from the
 SnapGene plasmid library (pUC19, pBR322, pACYC184, pBluescript II KS(+), pcDNA3.1(+), pEGFP-N1,
-pYES2) and the 8 SnapGene test files shipped with Biopython.
+pYES2), the 8 SnapGene test files shipped with Biopython, and 12 Gateway vectors from the same
+library (pDONR201/207/221/Zeo, pENTR1A, pDEST14/15/17/27, pcDNA-DEST40, pET-DEST42,
+pLenti6_V5-DEST).
 
 | Check | Reference | Result (2026-10-27) |
 |---|---|---|
@@ -18,6 +20,9 @@ pYES2) and the 8 SnapGene test files shipped with Biopython.
 | Restriction cloning (PCR insert + vector, both orientations) | pydna | 15/15 identical |
 | Gibson assembly (2–6 fragments, some reversed) | known answer | 28/28 identical |
 | Golden Gate, BsaI (2–5 parts) | known answer | 9/9 identical |
+| Gateway BP, 4 real pDONR vectors | pydna `gateway_assembly` | 12/12 identical |
+| Gateway LR, 7 real pDEST vectors | pydna `gateway_assembly` | 14/14 identical |
+| Cre/lox excision, inversion and integration | pydna `recombinase_assembly` | 8/8 identical |
 
 ## Defects this found and fixed
 
@@ -34,11 +39,22 @@ pYES2) and the 8 SnapGene test files shipped with Biopython.
   junction (one junction gained 4 bp, the other lost 4), so directional cloning products were
   wrong whenever the insert went in reversed.
 - PCR did not warn when a primer's 3′ end can also anneal to the opposite strand.
+- Gateway BP produced an entry clone that kept only the 25 bp attB cores, losing 148 bp of
+  donor-derived sequence, so the product carried attB sites instead of the attL sites a real
+  entry clone has. BP and LR now cut both parents inside the shared recombination core and join
+  them crosswise, which is what makes each junction a full attL (BP) or attB (LR) site.
+- att sites were recognised only from an annotation or the attB core sequence, so a genuine
+  entry clone — including a vendor pENTR plasmid whose attL is not annotated — was rejected with
+  "attL1 and attL2 sites must both be present". Sites are now identified from their core plus
+  the attP-derived arm, which tells attB, attP, attL and attR apart.
+- Cre/lox integration of two circular molecules concatenated them at their stored origins
+  instead of at the loxP sites, so the product was the right length but the wrong sequence, and
+  a site on the bottom strand was not flipped.
 
 ## Not covered
 
 - Opening GATC-written files in SnapGene itself (Biopython is an independent reader, not SnapGene).
 - 3011 enzymes in the database are not in Biopython's REBASE subset (mostly isoschizomer and
   historical names), and 15 of 550 commercial enzymes could not be checked.
-- Gateway, TA/TOPO, LIC, Cre/Lox, mutagenesis primers, Sanger alignment and the virtual gel
-  have unit tests only.
+- TA/TOPO, LIC, mutagenesis primers, Sanger alignment and the virtual gel have unit tests only.
+- Multi-site Gateway (attB4/attB3 series) is not compared; only the attB1/attB2 series is.

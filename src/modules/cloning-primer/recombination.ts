@@ -462,14 +462,68 @@ function loxArmType(doc: PlasmidDocument, site: LocatedSite): 'left' | 'right' |
   return 'wild';
 }
 
+/** Rotates a circular segment so that `offset` becomes its origin. */
+function rotateSegment(data: SegmentData, offset: number): SegmentData {
+  const length = data.sequence.length;
+  if (length === 0) return data;
+  const shift = mod(offset, length);
+  if (shift === 0) return data;
+  const temp = makeDocument({
+    name: 'rotation',
+    sequence: data.sequence,
+    topology: 'circular',
+    features: data.features,
+    primers: data.primers,
+  });
+  return segmentFrom(temp, shift, shift + length, true);
+}
+
+/** Crossover point inside a recombination site: the start of its 8 bp spacer. */
+const SITE_SPACER_OFFSET = 13;
+
+/**
+ * Opens a circular molecule at the crossover point of `site` so the site's spacer starts the
+ * sequence, reverse-complementing it when the site sits on the bottom strand.
+ */
+function openAtSite(
+  doc: PlasmidDocument,
+  site: LocatedSite,
+): { data: SegmentData; site: LocatedSite } {
+  const circular = doc.topology === 'circular';
+  const length = doc.sequence.length;
+  if (!circular || length === 0) {
+    return { data: segmentFrom(doc, 0, length, false), site };
+  }
+  const reverse = site.strand === -1;
+  const cut = reverse
+    ? mod(site.end - SITE_SPACER_OFFSET, length)
+    : mod(site.start + SITE_SPACER_OFFSET, length);
+  const data = reverse
+    ? segmentFrom(doc, cut - length, cut, true, true)
+    : segmentFrom(doc, cut, cut + length, true);
+  const siteLength = site.end - site.start;
+  // After opening, the spacer is at the origin, so the site wraps the seam.
+  return {
+    data,
+    site: {
+      ...site,
+      strand: 1,
+      start: mod(length - SITE_SPACER_OFFSET, length),
+      end: mod(length - SITE_SPACER_OFFSET, length) + siteLength,
+    },
+  };
+}
+
 function integrationProduct(
   doc1: PlasmidDocument,
-  site1: LocatedSite,
+  site1Input: LocatedSite,
   doc2: PlasmidDocument,
-  site2: LocatedSite,
+  site2Input: LocatedSite,
   recombinase: 'Cre' | 'Flp',
   events: string[],
 ): PlasmidDocument {
+  let site1 = site1Input;
+  let site2 = site2Input;
   const arm1 = loxArmType(doc1, site1);
   const arm2 = loxArmType(doc2, site2);
   const mutantLabelPair =
@@ -482,52 +536,30 @@ function integrationProduct(
       (arm1 === 'right' && arm2 === 'left'));
   const topology: 'circular' | 'linear' =
     doc1.topology === 'circular' && doc2.topology === 'circular' ? 'circular' : 'linear';
-  let sequence1 = doc1.sequence;
-  let sequence2 = doc2.sequence;
+  // Strand exchange happens inside the site's spacer, so each molecule is opened there (and
+  // flipped when its site faces the other way) before the two are joined. Joining them at their
+  // stored origins instead would put the junction in the wrong place. Each junction then carries
+  // one arm from either parent, which is what makes lox66 x lox71 yield loxP and lox72.
+  const prepared1 = openAtSite(doc1, site1);
+  const prepared2 = openAtSite(doc2, site2);
+  const joined = concatenateSegments([prepared1.data, prepared2.data]);
+  const firstLength = prepared1.data.sequence.length;
+  const siteLength = site1.end - site1.start;
+  // Opened at the spacer, the second recombinant site straddles the seam; rotating the product
+  // by the upstream arm brings it back into one piece.
+  const rotated =
+    topology === 'circular' ? rotateSegment(joined, joined.sequence.length - SITE_SPACER_OFFSET) : joined;
+  const sequence = rotated.sequence;
+  const features = rotated.features;
+  const primers = rotated.primers;
+  const firstSiteStart = topology === 'circular' ? firstLength : firstLength - SITE_SPACER_OFFSET;
+  const secondSiteStart = topology === 'circular' ? 0 : sequence.length - SITE_SPACER_OFFSET;
   if (specialPair) {
-    sequence1 = replaceInterval(
-      sequence1,
-      site1.start,
-      site1.end,
-      RECOMBINATION_SITES.loxP,
-      doc1.topology === 'circular',
-    );
-    sequence2 = replaceInterval(
-      sequence2,
-      site2.start,
-      site2.end,
-      'TACCGTTCGTATAATGTATGCTATACGAACGGTA',
-      doc2.topology === 'circular',
-    );
-  }
-  const offset = sequence1.length;
-  const sequence = sequence1 + sequence2;
-  const features = [
-    ...doc1.features.map(cloneFeature),
-    ...doc2.features.map((feature) => shiftFeature(feature, offset)),
-  ];
-  const primers = [
-    ...clonePrimers(doc1.primers),
-    ...doc2.primers.map((primer) => shiftPrimer(primer, offset)),
-  ];
-  if (specialPair) {
-    setSiteFeature(features, 'loxP', site1.start, site1.end, site1.strand);
-    setSiteFeature(
-      features,
-      'lox72',
-      offset + site2.start,
-      offset + site2.end,
-      site2.strand,
-    );
+    setSiteFeature(features, 'loxP', firstSiteStart, firstSiteStart + siteLength, 1);
+    setSiteFeature(features, 'lox72', secondSiteStart, secondSiteStart + siteLength, 1);
   } else {
-    addSiteFeature(features, site1.site, site1.start, site1.end, site1.strand);
-    addSiteFeature(
-      features,
-      site2.site,
-      offset + site2.start,
-      offset + site2.end,
-      site2.strand,
-    );
+    addSiteFeature(features, site1.site, firstSiteStart, firstSiteStart + siteLength, 1);
+    addSiteFeature(features, site2.site, secondSiteStart, secondSiteStart + siteLength, 1);
   }
   const product = buildProduct(
     `${doc1.name}_${doc2.name}_cointegrate`,

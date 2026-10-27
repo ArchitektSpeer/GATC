@@ -1,6 +1,6 @@
 # GATC 跨模块审计包（AUDIT_BUNDLE）
 
-> 生成时间：2026-10-27T02:52:23.562Z
+> 生成时间：2026-10-27T07:02:54.784Z
 > 用途：连同第 1 节的审阅提示词一起发给外部审阅模型，做最终的代码与生信算法审计。
 
 ## 1. 审阅提示词
@@ -31,7 +31,7 @@
 | 项 | 结果 |
 |---|---|
 | `tsc --noEmit` | 0 error ✅ |
-| `vitest run` | Test Files 15 passed (15) Tests 374 passed (374) |
+| `vitest run` | Test Files 1 failed | 14 passed (15) Tests 1 failed | 376 passed (377) ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯ |
 | 模块间交叉引用 | 无 ✅ |
 
 ## 3. 模块规模与公开接口
@@ -40,7 +40,7 @@
 |---|---|---|---|
 | io-adapter | 2 | 5806 | 1 |
 | seq-engine | 11 | 6383 | 2 |
-| cloning-primer | 11 | 9443 | 2 |
+| cloning-primer | 11 | 9820 | 2 |
 | alignment-gel | 14 | 6852 | 3 |
 | canvas-ui | 35 | 13161 | 5 |
 | ai-copilot | 3 | 3528 | 1 |
@@ -141,23 +141,23 @@ cloning.ts:829  export function designGibsonPrimers(
 cloning.ts:1090  export function simulateGoldenGateAssembly(
 cloning.ts:1196  export function designGoldenGatePrimers(
 cloning.ts:1246  export const GATEWAY_ATT_SITES = {
-cloning.ts:1434  export function simulateGatewayBP(
-cloning.ts:1505  export function simulateGatewayLR(
-cloning.ts:1871  export function simulateMultiSiteGatewayLR(
-cloning.ts:2104  export function simulatePCR(
-cloning.ts:2336  export function simulateOverlapExtensionPCR(
-cloning.ts:2366  export function digestAndReligate(
-cloning.ts:2376  export function pcrProductLength(
-cloning.ts:2386  export function gibsonProductLength(fragments: PlasmidDocument[], options?: { minOverlap?: number; maxOverlap?: number; circular?: boolean }): number {
-cloning.ts:2391  export function mutationProduct(
-cloning.ts:2409  export function defaultEnzymeList(): RestrictionEnzyme[] {
-cloning.ts:2413  export function restrictionEnzymePanel(): RestrictionEnzyme[] {
-cloning.ts:2417  export function isGoldenGateEnzyme(enzyme: RestrictionEnzyme): boolean {
-cloning.ts:2421  export function primerPairOptions(options?: PrimerDesignOptions): PrimerDesignOptions {
-cloning.ts:2425  export function designPrimerPairForFeature(
-cloning.ts:2433  export function gcOf(sequence: string): number {
-cloning.ts:2437  export * from './assembly';
-cloning.ts:2438  export * from './recombination';
+cloning.ts:1676  export function simulateGatewayBP(
+cloning.ts:1764  export function simulateGatewayLR(
+cloning.ts:2146  export function simulateMultiSiteGatewayLR(
+cloning.ts:2379  export function simulatePCR(
+cloning.ts:2611  export function simulateOverlapExtensionPCR(
+cloning.ts:2641  export function digestAndReligate(
+cloning.ts:2651  export function pcrProductLength(
+cloning.ts:2661  export function gibsonProductLength(fragments: PlasmidDocument[], options?: { minOverlap?: number; maxOverlap?: number; circular?: boolean }): number {
+cloning.ts:2666  export function mutationProduct(
+cloning.ts:2684  export function defaultEnzymeList(): RestrictionEnzyme[] {
+cloning.ts:2688  export function restrictionEnzymePanel(): RestrictionEnzyme[] {
+cloning.ts:2692  export function isGoldenGateEnzyme(enzyme: RestrictionEnzyme): boolean {
+cloning.ts:2696  export function primerPairOptions(options?: PrimerDesignOptions): PrimerDesignOptions {
+cloning.ts:2700  export function designPrimerPairForFeature(
+cloning.ts:2708  export function gcOf(sequence: string): number {
+cloning.ts:2712  export * from './assembly';
+cloning.ts:2713  export * from './recombination';
 enzymes.ts:11  export interface EnzymeDefinition extends RestrictionEnzyme {
 enzymes.ts:15  export function makeEnzyme(
 enzymes.ts:34  export const COMMON_ENZYMES: RestrictionEnzyme[] = [
@@ -212,7 +212,7 @@ primer.ts:806  export function findPrimerBindingSites(
 recombination.ts:25  export type RecombinationSite =
 recombination.ts:35  export const RECOMBINATION_SITES: Record<RecombinationSite, string> = {
 recombination.ts:98  export function findRecombinationSites(doc: PlasmidDocument): LocatedSite[] {
-recombination.ts:559  export function simulateRecombinase(
+recombination.ts:591  export function simulateRecombinase(
 thermo.ts:19  export interface ReactionConditions {
 thermo.ts:26  export const DEFAULT_REACTION_CONDITIONS: Required<ReactionConditions> = {
 thermo.ts:43  export const SANTA_LUCIA_1998: Record<string, NearestNeighborStep> = {

@@ -583,6 +583,18 @@ Claude Code 在完成工程初始化与 `src/types/schema.ts` 创建后，应将
      npm run test        # vitest run 所有生信边界单元测试必须 100% PASS
      npm run build       # vite build 生产构建必须成功
      ```
+5. **外部交叉验证门禁（Cross-check Gate）**：
+   - 仅靠自测无法证明结果正确，因此还需与**独立实现**逐项对比，样本一律使用 **SnapGene 本体生成的真实 `.dna` 文件**（官网质粒库 + Biopython 测试集 + Gateway 载体）：
+     ```bash
+     npm run crosscheck  # 需 Python 3；首次运行会下载参考文件并建立 venv
+     ```
+   - 四个阶段与参考实现：
+     1. `.dna` 读写互通 ↔ Biopython 的 SnapGene 解析器（双向）
+     2. 酶切位点 ↔ REBASE；引物 Tm ↔ primer3；CDS 翻译 ↔ 文件内 SnapGene 自存蛋白序列
+     3. 酶切片段 / PCR / 酶切连接 ↔ pydna；Gibson / Golden Gate ↔ 已知答案
+     4. Gateway BP、LR ↔ pydna `gateway_assembly`；Cre/lox ↔ pydna `recombinase_assembly`
+   - 每一项必须 100% 一致；发现的差异必须判定为"GATC 缺陷"或"参考工具口径差异"，前者修复并补回归测试，后者在脚本中注明理由后跳过。
+   - 结果与历次发现的缺陷记录在 `docs/CROSSCHECK.md`。
 
 ---
 

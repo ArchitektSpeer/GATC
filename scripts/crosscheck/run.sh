@@ -3,11 +3,12 @@
 #   1. .dna interoperability: GATC import vs Biopython's SnapGene parser, and GATC export read back by Biopython
 #   2. restriction sites vs REBASE, primer Tm vs primer3, CDS translations vs SnapGene's stored proteins
 #   3. digest / PCR / restriction cloning vs pydna; Gibson and Golden Gate against known answers
+#   4. Gateway BP/LR and Cre/lox vs pydna, on real Gateway vectors
 # Usage: npm run crosscheck            (work files go to .crosscheck/, which is git-ignored)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 W=.crosscheck
-mkdir -p "$W/refdata/snapgene" "$W/refdata/biopython" "$W/out"
+mkdir -p "$W/refdata/snapgene" "$W/refdata/biopython" "$W/refdata/gateway" "$W/out"
 
 if [ ! -x "$W/venv/bin/python" ]; then
   if command -v uv >/dev/null; then uv venv -q "$W/venv" && uv pip install -q -p "$W/venv" biopython primer3-py pydna
@@ -27,9 +28,14 @@ for p in "basic_cloning_vectors&plasmid=pUC19" "basic_cloning_vectors&plasmid=pB
   n=$(echo "$p" | sed 's/.*plasmid=//; s/%2B/+/g')
   [ -s "$W/refdata/snapgene/$n.dna" ] || curl -sfL -o "$W/refdata/snapgene/$n.dna" "$SG$p" || rm -f "$W/refdata/snapgene/$n.dna"
 done
+GW='https://www.snapgene.com/local/fetch.php?set=gateway_cloning_vectors&plasmid='
+for n in pDONR221 pDONR207 pDONR201 pDONR_Zeo pENTR1A pDEST14 pDEST15 pDEST17 pDEST27 pcDNA-DEST40 pET-DEST42 pLenti6_V5-DEST; do
+  [ -s "$W/refdata/gateway/$n.dna" ] || curl -sfL -o "$W/refdata/gateway/$n.dna" "$GW$n" || rm -f "$W/refdata/gateway/$n.dna"
+done
 find "$W/refdata" -size 0 -delete
-ALL=("$W"/refdata/*/*.dna)
+ALL=("$W"/refdata/snapgene/*.dna "$W"/refdata/biopython/*.dna)
 SGF=("$W"/refdata/snapgene/*.dna)
+GWF=("$W"/refdata/gateway/*.dna)
 
 status=0
 echo "== 1. .dna interoperability (${#ALL[@]} SnapGene-authored files) =="
@@ -57,4 +63,9 @@ echo "== 3. cloning simulations =="
 $PY scripts/crosscheck/ref_cloning.py gen "$W/out/scen.json" "${SGF[@]}" >/dev/null
 node scripts/crosscheck/gatc_cloning.mjs "$W/out/scen.json" "$W/out/cloning.json" 2>/dev/null
 $PY scripts/crosscheck/ref_cloning.py check "$W/out/scen.json" "$W/out/cloning.json" | grep -v "ref skipped" || status=1
+
+echo "== 4. Gateway and site-specific recombination =="
+$PY scripts/crosscheck/ref_recombination.py gen "$W/out/rec.json" "${GWF[@]}" >/dev/null
+node scripts/crosscheck/gatc_recombination.mjs "$W/out/rec.json" "$W/out/rec-gatc.json" 2>/dev/null
+$PY scripts/crosscheck/ref_recombination.py check "$W/out/rec.json" "$W/out/rec-gatc.json" || status=1
 exit $status

@@ -1289,6 +1289,147 @@ interface AttSiteLocation {
   name: string;
 }
 
+/**
+ * Gateway strand exchange happens inside a short core that the attB, attP, attL and attR site
+ * of one series all share, so a BP or LR product is the two parents cut inside their cores and
+ * joined crosswise: the entry clone keeps the donor-derived arm of attP, which turns the attB
+ * core into a full attL site. The parents are identical across the core, so the exact cut point
+ * inside it does not affect the product sequence.
+ */
+const GATEWAY_CORES: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: 'TWTGTACAAAAAA',
+  2: 'TWTGTACAAGAAA',
+  3: 'TWTGTATAATAAA',
+  4: 'TWTGTATAGAAAA',
+  5: 'TWTGTATACAAAA',
+};
+
+/**
+ * Top-strand left edge of the recombination core of one att site. The core is searched on both
+ * strands because the series-2 sites of a vector point inwards.
+ */
+function findGatewayCore(
+  doc: PlasmidDocument,
+  site: AttSiteLocation,
+  series: 1 | 2 | 3 | 4 | 5,
+): number | null {
+  const circular = doc.topology === 'circular';
+  const core = GATEWAY_CORES[series];
+  const matches = findMotifOnBothStrands(doc.sequence, core, circular);
+  if (matches.length === 0) return null;
+  const distance = (position: number): number => {
+    if (position >= site.start && position < site.end) return 0;
+    const raw = Math.min(
+      Math.abs(position - site.start),
+      Math.abs(position - site.end),
+    );
+    return circular ? Math.min(raw, doc.length - raw) : raw;
+  };
+  let best = matches[0];
+  for (const match of matches) {
+    if (distance(match.position) < distance(best.position)) best = match;
+  }
+  // A core far from the annotated site belongs to another att site in the same molecule.
+  return distance(best.position) > core.length * 4 ? null : best.position;
+}
+
+// Conserved stretches of the attP arms. An att site is attL when the attP-derived arm sits
+// upstream of its core, attR when it sits downstream, attP when both do and attB when neither
+// does, which is how a real entry or destination clone is recognised without annotation.
+const ATTP_LEFT_ARM = 'GACTGATAGTGACCTGT';
+const ATTP_RIGHT_ARM = 'CAGACTACATAAT';
+const ATTP_ARM_WINDOW = 140;
+
+/**
+ * Locates an att site from its recombination core and arms, for molecules whose att sites are
+ * not annotated. `kind` is the series letter: B, P, L or R.
+ */
+function findAttSiteByCore(
+  doc: PlasmidDocument,
+  series: 1 | 2 | 3 | 4 | 5,
+  kind: 'B' | 'P' | 'L' | 'R',
+): AttSiteLocation | null {
+  const circular = doc.topology === 'circular';
+  const core = GATEWAY_CORES[series];
+  for (const match of findMotifOnBothStrands(doc.sequence, core, circular)) {
+    // Read the neighbourhood in the site's own 5'->3' direction.
+    const before = sequenceSlice(doc.sequence, match.position - ATTP_ARM_WINDOW, match.position, circular);
+    const after = sequenceSlice(
+      doc.sequence,
+      match.position + core.length,
+      match.position + core.length + ATTP_ARM_WINDOW,
+      circular,
+    );
+    const upstream = match.strand === 1 ? before : reverseComplement(after);
+    const downstream = match.strand === 1 ? after : reverseComplement(before);
+    const hasLeftArm = upstream.includes(ATTP_LEFT_ARM);
+    const hasRightArm = downstream.includes(ATTP_RIGHT_ARM);
+    const matchesKind =
+      kind === 'L'
+        ? hasLeftArm && !hasRightArm
+        : kind === 'R'
+          ? hasRightArm && !hasLeftArm
+          : kind === 'P'
+            ? hasLeftArm && hasRightArm
+            : !hasLeftArm && !hasRightArm;
+    if (!matchesKind) continue;
+    // Span the arm the site actually carries, so the crossover keeps the right amount of flank.
+    const armBefore = hasLeftArm
+      ? upstream.length - upstream.lastIndexOf(ATTP_LEFT_ARM)
+      : Math.min(GATEWAY_ATT_SITES.attB1.length, upstream.length);
+    const armAfter = hasRightArm
+      ? downstream.indexOf(ATTP_RIGHT_ARM) + ATTP_RIGHT_ARM.length
+      : Math.min(GATEWAY_ATT_SITES.attB1.length, downstream.length);
+    const leading = match.strand === 1 ? armBefore : armAfter;
+    const trailing = match.strand === 1 ? armAfter : armBefore;
+    const start = match.position - leading;
+    const end = match.position + core.length + trailing;
+    if (!circular && (start < 0 || end > doc.length)) continue;
+    return {
+      start: circular ? mod(start, doc.length) : start,
+      end: circular ? mod(end, doc.length) : end,
+      strand: match.strand,
+      name: `att${kind}${series}`,
+    };
+  }
+  return null;
+}
+
+/** Cut coordinates of a recombination between two att sites, or null if a core is missing. */
+function gatewayCoreCuts(
+  left: { doc: PlasmidDocument; first: AttSiteLocation; second: AttSiteLocation },
+  right: { doc: PlasmidDocument; first: AttSiteLocation; second: AttSiteLocation },
+): { leftFirst: number; leftSecond: number; rightFirst: number; rightSecond: number } | null {
+  const leftFirst = findGatewayCore(left.doc, left.first, 1);
+  const leftSecond = findGatewayCore(left.doc, left.second, 2);
+  const rightFirst = findGatewayCore(right.doc, right.first, 1);
+  const rightSecond = findGatewayCore(right.doc, right.second, 2);
+  if (leftFirst === null || leftSecond === null || rightFirst === null || rightSecond === null) {
+    return null;
+  }
+  return { leftFirst, leftSecond, rightFirst, rightSecond };
+}
+
+/**
+ * Feature spanning the att site that a crossover builds at `junction`, the position in the
+ * product where the second parent's piece begins. The arms are taken from how much of each
+ * parent's annotated att site lies outside its core.
+ */
+function junctionAttFeature(
+  name: string,
+  junction: number,
+  upstream: { doc: PlasmidDocument; site: AttSiteLocation; core: number },
+  downstream: { doc: PlasmidDocument; site: AttSiteLocation; core: number },
+  productLength: number,
+): SequenceFeature | null {
+  const armBefore = Math.max(0, rangeLength(upstream.site.start, upstream.core, upstream.doc.length, upstream.doc.topology === 'circular'));
+  const armAfter = Math.max(0, rangeLength(downstream.core, downstream.site.end, downstream.doc.length, downstream.doc.topology === 'circular'));
+  const start = junction - armBefore;
+  const end = junction + armAfter;
+  if (end <= start || start < 0 || end > productLength) return null;
+  return attFeature(name, start, end);
+}
+
 function findAttSite(doc: PlasmidDocument, names: string[], motifs: string[]): AttSiteLocation | null {
   const normalisedNames = names.map((name) => name.toLowerCase().replace(/[^a-z0-9]/g, ''));
   for (const feature of doc.features) {
@@ -1431,15 +1572,116 @@ function gatewayBackboneSegments(
   return { segments: [before, after], before, after, circular: false };
 }
 
+/**
+ * Products of a Gateway reaction built by cutting both parents inside their recombination cores
+ * and joining them crosswise: the product keeps the vector backbone plus the insert's gene, and
+ * the byproduct keeps the vector's internal cassette plus the rest of the insert. Returns null
+ * when a core cannot be located, so the caller can fall back to joining at the annotated edges.
+ */
+function gatewayCoreProducts(options: {
+  insert: PlasmidDocument;
+  vector: PlasmidDocument;
+  insertFirst: AttSiteLocation;
+  insertSecond: AttSiteLocation;
+  vectorFirst: AttSiteLocation;
+  vectorSecond: AttSiteLocation;
+  operation: 'gateway_bp' | 'gateway_lr';
+  productName: string;
+  byproductName: string;
+  productSiteNames: [string, string];
+  warnings: string[];
+}): { product: PlasmidDocument; byproduct: PlasmidDocument } | null {
+  const { insert, vector, insertFirst, insertSecond, vectorFirst, vectorSecond, warnings } = options;
+  if (vector.topology !== 'circular') return null;
+  const cuts = gatewayCoreCuts(
+    { doc: insert, first: insertFirst, second: insertSecond },
+    { doc: vector, first: vectorFirst, second: vectorSecond },
+  );
+  if (!cuts) return null;
+
+  const gene = segmentFrom(insert, cuts.leftFirst, cuts.leftSecond);
+  const backbone = segmentFrom(vector, cuts.rightSecond, cuts.rightFirst);
+  const productData: SegmentData = { sequence: '', features: [], primers: [] };
+  appendSegment(productData, backbone);
+  const junction = productData.sequence.length;
+  appendSegment(productData, gene);
+  const productLength = productData.sequence.length;
+  const firstSite = junctionAttFeature(
+    options.productSiteNames[0],
+    junction,
+    { doc: vector, site: vectorFirst, core: cuts.rightFirst },
+    { doc: insert, site: insertFirst, core: cuts.leftFirst },
+    productLength,
+  );
+  // The second site straddles the circle's seam, so it is annotated as a wrapping feature.
+  const secondArmBefore = rangeLength(
+    insertSecond.start,
+    cuts.leftSecond,
+    insert.length,
+    insert.topology === 'circular',
+  );
+  const secondArmAfter = rangeLength(
+    cuts.rightSecond,
+    vectorSecond.end,
+    vector.length,
+    vector.topology === 'circular',
+  );
+  const secondSite =
+    secondArmBefore > 0 && secondArmAfter > 0 && secondArmBefore + secondArmAfter <= productLength
+      ? attFeature(
+          options.productSiteNames[1],
+          mod(productLength - secondArmBefore, productLength),
+          mod(secondArmAfter, productLength),
+        )
+      : null;
+  if (firstSite) productData.features.push(firstSite);
+  if (secondSite) productData.features.push(secondSite);
+  const product = buildGatewayProduct(
+    options.productName,
+    options.operation,
+    [insert, vector],
+    [productData],
+    [],
+    'circular',
+    warnings,
+  );
+
+  const cassette = segmentFrom(vector, cuts.rightFirst, cuts.rightSecond);
+  const insertIsCircular = insert.topology === 'circular';
+  const byproductSegments: SegmentData[] = insertIsCircular
+    ? [segmentFrom(insert, cuts.leftSecond, cuts.leftFirst), cassette]
+    : [
+        segmentFrom(insert, 0, cuts.leftFirst),
+        cassette,
+        segmentFrom(insert, cuts.leftSecond, insert.length),
+      ];
+  const byproduct = buildGatewayProduct(
+    options.byproductName,
+    options.operation,
+    [vector, insert],
+    byproductSegments,
+    [],
+    insertIsCircular ? 'circular' : 'linear',
+    warnings,
+    insertIsCircular
+      ? undefined
+      : {
+          left: copyOverhang(insert.linearEnds?.left ?? bluntOverhang()),
+          right: copyOverhang(insert.linearEnds?.right ?? bluntOverhang()),
+        },
+  );
+  return { product, byproduct };
+}
+
 export function simulateGatewayBP(
   attBInsert: PlasmidDocument,
   donor: PlasmidDocument,
 ): { entryClone: PlasmidDocument | null; byproduct: PlasmidDocument | null; warnings: string[] } {
   const warnings: string[] = [];
-  const b1 = findAttSite(attBInsert, ['attB1', 'attb1'], [GATEWAY_ATT_SITES.attB1]);
-  const b2 = findAttSite(attBInsert, ['attB2', 'attb2'], [GATEWAY_ATT_SITES.attB2]);
-  const p1 = findAttSite(donor, ['attP1', 'attp1'], [GATEWAY_ATT_SITES.attP1, 'ACAAGTTTGTACAAAAAAGCTGAAC']);
-  const p2 = findAttSite(donor, ['attP2', 'attp2'], [GATEWAY_ATT_SITES.attP2, 'ACCCAGCTTTCTTGTACAAAGTGGT', 'ACCCAGCTTTCTTGTACAAAGTGGTT']);
+  const b1 = findAttSite(attBInsert, ['attB1', 'attb1'], [GATEWAY_ATT_SITES.attB1]) ?? findAttSiteByCore(attBInsert, 1, 'B');
+  const b2 = findAttSite(attBInsert, ['attB2', 'attb2'], [GATEWAY_ATT_SITES.attB2]) ?? findAttSiteByCore(attBInsert, 2, 'B');
+  const p1 = findAttSite(donor, ['attP1', 'attp1'], [GATEWAY_ATT_SITES.attP1, 'ACAAGTTTGTACAAAAAAGCTGAAC']) ?? findAttSiteByCore(donor, 1, 'P');
+  const p2 = findAttSite(donor, ['attP2', 'attp2'], [GATEWAY_ATT_SITES.attP2, 'ACCCAGCTTTCTTGTACAAAGTGGT', 'ACCCAGCTTTCTTGTACAAAGTGGTT']) ?? findAttSiteByCore(donor, 2, 'P');
   if (!b1 || !b2) {
     return { entryClone: null, byproduct: null, warnings: ['attB1 and attB2 sites must both be present on the insert.'] };
   }
@@ -1451,6 +1693,23 @@ export function simulateGatewayBP(
   if (attBInsert.topology !== 'circular') warnings.push('The attB insert is linear; the entry clone will be linear.');
   if (donor.topology !== 'circular') warnings.push('The donor vector is linear; the entry clone will be linear.');
   const topology = donor.topology === 'circular' ? 'circular' : 'linear';
+  const coreProducts = gatewayCoreProducts({
+    insert: attBInsert,
+    vector: donor,
+    insertFirst: b1,
+    insertSecond: b2,
+    vectorFirst: p1,
+    vectorSecond: p2,
+    operation: 'gateway_bp',
+    productName: `${attBInsert.name}_entry`,
+    byproductName: `${donor.name}_bp_byproduct`,
+    productSiteNames: ['attL1', 'attL2'],
+    warnings,
+  });
+  if (coreProducts) {
+    return { entryClone: coreProducts.product, byproduct: coreProducts.byproduct, warnings };
+  }
+  warnings.push('Gateway cores were not found; the att sites were joined at their annotated edges.');
   const insertInternal = segmentFrom(attBInsert, b1.end, b2.start);
   const donorBackbone = gatewayBackboneSegments(donor, p1, p2);
   const entrySegments = donorBackbone.circular
@@ -1507,10 +1766,10 @@ export function simulateGatewayLR(
   destination: PlasmidDocument,
 ): { expressionClone: PlasmidDocument | null; byproduct: PlasmidDocument | null; warnings: string[] } {
   const warnings: string[] = [];
-  const l1 = findAttSite(entryClone, ['attL1', 'attl1'], [GATEWAY_ATT_SITES.attL1]);
-  const l2 = findAttSite(entryClone, ['attL2', 'attl2'], [GATEWAY_ATT_SITES.attL2]);
-  const r1 = findAttSite(destination, ['attR1', 'attr1'], [GATEWAY_ATT_SITES.attR1, 'ACAAGTTTGTACAAAAAAGCTGAAC']);
-  const r2 = findAttSite(destination, ['attR2', 'attr2'], [GATEWAY_ATT_SITES.attR2, 'ACCCAGCTTTCTTGTACAAAGTGGT', 'ACCCAGCTTTCTTGTACAAAGTGGTT']);
+  const l1 = findAttSite(entryClone, ['attL1', 'attl1'], []) ?? findAttSiteByCore(entryClone, 1, 'L');
+  const l2 = findAttSite(entryClone, ['attL2', 'attl2'], []) ?? findAttSiteByCore(entryClone, 2, 'L');
+  const r1 = findAttSite(destination, ['attR1', 'attr1'], []) ?? findAttSiteByCore(destination, 1, 'R');
+  const r2 = findAttSite(destination, ['attR2', 'attr2'], []) ?? findAttSiteByCore(destination, 2, 'R');
   if (!l1 || !l2) {
     return { expressionClone: null, byproduct: null, warnings: ['attL1 and attL2 sites must both be present on the entry clone.'] };
   }
@@ -1521,6 +1780,22 @@ export function simulateGatewayLR(
   if (r1.start >= r2.start) warnings.push('attR1 is downstream of attR2; verify the destination orientation.');
   if (entryClone.topology !== 'circular') warnings.push('The entry clone is linear; the expression clone will be linear.');
   if (destination.topology !== 'circular') warnings.push('The destination vector is linear; the expression clone will be linear.');
+  const coreProducts = gatewayCoreProducts({
+    insert: entryClone,
+    vector: destination,
+    insertFirst: l1,
+    insertSecond: l2,
+    vectorFirst: r1,
+    vectorSecond: r2,
+    operation: 'gateway_lr',
+    productName: `${entryClone.name}_expression`,
+    byproductName: `${entryClone.name}_lr_byproduct`,
+    productSiteNames: ['attB1', 'attB2'],
+    warnings,
+  });
+  if (coreProducts) {
+    return { expressionClone: coreProducts.product, byproduct: coreProducts.byproduct, warnings };
+  }
   const topology = destination.topology === 'circular' ? 'circular' : 'linear';
   const insertInternal = segmentFrom(entryClone, l1.end, l2.start);
   const destinationBackbone = gatewayBackboneSegments(destination, r1, r2);

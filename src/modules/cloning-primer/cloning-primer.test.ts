@@ -1187,6 +1187,42 @@ describe('TA, TOPO and LIC cloning', () => {
   });
 });
 
+describe('Gateway recombination products', () => {
+  const CORE1 = 'TTTGTACAAAAAA';
+  const CORE2 = 'TTTGTACAAGAAA';
+  // The attP arms that tell attB, attP, attL and attR apart.
+  const P_LEFT = 'TTTGACTGATAGTGACCTGTTCGTTGCAACAAATTGATAAGCAATGCTTTTTTATAATGCCAAC';
+  const P_RIGHT = 'GCTGAACGAGAAACGTAAAATGATATAAATATCAATATATTAAATTAGATTTTGCATAAAAAACAGACTACATAATACTGTAAAACAC';
+
+  const attB1 = `ACAAG${CORE1}GCAGGCT`;
+  const attB2 = reverseComplement(`ACAAG${CORE2}GCAGGCT`);
+  const attP1 = `${P_LEFT}${CORE1}${P_RIGHT}`;
+  const attP2 = reverseComplement(`${P_LEFT}${CORE2}${P_RIGHT}`);
+
+  it('builds an entry clone whose junctions are full attL sites', () => {
+    const gene = 'ATGGCTAGCAAAGGCGAAGAACTGTTTACCGGC'.repeat(3);
+    const insert = makeDocument({ name: 'pcr', sequence: `CCCC${attB1}${gene}${attB2}GGGG`, topology: 'linear' });
+    const donor = makeDocument({
+      name: 'pDONR',
+      sequence: `AAACCCGGGTTT${attP1}CCGGCCGGCCGGCCGG${attP2}TTTGGGCCCAAA`,
+      topology: 'circular',
+    });
+    const { entryClone, byproduct, warnings } = simulateGatewayBP(insert, donor);
+    expect(warnings.some((warning) => warning.includes('cores were not found'))).toBe(false);
+    expect(entryClone).not.toBeNull();
+    expect(entryClone?.topology).toBe('circular');
+    const doubled = (entryClone?.sequence ?? '') + (entryClone?.sequence ?? '');
+    expect(doubled).toContain(gene);
+    // Each junction keeps the donor's attP arm, which is what makes it an attL site.
+    expect(doubled).toContain(`${P_LEFT}${CORE1}GCAGGCT`);
+    expect(doubled).toContain(reverseComplement(`${P_LEFT}${CORE2}GCAGGCT`));
+    // The ccdB cassette leaves with the byproduct, not the entry clone.
+    expect(doubled).not.toContain('CCGGCCGGCCGGCCGG');
+    expect((byproduct?.sequence ?? '') + (byproduct?.sequence ?? '')).toContain('CCGGCCGGCCGGCCGG');
+  });
+
+});
+
 describe('site-specific recombination', () => {
   const loxP = RECOMBINATION_SITES.loxP;
   const lox2272 = RECOMBINATION_SITES.lox2272;
@@ -1313,6 +1349,40 @@ describe('site-specific recombination', () => {
     const shifted = result.products[0].features.filter((item) => item.name === 'loxP');
     expect(shifted.length).toBeGreaterThanOrEqual(2);
     expect(result.products[0].history.some((node) => node.operation === 'manual_edit')).toBe(true);
+  });
+
+  it('joins two circles at their loxP sites, not at their stored origins', () => {
+    const loxPSite = RECOMBINATION_SITES.loxP;
+    const targetBody = 'ACGTTGCA'.repeat(20);
+    const insertBody = 'GGCATTCC'.repeat(10);
+    // Each circle carries one loxP in the middle, away from its origin.
+    const target = makeDocument({ name: 'target', sequence: targetBody + loxPSite + 'TTTTAAAA', topology: 'circular' });
+    const insert = makeDocument({ name: 'donor', sequence: 'CCCCGGGG' + loxPSite + insertBody, topology: 'circular' });
+    const result = simulateRecombinase([target, insert], 'Cre');
+    expect(result.products).toHaveLength(1);
+    const product = result.products[0];
+    expect(product.length).toBe(target.length + insert.length);
+    // The cointegrate carries two loxP sites and keeps each parent's non-site sequence intact.
+    const doubled = product.sequence + product.sequence;
+    expect(doubled.split(loxPSite).length - 1).toBeGreaterThanOrEqual(2);
+    expect(doubled).toContain(targetBody);
+    expect(doubled).toContain(insertBody);
+  });
+
+  it('flips a partner whose loxP site sits on the bottom strand', () => {
+    const loxPSite = RECOMBINATION_SITES.loxP;
+    const body = 'TTGCAACC'.repeat(12);
+    const target = makeDocument({ name: 'target', sequence: 'ACGT'.repeat(8) + loxPSite + 'GGTT'.repeat(8), topology: 'circular' });
+    const flipped = makeDocument({
+      name: 'flipped',
+      sequence: 'AACC'.repeat(6) + reverseComplement(loxPSite) + body,
+      topology: 'circular',
+    });
+    const result = simulateRecombinase([target, flipped], 'Cre');
+    expect(result.products).toHaveLength(1);
+    const doubled = result.products[0].sequence + result.products[0].sequence;
+    // After the flip the partner contributes its bottom strand, so the body appears reversed.
+    expect(doubled).toContain(reverseComplement(body));
   });
 
   it('generates loxP and lox72 after lox66 and lox71 integration', () => {
