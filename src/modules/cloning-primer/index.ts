@@ -60,6 +60,7 @@ export {
   simulateGibsonAssembly,
   designGibsonPrimers,
   simulateGoldenGateAssembly,
+  goldenGatePartEnds,
   designGoldenGatePrimers,
   simulateGatewayBP,
   simulateGatewayLR,
@@ -81,6 +82,31 @@ export {
   simulateTACloning,
   simulateTOPOCloning,
 } from './assembly';
+
+export type {
+  MocloSlot,
+  MocloStandard,
+  SlotMatch,
+  SyntaxProblem,
+  SyntaxCheck,
+  CombinatorialSlot,
+  CombinatorialProduct,
+  CombinatorialFailure,
+  CombinatorialResult,
+  SlotPrimerDesign,
+} from './moclo';
+export {
+  MOCLO_STANDARDS,
+  mocloStandard,
+  fusionSitesOf,
+  identifySlots,
+  checkPartInSlot,
+  checkSlotChain,
+  scoreFusionSiteSet,
+  combinations,
+  combinatorialAssembly,
+  designSlotPrimers,
+} from './moclo';
 
 export type {
   DuplexEnd,

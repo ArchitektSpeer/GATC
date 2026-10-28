@@ -19,7 +19,9 @@ export type ViewMode = 'split' | 'map' | 'sequence' | 'enzymes' | 'features' | '
 export type Theme = 'light' | 'dark' | 'publication';
 export type WizardKind = 'pcr' | 'restriction' | 'gibson' | 'golden_gate' | 'mutagenesis' | 'primers' | 'gateway' | 'ta_topo' | 'lic' | 'recombinase' | 'insert';
 export type NebBuffer = 'r1.1' | 'r2.1' | 'r3.1' | 'rCutSmart';
-export type ToolDialog = 'find' | 'backtranslate' | 'ncbi' | 'primerlib' | 'vectors' | 'oligo' | null;
+export type ToolDialog =
+  | 'find' | 'backtranslate' | 'ncbi' | 'primerlib' | 'vectors' | 'oligo' | 'moclo'
+  | null;
 export type MapShape = 'auto' | 'circular' | 'linear';
 
 /** A reusable oligo kept across sessions, independent of any sequence. */

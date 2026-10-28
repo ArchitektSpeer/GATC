@@ -384,6 +384,42 @@ await check('导出实验记录（Markdown + 网页）', async () => {
   return `${text.length} chars markdown, ${page2.length} chars html`;
 });
 
+await check('MoClo 矩阵：语法表与元件设计', async () => {
+  await closeDialogs();
+  await tab('pUC19');
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('组合克隆');
+  await page.getByText('组合克隆（MoClo / Golden Gate 矩阵）').click();
+  const dialog = page.locator('.fixed.inset-0').last();
+  // The published plant fusion sites have to be on screen, exactly as the paper gives them.
+  await dialog.getByText('A1', { exact: true }).waitFor({ timeout: 5000 });
+  const text = await dialog.innerText();
+  for (const site of ['GGAG', 'TGAC', 'TCCC', 'TACT', 'CCAT', 'AATG', 'AGGT', 'AGCC', 'TTCG', 'GCTT', 'GGTA', 'CGCT']) {
+    if (!text.includes(site)) throw new Error(`fusion site ${site} is missing from the syntax table`);
+  }
+  if (!/接头表已对照原文核对/.test(text)) throw new Error('the verified-source badge is missing');
+
+  // pUC19 is not a MoClo part, and the tool must say so rather than pretend.
+  await dialog.getByRole('button', { name: /按接头自动归位/ }).click();
+  const t = await toast();
+  if (!/没有符合/.test(t)) throw new Error(t);
+
+  // Domestication: designing the primer pair that would make pUC19's lacZ a CDS part.
+  await dialog.getByLabel('要做成的位置').selectOption('B3-B4');
+  await dialog.getByText('GGTCTCAAATG').first().waitFor({ timeout: 5000 });
+  await shot('21-moclo');
+
+  // Switching to the yeast toolkit must flag that its table is second-hand.
+  await dialog.getByLabel('标准语法').selectOption('ytk');
+  await dialog.getByText(/接头表取自第三方实现/).waitFor({ timeout: 5000 });
+  const ytk = await dialog.innerText();
+  for (const site of ['CCCT', 'AACG', 'TATG', 'ATCC', 'GCTG', 'TACA', 'GAGT', 'CCGA']) {
+    if (!ytk.includes(site)) throw new Error(`YTK site ${site} is missing`);
+  }
+  await closeDialogs();
+  return `12 plant sites + 8 YTK sites shown; ${t}`;
+});
+
 await browser.close();
 const report = { url: URL, passed: results.filter((r) => r.ok).length, total: results.length, results, consoleErrors: errors.slice(0, 30) };
 writeFileSync(`${out}/report.json`, JSON.stringify(report, null, 2));

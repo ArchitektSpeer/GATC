@@ -1090,6 +1090,27 @@ function searchGoldenGate(parts: GoldenGatePart[], circular: boolean): GoldenGat
   return null;
 }
 
+/**
+ * The fragment a Type IIS part plasmid releases, and the two overhangs it presents.
+ * This is the same preparation the assembly itself does, exposed so a part can be
+ * checked against an assembly standard without assembling anything.
+ */
+export function goldenGatePartEnds(
+  part: PlasmidDocument,
+  enzyme: RestrictionEnzyme,
+): { left: OverhangEnd; right: OverhangEnd; length: number; sequence: string; warnings: string[] } | null {
+  const warnings: string[] = [];
+  const prepared = prepareGoldenGatePart(part, enzyme, warnings);
+  if (!prepared) return null;
+  return {
+    left: prepared.left,
+    right: prepared.right,
+    length: prepared.sequence.length,
+    sequence: prepared.sequence,
+    warnings,
+  };
+}
+
 export function simulateGoldenGateAssembly(
   parts: PlasmidDocument[],
   enzyme: RestrictionEnzyme,
