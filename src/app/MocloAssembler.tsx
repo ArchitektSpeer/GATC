@@ -24,6 +24,7 @@ import {
 import { addPrimersToDoc, replaceIfCurrent } from './actions';
 import { selectActiveDoc, useWorkbench } from './store';
 import { Badge, Button, Dialog, Field, Select } from './ui';
+import { t as translate, useT } from '../lib/i18n';
 
 /** The acceptor is not one of the standard's positions; its sites come from the vector itself. */
 const ACCEPTOR = '__acceptor__';
@@ -33,6 +34,7 @@ function slotKey(slot: MocloSlot): string {
 }
 
 export function MocloAssemblerDialog() {
+  const t = useT();
   const open = useWorkbench((s) => s.tool === 'moclo');
   const setTool = useWorkbench((s) => s.setTool);
   const docs = useWorkbench((s) => s.docs);
@@ -60,7 +62,7 @@ export function MocloAssemblerDialog() {
     const ordered: MocloSlot[] = acceptorSites
       ? [
           {
-            id: '受体载体',
+            id: t('受体载体'),
             code: 'VECTOR',
             label: acceptors[0].name,
             upstream: acceptorSites.upstream,
@@ -111,8 +113,8 @@ export function MocloAssemblerDialog() {
       .getState()
       .notify(
         placed
-          ? `按接头归位 ${placed} 个元件；受体载体请手动指定`
-          : `打开的序列里没有符合 ${standard.name} 接头的元件`,
+          ? t('按接头归位 {v0} 个元件；受体载体请手动指定', { v0: placed })
+          : t('打开的序列里没有符合 {v0} 接头的元件', { v0: t(standard.name) }),
       );
   };
 
@@ -121,7 +123,7 @@ export function MocloAssemblerDialog() {
     setBusy(true);
     try {
       const groups = [
-        ...(acceptors.length ? [{ label: '受体载体', parts: acceptors }] : []),
+        ...(acceptors.length ? [{ label: t('受体载体'), parts: acceptors }] : []),
         ...used.map((s) => ({ label: `${s.id} ${s.code}`, parts: partsIn(slotKey(s)) })),
       ];
       const outcome = combinatorialAssembly(groups, enzyme, { limit, namePrefix: 'MoClo' });
@@ -131,7 +133,7 @@ export function MocloAssemblerDialog() {
       useWorkbench
         .getState()
         .notify(
-          `组合装配完成：${outcome.products.length} 个产物${outcome.failures.length ? `，${outcome.failures.length} 个组合装不起来` : ''}`,
+          t('组合装配完成：{v0} 个产物{v1}', { v0: outcome.products.length, v1: outcome.failures.length ? `，${outcome.failures.length} 个组合装不起来` : '' }),
         );
     } finally {
       setBusy(false);
@@ -141,7 +143,7 @@ export function MocloAssemblerDialog() {
   const openAll = () => {
     if (!results?.length) return;
     useWorkbench.getState().openDocs(results.map((r) => r.product));
-    useWorkbench.getState().notify(`已打开 ${results.length} 个组合产物`);
+    useWorkbench.getState().notify(t('已打开 {v0} 个组合产物', { v0: results.length }));
     setTool(null);
   };
 
@@ -149,16 +151,16 @@ export function MocloAssemblerDialog() {
     <Dialog
       open={open}
       onClose={() => setTool(null)}
-      title="组合克隆（MoClo / Golden Gate 矩阵）"
+      title={t('组合克隆（MoClo / Golden Gate 矩阵）')}
       width={960}
       footer={
           <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-[var(--muted)]">
-            将生成 <b className="text-[var(--text)]">{used.length >= 1 && acceptors.length ? combinationCount : 0}</b> 个组合
+            {t('将生成')} <b className="text-[var(--text)]">{used.length >= 1 && acceptors.length ? combinationCount : 0}</b> {t('个组合')}
           </span>
           <label className="flex items-center gap-1">
-            上限
-            <Select aria-label="组合上限" className="w-20" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+            {t('上限')}
+            <Select aria-label={t('组合上限')} className="w-20" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
               {[8, 24, 48, 96, 384].map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -173,16 +175,16 @@ export function MocloAssemblerDialog() {
             disabled={busy || !enzyme || used.length < 1 || !acceptors.length || errors.length > 0}
             onClick={build}
           >
-            <Sparkles size={12} /> {busy ? '装配中…' : '生成全部组合'}
+            <Sparkles size={12} /> {busy ? t('装配中…') : t('生成全部组合')}
           </Button>
         </div>
       }
     >
       <div className="flex flex-col gap-3 text-xs">
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="标准语法" hint={standard.source}>
+          <Field label={t('标准语法')} hint={t(standard.source)}>
             <Select
-              aria-label="标准语法"
+              aria-label={t('标准语法')}
               value={standardId}
               onChange={(e) => {
                 setStandardId(e.target.value);
@@ -192,50 +194,50 @@ export function MocloAssemblerDialog() {
             >
               {MOCLO_STANDARDS.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {t(s.name)}
                 </option>
               ))}
             </Select>
           </Field>
           <Badge tone="blue">{standard.enzyme}</Badge>
           {standard.verifiedAgainstPublication ? (
-            <Badge tone="green">接头表已对照原文核对</Badge>
+            <Badge tone="green">{t('接头表已对照原文核对')}</Badge>
           ) : (
-            <Badge tone="amber">接头表取自第三方实现，未对照原文</Badge>
+            <Badge tone="amber">{t('接头表取自第三方实现，未对照原文')}</Badge>
           )}
           <div className="flex-1" />
           <Button size="sm" onClick={autoAssign} disabled={!docs.length}>
-            <Wand2 size={12} /> 按接头自动归位
+            <Wand2 size={12} /> {t('按接头自动归位')}
           </Button>
         </div>
 
-        {standard.note && <p className="text-[var(--muted)]">{standard.note}</p>}
+        {standard.note && <p className="text-[var(--muted)]">{t(standard.note)}</p>}
 
         <div className="max-h-[42vh] overflow-auto rounded-md border border-[var(--border)]">
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-[var(--panel)] text-[var(--muted)]">
               <tr>
-                <th className="px-2 py-1.5 text-left font-medium">位置</th>
-                <th className="px-2 py-1.5 text-left font-medium">接头</th>
-                <th className="px-2 py-1.5 text-left font-medium">候选元件（放几个就组合几种）</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('位置')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('接头')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('候选元件（放几个就组合几种）')}</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-t border-[var(--border)] bg-[var(--bg)]">
                 <td className="px-2 py-1.5">
-                  <div className="font-medium">受体载体</div>
-                  <div className="text-[10px] text-[var(--muted)]">骨架</div>
+                  <div className="font-medium">{t('受体载体')}</div>
+                  <div className="text-[10px] text-[var(--muted)]">{t('骨架')}</div>
                 </td>
                 <td className="mono px-2 py-1.5 text-[var(--muted)]">
                   {acceptors[0] && enzyme
                     ? (() => {
                         const sites = fusionSitesOf(acceptors[0], enzyme);
-                        return sites ? `${sites.upstream} → ${sites.downstream}` : '读不出接头';
+                        return sites ? `${sites.upstream} → ${sites.downstream}` : t('读不出接头');
                       })()
-                    : '由所选载体决定'}
+                    : t('由所选载体决定')}
                 </td>
                 <td className="px-2 py-1.5">
-                  <PartPicker label="受体载体" docs={docs} chosen={assigned[ACCEPTOR] ?? []} onAdd={(id) => add(ACCEPTOR, id)} onRemove={(id) => remove(ACCEPTOR, id)} byId={byId} />
+                  <PartPicker label={t('受体载体')} docs={docs} chosen={assigned[ACCEPTOR] ?? []} onAdd={(id) => add(ACCEPTOR, id)} onRemove={(id) => remove(ACCEPTOR, id)} byId={byId} />
                 </td>
               </tr>
               {standard.slots.map((s) => {
@@ -245,7 +247,7 @@ export function MocloAssemblerDialog() {
                   <tr key={s.id} className="border-t border-[var(--border)] align-top">
                     <td className="px-2 py-1.5">
                       <div className="font-medium">{s.id}</div>
-                      <div className="text-[10px] text-[var(--muted)]">{s.label}</div>
+                      <div className="text-[10px] text-[var(--muted)]">{t(s.label)}</div>
                     </td>
                     <td className="mono whitespace-nowrap px-2 py-1.5 text-[var(--muted)]">
                       {s.upstream} → {s.downstream}
@@ -273,7 +275,7 @@ export function MocloAssemblerDialog() {
           <div className="flex flex-col gap-1">
             {chain.ok ? (
               <p className="flex items-center gap-1 text-green-600">
-                <Check size={12} /> 接头首尾相接{chain.hasAcceptor ? '并可环化' : '（未指定受体载体，产物为线性）'}
+                <Check size={12} /> {t('接头首尾相接{v0}', { v0: chain.hasAcceptor ? t('并可环化') : t('（未指定受体载体，产物为线性）') })}
               </p>
             ) : (
               chain.gaps.map((gap) => (
@@ -297,7 +299,7 @@ export function MocloAssemblerDialog() {
               {failures.length > 0 && <Badge tone="red">{failures.length} 个组合装不起来</Badge>}
               <div className="flex-1" />
               <Button size="sm" variant="primary" disabled={!results.length} onClick={openAll}>
-                全部打开为标签页
+                {t('全部打开为标签页')}
               </Button>
             </div>
             <div className="max-h-48 overflow-auto rounded-md border border-[var(--border)]">
@@ -358,18 +360,19 @@ function PartPicker({
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-1">
       {chosen.map((id) => (
         <span key={id} className="inline-flex items-center gap-1 rounded bg-[var(--bg)] px-1.5 py-0.5">
           {byId.get(id)?.name ?? id}
-          <button aria-label="移除" className="text-[var(--muted)] hover:text-red-600" onClick={() => onRemove(id)}>
+          <button aria-label={t('移除')} className="text-[var(--muted)] hover:text-red-600" onClick={() => onRemove(id)}>
             <X size={10} />
           </button>
         </span>
       ))}
       <Select
-        aria-label={`添加元件到 ${label}`}
+        aria-label={t('添加元件到 {v0}', { v0: label })}
         className="w-36"
         value=""
         onChange={(e) => {
@@ -377,7 +380,7 @@ function PartPicker({
           e.target.value = '';
         }}
       >
-        <option value="">+ 添加…</option>
+        <option value="">{t('+ 添加…')}</option>
         {docs
           .filter((d) => !chosen.includes(d.id))
           .map((d) => (
@@ -396,6 +399,7 @@ function PartPicker({
  * an ordinary gene usable in the matrix above.
  */
 function Domestication({ standard }: { standard: MocloStandard }) {
+  const t = useT();
   const doc = useWorkbench(selectActiveDoc);
   const selection = useWorkbench((s) => s.selection);
   const [slotId, setSlotId] = useState(standard.slots[0].id);
@@ -416,11 +420,11 @@ function Domestication({ standard }: { standard: MocloStandard }) {
     if (
       replaceIfCurrent(
         doc,
-        addPrimersToDoc(doc, [design.forward, design.reverse], `为 ${slot.id} 位设计引物`),
-        `${doc.name} 已改变，请重新设计`,
+        addPrimersToDoc(doc, [design.forward, design.reverse], t('为 {v0} 位设计引物', { v0: slot.id })),
+        t('{v0} 已改变，请重新设计', { v0: doc.name }),
       )
     ) {
-      useWorkbench.getState().notify(`已把 ${slot.id} 位的两条引物加入 ${doc.name}`);
+      useWorkbench.getState().notify(t('已把 {v0} 位的两条引物加入 {v1}', { v0: slot.id, v1: doc.name }));
     }
   };
 
@@ -428,16 +432,16 @@ function Domestication({ standard }: { standard: MocloStandard }) {
     <div className="flex flex-col gap-2 rounded-md border border-[var(--border)] p-2">
       <div className="flex flex-wrap items-end gap-2">
         <Field
-          label="把当前序列做成元件（domestication）"
+          label={t('把当前序列做成元件（domestication）')}
           hint={
             doc
               ? selection
-                ? `选区 ${selection.start + 1}..${selection.end}（${selection.end - selection.start} bp）`
-                : `未选区，按整条 ${doc.name} 计算；在序列或图谱上拖选可改范围`
-              : '先打开一条序列'
+                ? t('选区 {v0}..{v1}（{v2} bp）', { v0: selection.start + 1, v1: selection.end, v2: selection.end - selection.start })
+                : t('未选区，按整条 {v0} 计算；在序列或图谱上拖选可改范围', { v0: doc.name })
+              : t('先打开一条序列')
           }
         >
-          <Select aria-label="要做成的位置" className="w-64" value={slotId} onChange={(e) => setSlotId(e.target.value)}>
+          <Select aria-label={t('要做成的位置')} className="w-64" value={slotId} onChange={(e) => setSlotId(e.target.value)}>
             {standard.slots.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.id} {s.code} — {s.upstream} → {s.downstream}
@@ -447,7 +451,7 @@ function Domestication({ standard }: { standard: MocloStandard }) {
         </Field>
         <div className="flex-1" />
         <Button size="sm" disabled={!design} onClick={addToDoc}>
-          加入当前序列的引物
+          {t('加入当前序列的引物')}
         </Button>
       </div>
       {design && (

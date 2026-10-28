@@ -12,6 +12,7 @@ import type {
 } from '../../types/schema';
 import type { VizTheme } from './theme';
 import { baseColor, getTheme } from './theme';
+import { t as translate, useT } from '../../lib/i18n';
 import {
   assignFeatureTracks,
   clamp,
@@ -115,6 +116,7 @@ export function LinearSequenceEditor({
   height = 620,
   aaDisplay = 'single',
 }: LinearSequenceEditorProps) {
+  const t = useT();
   const tokens = getTheme(theme);
   const sequence = doc.sequence.toUpperCase();
   const length = doc.length || sequence.length;
@@ -507,7 +509,7 @@ export function LinearSequenceEditor({
             {doc.name || '未命名序列'}
           </div>
           <div style={{ fontSize: 11, color: tokens.muted }}>
-            {formatBp(length)} bp · 每行 {bpPerRow} bp · 共 {totalRows} 行
+            {t('{v0} bp · 每行 {v1} bp · 共 {v2} 行', { v0: formatBp(length), v1: bpPerRow, v2: totalRows })}
           </div>
         </div>
       </div>
@@ -522,7 +524,7 @@ export function LinearSequenceEditor({
         }}
       >
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <MousePointer2 size={12} /> 拖动选择
+          <MousePointer2 size={12} /> {t('拖动选择')}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <Keyboard size={12} /> {onEdit ? '输入 ACGT 编辑' : '只读'}
@@ -1099,9 +1101,7 @@ export function LinearSequenceEditor({
         }}
       >
         <span>
-          第 {Math.min(totalRows, Math.floor(scrollTop / layout.rowHeight) + 1)} / {totalRows} 行
-          {' · '}
-          {trimNumber((Math.min(length, scrollTop / layout.rowHeight * bpPerRow + bpPerRow) / Math.max(1, length)) * 100)}% · {formatBp(length)} bp
+          {t('第 {v0} / {v1} 行{v2}{v3}% · {v4} bp', { v0: Math.min(totalRows, Math.floor(scrollTop / layout.rowHeight) + 1), v1: totalRows, v2: ' · ', v3: trimNumber((Math.min(length, scrollTop / layout.rowHeight * bpPerRow + bpPerRow) / Math.max(1, length)) * 100), v4: formatBp(length) })}
         </span>
         <span>选区 {liveSelection ? `${formatBp(liveSelectionLength)} bp` : '无'}</span>
       </div>

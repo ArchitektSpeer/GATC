@@ -13,6 +13,7 @@ import type {
 } from '../../types/schema';
 import type { VizTheme } from './theme';
 import { getTheme } from './theme';
+import { t as translate, useT } from '../../lib/i18n';
 import {
   clamp,
   contrastText,
@@ -101,6 +102,7 @@ export function LinearPlasmidMap({
   width: requestedWidth = DEFAULT_WIDTH,
   svgRef,
 }: LinearPlasmidMapProps) {
+  const t = useT();
   const tokens = getTheme(theme);
   const rawUid = useId();
   const uid = safeId(rawUid);
@@ -354,7 +356,7 @@ export function LinearPlasmidMap({
   if (resolved.showLength) subtitleParts.push(`${formatBp(length)} bp`);
   subtitleParts.push(doc.topology);
   if (resolved.showFeatures) subtitleParts.push(`${visibleFeatures.length} features`);
-  if (cutItems.length > 0) subtitleParts.push(`${cutSites.length} 个切点`);
+  if (cutItems.length > 0) subtitleParts.push(t('{v0} 个切点', { v0: cutSites.length }));
 
   const css = `
     .osg-linear-map text { user-select: none; }

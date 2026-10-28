@@ -17,6 +17,7 @@ import {
 import { uid } from './actions';
 import { useWorkbench } from './store';
 import { Badge, Button, Dialog, Field, Input, Select, Tabs } from './ui';
+import { t as translate, useT } from '../lib/i18n';
 
 type Mode = 'design' | 'anneal';
 type EndType = OverhangEnd['type'];
@@ -54,13 +55,14 @@ function EndFields({
   onType: (t: EndType) => void;
   onSequence: (s: string) => void;
 }) {
+  const t = useT();
   return (
     <Field label={label} hint={hint}>
       <div className="flex items-center gap-2">
         <Select className="w-28" value={type} onChange={(e) => onType(e.target.value as EndType)}>
-          <option value="5-prime">5′ 突出</option>
-          <option value="3-prime">3′ 突出</option>
-          <option value="blunt">平末端</option>
+          <option value="5-prime">{t('5′ 突出')}</option>
+          <option value="3-prime">{t('3′ 突出')}</option>
+          <option value="blunt">{t('平末端')}</option>
         </Select>
         <Input
           className="mono w-40"
@@ -75,6 +77,7 @@ function EndFields({
 }
 
 export function OligoAnnealDialog() {
+  const t = useT();
   const open = useWorkbench((s) => s.tool === 'oligo');
   const setTool = useWorkbench((s) => s.setTool);
   const docs = useWorkbench((s) => s.docs);
@@ -145,14 +148,14 @@ export function OligoAnnealDialog() {
     setLeftSeq(right.sequence);
     setRightType(left.type);
     setRightSeq(left.sequence);
-    useWorkbench.getState().notify(`已套用 ${fragment.name} 的末端：${describeEnd(right)} / ${describeEnd(left)}`);
+    useWorkbench.getState().notify(t('已套用 {v0} 的末端：{v1} / {v2}', { v0: fragment.name, v1: describeEnd(right), v2: describeEnd(left) }));
   };
 
   const openFragment = () => {
     if (!ok) return;
     useWorkbench.getState().openDocs([ok.result.duplex]);
     useWorkbench.getState().notify(
-      `已生成双链片段 ${ok.result.duplex.name}（${ok.result.duplexLength} bp 配对，${describeEnd(ok.result.left)} / ${describeEnd(ok.result.right)}）`,
+      t('已生成双链片段 {v0}（{v1} bp 配对，{v2} / {v3}）', { v0: ok.result.duplex.name, v1: ok.result.duplexLength, v2: describeEnd(ok.result.left), v3: describeEnd(ok.result.right) }),
     );
     setTool(null);
   };
@@ -163,10 +166,10 @@ export function OligoAnnealDialog() {
     const st = useWorkbench.getState();
     st.setPrimerLibrary([
       ...st.primerLibrary,
-      { id: uid('lp'), name: `${stem}_top`, sequence: ok.top, note: '退火寡核苷酸' },
-      { id: uid('lp'), name: `${stem}_bottom`, sequence: ok.bottom, note: '退火寡核苷酸' },
+      { id: uid('lp'), name: `${stem}_top`, sequence: ok.top, note: t('退火寡核苷酸') },
+      { id: uid('lp'), name: `${stem}_bottom`, sequence: ok.bottom, note: t('退火寡核苷酸') },
     ]);
-    st.notify('两条寡核苷酸已存入引物库');
+    st.notify(t('两条寡核苷酸已存入引物库'));
   };
 
   const copyOligos = async () => {
@@ -174,9 +177,9 @@ export function OligoAnnealDialog() {
     const stem = (name.trim() || ok.result.duplex.name).replace(/\s+/g, '_');
     try {
       await navigator.clipboard.writeText(`${stem}_top\t${ok.top}\n${stem}_bottom\t${ok.bottom}\n`);
-      useWorkbench.getState().notify('已复制「名称 + 序列」两行，可直接粘贴到订购单');
+      useWorkbench.getState().notify(t('已复制「名称 + 序列」两行，可直接粘贴到订购单'));
     } catch {
-      useWorkbench.getState().notify('浏览器拒绝了剪贴板访问；请手动复制');
+      useWorkbench.getState().notify(t('浏览器拒绝了剪贴板访问；请手动复制'));
     }
   };
 
@@ -184,18 +187,18 @@ export function OligoAnnealDialog() {
     <Dialog
       open={open}
       onClose={() => setTool(null)}
-      title="寡核苷酸退火（短片段直接连接）"
+      title={t('寡核苷酸退火（短片段直接连接）')}
       width={760}
       footer={
         <div className="flex justify-end gap-2 text-xs">
           <Button size="sm" disabled={!ok} onClick={copyOligos}>
-            <Copy size={12} /> 复制订购单两行
+            <Copy size={12} /> {t('复制订购单两行')}
           </Button>
           <Button size="sm" disabled={!ok} onClick={saveOligos}>
-            <Plus size={12} /> 存入引物库
+            <Plus size={12} /> {t('存入引物库')}
           </Button>
           <Button size="sm" variant="primary" disabled={!ok} onClick={openFragment}>
-            <FlaskConical size={12} /> 作为双链片段打开
+            <FlaskConical size={12} /> {t('作为双链片段打开')}
           </Button>
         </div>
       }
@@ -206,22 +209,21 @@ export function OligoAnnealDialog() {
             value={mode}
             onChange={setMode}
             items={[
-              { value: 'design', label: '设计要订的引物' },
-              { value: 'anneal', label: '已有两条引物' },
+              { value: 'design', label: t('设计要订的引物') },
+              { value: 'anneal', label: t('已有两条引物') },
             ]}
           />
           <div className="flex-1" />
-          <Input className="w-40" placeholder="片段名称（可选）" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input className="w-40" placeholder={t('片段名称（可选）')} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
 
         <p className="text-[var(--muted)]">
-          两条部分互补的引物退火即得一段带末端的双链片段，不需要 PCR。sgRNA 间隔序列、短 linker、接头、标签都这么连。
-          产物是普通线性片段，可直接送入酶切连接或 Golden Gate 向导。
+          {t('两条部分互补的引物退火即得一段带末端的双链片段，不需要 PCR。sgRNA 间隔序列、短 linker、接头、标签都这么连。产物是普通线性片段，可直接送入酶切连接或 Golden Gate 向导。')}
         </p>
 
         {mode === 'design' ? (
           <div className="flex flex-col gap-3">
-            <Field label="要插入的双链核心序列（上链 5′→3′）" hint="只写配对的部分，突出末端在下面单独填">
+            <Field label={t('要插入的双链核心序列（上链 5′→3′）')} hint={t('只写配对的部分，突出末端在下面单独填')}>
               <textarea
                 className="mono h-16 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] p-2 outline-none"
                 value={insert}
@@ -230,9 +232,9 @@ export function OligoAnnealDialog() {
               />
             </Field>
             {cutFragments.length > 0 && (
-              <Field label="从已酶切的片段取末端" hint="选一个酶切后的载体骨架，自动填入它两端对应的突出末端">
+              <Field label={t('从已酶切的片段取末端')} hint={t('选一个酶切后的载体骨架，自动填入它两端对应的突出末端')}>
                 <Select value="" onChange={(e) => e.target.value && takeEnds(e.target.value)}>
-                  <option value="">选择片段…</option>
+                  <option value="">{t('选择片段…')}</option>
                   {cutFragments.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}（{describeEnd(d.linearEnds!.left)} / {describeEnd(d.linearEnds!.right)}）
@@ -242,13 +244,13 @@ export function OligoAnnealDialog() {
               </Field>
             )}
             <div className="flex flex-wrap gap-4">
-              <EndFields label="左端" hint="5′ 突出的碱基属于上链" type={leftType} sequence={leftSeq} onType={setLeftType} onSequence={setLeftSeq} />
-              <EndFields label="右端" hint="5′ 突出的碱基属于下链" type={rightType} sequence={rightSeq} onType={setRightType} onSequence={setRightSeq} />
+              <EndFields label={t('左端')} hint={t('5′ 突出的碱基属于上链')} type={leftType} sequence={leftSeq} onType={setLeftType} onSequence={setLeftSeq} />
+              <EndFields label={t('右端')} hint={t('5′ 突出的碱基属于下链')} type={rightType} sequence={rightSeq} onType={setRightType} onSequence={setRightSeq} />
             </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <Field label="上链引物（5′→3′）">
+            <Field label={t('上链引物（5′→3′）')}>
               <textarea
                 className="mono h-14 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] p-2 outline-none"
                 value={topOligo}
@@ -256,7 +258,7 @@ export function OligoAnnealDialog() {
                 placeholder="CACCGGTCAGGGTTCTGGATATCTG"
               />
             </Field>
-            <Field label="下链引物（5′→3′）">
+            <Field label={t('下链引物（5′→3′）')}>
               <textarea
                 className="mono h-14 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] p-2 outline-none"
                 value={bottomOligo}
@@ -265,7 +267,7 @@ export function OligoAnnealDialog() {
               />
             </Field>
             <label className="flex items-center gap-2">
-              配对区允许错配
+              {t('配对区允许错配')}
               <Select className="w-16" value={mismatchBudget} onChange={(e) => setMismatchBudget(Number(e.target.value))}>
                 {[0, 1, 2, 3].map((n) => (
                   <option key={n} value={n}>
@@ -298,12 +300,12 @@ export function OligoAnnealDialog() {
             </pre>
             <div className="flex flex-col gap-1">
               <div className="flex gap-2">
-                <span className="w-14 shrink-0 text-[var(--muted)]">上链</span>
+                <span className="w-14 shrink-0 text-[var(--muted)]">{t('上链')}</span>
                 <span className="mono break-all">{ok.top}</span>
                 <span className="shrink-0 text-[var(--muted)]">{ok.top.length} nt</span>
               </div>
               <div className="flex gap-2">
-                <span className="w-14 shrink-0 text-[var(--muted)]">下链</span>
+                <span className="w-14 shrink-0 text-[var(--muted)]">{t('下链')}</span>
                 <span className="mono break-all">{ok.bottom}</span>
                 <span className="shrink-0 text-[var(--muted)]">{ok.bottom.length} nt</span>
               </div>

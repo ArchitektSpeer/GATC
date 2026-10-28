@@ -4,6 +4,7 @@
 // Minimal shadcn/ui-style primitives used by the workbench shell.
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
 import { X } from 'lucide-react';
+import { t as translate, useT } from '../lib/i18n';
 
 export function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -99,6 +100,7 @@ export function Dialog({
   footer?: ReactNode;
   width?: number;
 }) {
+  const t = useT();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -115,7 +117,7 @@ export function Dialog({
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <div className="text-[15px] font-semibold">{title}</div>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭">
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('关闭')}>
             <X size={16} />
           </Button>
         </div>
@@ -137,6 +139,7 @@ export function Tabs<T extends string>({
   onChange: (v: T) => void;
   items: Array<{ value: T; label: ReactNode }>;
 }) {
+  const t = useT();
   return (
     <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg)] p-0.5">
       {items.map((it) => (
@@ -148,7 +151,7 @@ export function Tabs<T extends string>({
             value === it.value ? 'bg-[var(--panel)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--text)]',
           )}
         >
-          {it.label}
+          {typeof it.label === 'string' ? t(it.label) : it.label}
         </button>
       ))}
     </div>

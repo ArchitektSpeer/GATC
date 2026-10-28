@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 import type { CSSProperties } from 'react';
+import { t as translate, useT } from '../../lib/i18n';
 import {
   MAX_LABEL_FONT_SIZE,
   MIN_LABEL_FONT_SIZE,
@@ -65,6 +66,7 @@ export function MapDisplayOptionsPanel({
   onChange,
   featureTypes,
 }: MapDisplayOptionsPanelProps) {
+  const t = useT();
   const resolved = resolveMapDisplayOptions(value);
   const patch = (next: Partial<MapDisplayOptions>): void => {
     onChange({ ...value, ...next });
@@ -103,7 +105,7 @@ export function MapDisplayOptionsPanel({
         boxSizing: 'border-box',
       }}
       role="group"
-      aria-label="Map display options"
+      aria-label={t('图谱显示选项')}
     >
       <div
         style={{
@@ -115,7 +117,7 @@ export function MapDisplayOptionsPanel({
           fontWeight: 700,
         }}
       >
-        <span>Map display</span>
+        <span>{t('图谱显示')}</span>
         <span style={{ fontFamily: 'monospace', fontSize: 9.5, opacity: 0.5 }}>
           {resolved.hiddenFeatureTypes.length > 0
             ? `${resolved.hiddenFeatureTypes.length} hidden`
@@ -123,7 +125,7 @@ export function MapDisplayOptionsPanel({
         </span>
       </div>
 
-      <div style={sectionTitle}>Layers</div>
+      <div style={sectionTitle}>{t('图层')}</div>
       <div
         style={{
           display: 'grid',
@@ -131,27 +133,27 @@ export function MapDisplayOptionsPanel({
           gap: '3px 12px',
         }}
       >
-        {toggleRow('Features', resolved.showFeatures, (next) => patch({ showFeatures: next }))}
-        {toggleRow('Enzymes', resolved.showEnzymes, (next) => patch({ showEnzymes: next }))}
-        {toggleRow('Primers', resolved.showPrimers, (next) => patch({ showPrimers: next }))}
-        {toggleRow('ORFs', resolved.showOrfs, (next) => patch({ showOrfs: next }))}
-        {toggleRow('Feature labels', resolved.showFeatureLabels, (next) =>
+        {toggleRow(t('特征'), resolved.showFeatures, (next) => patch({ showFeatures: next }))}
+        {toggleRow(t('酶'), resolved.showEnzymes, (next) => patch({ showEnzymes: next }))}
+        {toggleRow(t('引物'), resolved.showPrimers, (next) => patch({ showPrimers: next }))}
+        {toggleRow(t('ORF'), resolved.showOrfs, (next) => patch({ showOrfs: next }))}
+        {toggleRow(t('特征标签'), resolved.showFeatureLabels, (next) =>
           patch({ showFeatureLabels: next }),
         )}
-        {toggleRow('Enzyme labels', resolved.showEnzymeLabels, (next) =>
+        {toggleRow(t('酶标签'), resolved.showEnzymeLabels, (next) =>
           patch({ showEnzymeLabels: next }),
         )}
-        {toggleRow('Ruler ticks', resolved.showTicks, (next) => patch({ showTicks: next }))}
-        {toggleRow('GC plot', resolved.showGcPlot, (next) => patch({ showGcPlot: next }))}
+        {toggleRow(t('刻度线'), resolved.showTicks, (next) => patch({ showTicks: next }))}
+        {toggleRow(t('GC 曲线'), resolved.showGcPlot, (next) => patch({ showGcPlot: next }))}
         {toggleRow('Sticky ends', resolved.showLinearEnds, (next) =>
           patch({ showLinearEnds: next }),
         )}
-        {toggleRow('Length badge', resolved.showLength, (next) => patch({ showLength: next }))}
+        {toggleRow(t('长度标记'), resolved.showLength, (next) => patch({ showLength: next }))}
       </div>
 
-      <div style={sectionTitle}>Typography</div>
+      <div style={sectionTitle}>{t('文字')}</div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-        <span style={{ minWidth: 66 }}>Label size</span>
+        <span style={{ minWidth: 66 }}>{t('标签字号')}</span>
         <input
           type="range"
           min={MIN_LABEL_FONT_SIZE}
@@ -177,7 +179,7 @@ export function MapDisplayOptionsPanel({
           marginTop: 5,
         }}
       >
-        <span>Tick interval</span>
+        <span>{t('刻度间隔')}</span>
         <select
           value={String(resolved.tickInterval)}
           onChange={(event) => {
@@ -210,11 +212,11 @@ export function MapDisplayOptionsPanel({
       </label>
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
-        <span style={{ fontSize: 11 }}>Title override</span>
+        <span style={{ fontSize: 11 }}>{t('自定义标题')}</span>
         <input
           type="text"
           value={resolved.title}
-          placeholder="Use document name"
+          placeholder={t('默认用文档名')}
           onChange={(event) => patch({ title: event.currentTarget.value })}
           style={{
             fontSize: 11,
@@ -230,7 +232,7 @@ export function MapDisplayOptionsPanel({
 
       {featureTypes.length > 0 ? (
         <>
-          <div style={sectionTitle}>Feature types</div>
+          <div style={sectionTitle}>{t('特征类型')}</div>
           <div
             style={{
               display: 'flex',

@@ -9,6 +9,7 @@ import type { PlasmidDocument, SangerTraceData } from '../types/schema';
 import { parseProjectFile, serializeProject } from '../modules/io-adapter';
 import { version as APP_VERSION } from '../../package.json';
 import { remapDocIds } from './doc-ids';
+import { t as translate } from '../lib/i18n';
 
 export { APP_VERSION };
 
@@ -58,13 +59,13 @@ export class IndexedDbSnapshotStore implements SnapshotStore {
   constructor(private readonly factory: IDBFactory = globalThis.indexedDB) {}
 
   private open(): Promise<IDBDatabase> {
-    if (!this.factory) return Promise.reject(new Error('此浏览器不支持 IndexedDB，无法自动保存'));
+    if (!this.factory) return Promise.reject(new Error(translate('此浏览器不支持 IndexedDB，无法自动保存')));
     this.db ??= new Promise((resolve, reject) => {
       const req = this.factory.open(DB_NAME, 1);
       req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'sessionId' });
       req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error ?? new Error('无法打开自动保存数据库'));
-      req.onblocked = () => reject(new Error('自动保存数据库被其他标签页占用'));
+      req.onerror = () => reject(req.error ?? new Error(translate('无法打开自动保存数据库')));
+      req.onblocked = () => reject(new Error(translate('自动保存数据库被其他标签页占用')));
     });
     this.db.catch(() => (this.db = null));
     return this.db;
@@ -76,7 +77,7 @@ export class IndexedDbSnapshotStore implements SnapshotStore {
     const result = request(fn(tx.objectStore(STORE)));
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
-      tx.onabort = tx.onerror = () => reject(tx.error ?? new Error('自动保存事务失败'));
+      tx.onabort = tx.onerror = () => reject(tx.error ?? new Error(translate('自动保存事务失败')));
     });
     return result;
   }
@@ -211,9 +212,9 @@ export type AutosaveReport = { ok: true; wrote: boolean; at: string } | { ok: fa
 export function describeStorageError(e: unknown): string {
   const name = e instanceof DOMException || e instanceof Error ? e.name : '';
   const msg = e instanceof Error ? e.message : String(e);
-  if (name === 'QuotaExceededError' || /quota|disk full|no space/i.test(msg)) return '存储空间不足，自动保存未完成。请导出项目文件（Ctrl+S）以免丢失修改。';
-  if (name === 'SecurityError' || /permission|denied|access/i.test(msg)) return '没有写入权限，自动保存未完成。请导出项目文件（Ctrl+S）以免丢失修改。';
-  return `自动保存失败：${msg}。请导出项目文件（Ctrl+S）以免丢失修改。`;
+  if (name === 'QuotaExceededError' || /quota|disk full|no space/i.test(msg)) return translate('存储空间不足，自动保存未完成。请导出项目文件（Ctrl+S）以免丢失修改。');
+  if (name === 'SecurityError' || /permission|denied|access/i.test(msg)) return translate('没有写入权限，自动保存未完成。请导出项目文件（Ctrl+S）以免丢失修改。');
+  return translate('自动保存失败：{v0}。请导出项目文件（Ctrl+S）以免丢失修改。', { v0: msg });
 }
 
 /**
@@ -304,7 +305,7 @@ export function planRestore(
     if (!record.dirtyIds.includes(originalId)) {
       if (!open) plan.openSaved.push(doc);
     } else if (doc.id !== originalId) {
-      plan.openDirty.push({ ...doc, name: `${doc.name}（恢复）` });
+      plan.openDirty.push({ ...doc, name: translate('{v0}（恢复）', { v0: doc.name }) });
     } else if (!open) {
       plan.openDirty.push(doc);
     } else {

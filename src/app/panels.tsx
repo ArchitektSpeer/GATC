@@ -12,6 +12,7 @@ import { digestToGel, historyNode, uid } from './actions';
 import { FeatureEditor, PrimerEditor } from './editors';
 import { ALL_COMMERCIAL_SET, useWorkbench, type NebBuffer } from './store';
 import { Badge, Button, Input, Select, cn } from './ui';
+import { t as translate, useT } from '../lib/i18n';
 
 const BUFFERS: NebBuffer[] = ['r1.1', 'r2.1', 'r3.1', 'rCutSmart'];
 
@@ -27,6 +28,7 @@ export function filterCutSites(sites: CutSite[], f: ReturnType<typeof useWorkben
 }
 
 export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSite[] }) {
+  const t = useT();
   const filter = useWorkbench((s) => s.enzymeFilter);
   const setFilter = useWorkbench((s) => s.setEnzymeFilter);
   const setSelection = useWorkbench((s) => s.setSelection);
@@ -49,9 +51,9 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
   }, [picked, sites]);
 
   const saveSet = () => {
-    const name = window.prompt(`将勾选的 ${picked.length} 种酶保存为酶集，名称：`, '我的酶集');
+    const name = window.prompt(t('将勾选的 {v0} 种酶保存为酶集，名称：', { v0: picked.length }), t('我的酶集'));
     if (!name?.trim()) return;
-    saveCustomSet({ id: uid('set'), name: name.trim(), description: '自定义酶集', enzymeNames: picked });
+    saveCustomSet({ id: uid('set'), name: name.trim(), description: t('自定义酶集'), enzymeNames: picked });
   };
 
   const groups = useMemo(() => {
@@ -69,9 +71,9 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] p-2">
-        <Select aria-label="酶集" value={enzymeSetId} onChange={(e) => setEnzymeSet(e.target.value)} title="用于扫描与图谱显示的酶集">
+        <Select aria-label={t('酶集')} value={enzymeSetId} onChange={(e) => setEnzymeSet(e.target.value)} title={t('用于扫描与图谱显示的酶集')}>
           <option value={ALL_COMMERCIAL_SET}>全部市售酶 ({COMMERCIAL_ENZYMES.length})</option>
-          <optgroup label="预设酶集">
+          <optgroup label={t('预设酶集')}>
             {ENZYME_SETS.map((es) => (
               <option key={es.id} value={es.id} title={es.description}>
                 {es.name} ({es.enzymeNames.length})
@@ -79,7 +81,7 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
             ))}
           </optgroup>
           {customSets.length > 0 && (
-            <optgroup label="自定义酶集">
+            <optgroup label={t('自定义酶集')}>
               {customSets.map((es) => (
                 <option key={es.id} value={es.id}>
                   {es.name} ({es.enzymeNames.length})
@@ -89,12 +91,12 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
           )}
         </Select>
         {isCustom && (
-          <Button size="sm" variant="ghost" onClick={() => deleteCustomSet(enzymeSetId)} aria-label="删除酶集" title="删除此自定义酶集">
+          <Button size="sm" variant="ghost" onClick={() => deleteCustomSet(enzymeSetId)} aria-label={t('删除酶集')} title={t('删除此自定义酶集')}>
             <Trash2 size={12} />
           </Button>
         )}
         <div className="w-48">
-          <Input placeholder="搜索酶 / 识别序列" value={filter.query} onChange={(e) => setFilter({ query: e.target.value })} />
+          <Input placeholder={t('搜索酶 / 识别序列')} value={filter.query} onChange={(e) => setFilter({ query: e.target.value })} />
         </div>
         <label className="flex items-center gap-1 text-xs">
           <input type="checkbox" checked={filter.uniqueOnly} onChange={(e) => setFilter({ uniqueOnly: e.target.checked })} /> 单切点
@@ -108,7 +110,7 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
           排除甲基化阻断
         </label>
         <Select value={filter.buffer ?? ''} onChange={(e) => setFilter({ buffer: (e.target.value || null) as NebBuffer | null })}>
-          <option value="">任意 Buffer</option>
+          <option value="">{t('任意 Buffer')}</option>
           {BUFFERS.map((b) => (
             <option key={b} value={b}>
               NEB {b} ≥75%
@@ -117,7 +119,7 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
         </Select>
         <div className="flex-1" />
         <Button size="sm" disabled={!picked.length} onClick={saveSet}>
-          保存为酶集
+          {t('保存为酶集')}
         </Button>
         <Button
           variant="primary"
@@ -128,13 +130,13 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
             setView('gel');
           }}
         >
-          <Microscope size={13} /> 酶切并跑胶 ({picked.length})
+          <Microscope size={13} /> {t('酶切并跑胶 ({v0})', { v0: picked.length })}
         </Button>
       </div>
       {digestPlan && (
         <div className="border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs">
-          <b>双酶切推荐：</b>
-          {digestPlan.buffer === 'sequential' ? <Badge tone="amber">分步酶切</Badge> : <Badge tone="green">NEB {digestPlan.buffer}</Badge>}{' '}
+          <b>{t('双酶切推荐：')}</b>
+          {digestPlan.buffer === 'sequential' ? <Badge tone="amber">{t('分步酶切')}</Badge> : <Badge tone="green">NEB {digestPlan.buffer}</Badge>}{' '}
           {Object.entries(digestPlan.activities)
             .map(([n, a]) => `${n} ${a}%`)
             .join(' · ')}
@@ -151,12 +153,12 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
           <thead className="sticky top-0 z-10 bg-[var(--panel)] text-left text-[var(--muted)] shadow-[0_1px_0_var(--border)]">
             <tr>
               <th className="w-8" />
-              <th className="whitespace-nowrap">酶</th>
-              <th className="whitespace-nowrap">识别序列</th>
-              <th className="whitespace-nowrap text-right">切点数</th>
-              <th className="w-full">切口位置（点击定位）</th>
-              <th className="whitespace-nowrap">末端</th>
-              <th className="whitespace-nowrap">甲基化</th>
+              <th className="whitespace-nowrap">{t('酶')}</th>
+              <th className="whitespace-nowrap">{t('识别序列')}</th>
+              <th className="whitespace-nowrap text-right">{t('切点数')}</th>
+              <th className="w-full">{t('切口位置（点击定位）')}</th>
+              <th className="whitespace-nowrap">{t('末端')}</th>
+              <th className="whitespace-nowrap">{t('甲基化')}</th>
             </tr>
           </thead>
           <tbody>
@@ -165,7 +167,7 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
               return (
                 <tr key={name} className={cn('border-t border-[var(--border)] hover:bg-slate-50 dark:hover:bg-slate-800/40', picked.includes(name) && 'bg-blue-50/60 dark:bg-blue-950/30')}>
                   <td>
-                    <input type="checkbox" aria-label={`选择 ${name}`} checked={picked.includes(name)} onChange={() => toggle(name)} />
+                    <input type="checkbox" aria-label={t('选择 {v0}', { v0: name })} checked={picked.includes(name)} onChange={() => toggle(name)} />
                   </td>
                   <td className={cn('whitespace-nowrap font-medium', list.length === 1 && 'font-bold')}>
                     {name} {e.isTypeIIS && <Badge tone="blue">IIS</Badge>}
@@ -187,23 +189,24 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
                     </div>
                   </td>
                   <td className="mono whitespace-nowrap">
-                    {list[0].overhangType === 'blunt' ? '平末端' : `${list[0].overhangType === '5-prime' ? "5'" : "3'"} ${list[0].overhangSeq}`}
+                    {list[0].overhangType === 'blunt' ? t('平末端') : `${list[0].overhangType === '5-prime' ? "5'" : "3'"} ${list[0].overhangSeq}`}
                   </td>
                   <td className="whitespace-nowrap">
-                    {list.some((s) => s.isMethylationBlocked) ? <Badge tone="red">阻断</Badge> : <Badge tone="green">可切</Badge>}
+                    {list.some((s) => s.isMethylationBlocked) ? <Badge tone="red">{t('阻断')}</Badge> : <Badge tone="green">{t('可切')}</Badge>}
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {!groups.length && <div className="p-6 text-center text-xs text-[var(--muted)]">没有符合条件的酶切位点</div>}
+        {!groups.length && <div className="p-6 text-center text-xs text-[var(--muted)]">{t('没有符合条件的酶切位点')}</div>}
       </div>
     </div>
   );
 }
 
 export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
+  const t = useT();
   const setSelection = useWorkbench((s) => s.setSelection);
   const replaceDoc = useWorkbench((s) => s.replaceDoc);
   const [orfs, setOrfs] = useState<ORF[]>([]);
@@ -225,7 +228,7 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
       ...doc,
       features: doc.features.filter((f) => f.id !== id),
       updatedAt: new Date().toISOString(),
-      history: [...doc.history, historyNode('manual_edit', '删除特征')],
+      history: [...doc.history, historyNode('manual_edit', t('删除特征'))],
     });
   const removePrimer = (id: string) =>
     replaceDoc({ ...doc, primers: doc.primers.filter((p) => p.id !== id), updatedAt: new Date().toISOString() });
@@ -234,7 +237,7 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
       ...doc,
       features: [...doc.features, { id: `f-${o.id}`, name: `ORF ${o.start + 1}..${o.end}`, type: 'CDS', start: o.start, end: o.end, strand: o.strand, color: '#3b82f6', translation: o.aminoAcids }],
       updatedAt: new Date().toISOString(),
-      history: [...doc.history, historyNode('manual_edit', '将 ORF 添加为 CDS 特征')],
+      history: [...doc.history, historyNode('manual_edit', t('将 ORF 添加为 CDS 特征'))],
     });
 
   return (
@@ -242,8 +245,8 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
       <div className="flex gap-1 border-b border-[var(--border)] p-2">
         {(
           [
-            ['features', `特征 (${doc.features.length})`],
-            ['primers', `引物 (${doc.primers.length})`],
+            ['features', t('特征 ({v0})', { v0: doc.features.length })],
+            ['primers', t('引物 ({v0})', { v0: doc.primers.length })],
             ['orfs', `ORF (${orfs.length})`],
           ] as const
         ).map(([k, label]) => (
@@ -254,12 +257,12 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
         <div className="flex-1" />
         {tab === 'features' && (
           <Button size="sm" onClick={() => setEditing(null)}>
-            <Plus size={12} /> 添加特征
+            <Plus size={12} /> {t('添加特征')}
           </Button>
         )}
         {tab === 'primers' && (
           <Button size="sm" onClick={() => setAddingPrimer(true)}>
-            <Plus size={12} /> 添加引物
+            <Plus size={12} /> {t('添加引物')}
           </Button>
         )}
       </div>
@@ -271,28 +274,28 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
             {tab === 'features' && (
               <tr>
                 <th className="w-6" />
-                <th>名称</th>
-                <th>类型</th>
-                <th>位置</th>
-                <th>方向</th>
+                <th>{t('名称')}</th>
+                <th>{t('类型')}</th>
+                <th>{t('位置')}</th>
+                <th>{t('方向')}</th>
                 <th className="w-20" />
               </tr>
             )}
             {tab === 'primers' && (
               <tr>
-                <th>名称</th>
-                <th>序列 5′→3′</th>
-                <th>结合位置</th>
-                <th className="whitespace-nowrap">退火 Tm</th>
+                <th>{t('名称')}</th>
+                <th>{t('序列 5′→3′')}</th>
+                <th>{t('结合位置')}</th>
+                <th className="whitespace-nowrap">{t('退火 Tm')}</th>
                 <th className="w-12" />
               </tr>
             )}
             {tab === 'orfs' && (
               <tr>
-                <th>读框</th>
-                <th>位置</th>
-                <th>长度</th>
-                <th>分子量</th>
+                <th>{t('读框')}</th>
+                <th>{t('位置')}</th>
+                <th>{t('长度')}</th>
+                <th>{t('分子量')}</th>
                 <th>pI</th>
                 <th className="w-12" />
               </tr>
@@ -308,12 +311,12 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
                   <td className="font-medium">{f.name}</td>
                   <td className="text-[var(--muted)]">{f.type}</td>
                   <td className="mono whitespace-nowrap">{rangeLabel(f.start, f.end, doc.length)}</td>
-                  <td className="whitespace-nowrap text-[var(--muted)]">{f.strand === -1 ? '← 负链' : f.strand === 1 ? '→ 正链' : '—'}</td>
+                  <td className="whitespace-nowrap text-[var(--muted)]">{f.strand === -1 ? t('← 负链') : f.strand === 1 ? t('→ 正链') : '—'}</td>
                   <td className="whitespace-nowrap text-right">
-                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), setEditing(f))} aria-label="编辑">
+                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), setEditing(f))} aria-label={t('编辑')}>
                       <Pencil size={12} />
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), removeFeature(f.id))} aria-label="删除">
+                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), removeFeature(f.id))} aria-label={t('删除')}>
                       <Trash2 size={12} />
                     </Button>
                   </td>
@@ -332,7 +335,7 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
                   </td>
                   <td className="whitespace-nowrap">{p.tmAnnealing.toFixed(1)} °C</td>
                   <td className="text-right">
-                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), removePrimer(p.id))} aria-label="删除">
+                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), removePrimer(p.id))} aria-label={t('删除')}>
                       <Trash2 size={12} />
                     </Button>
                   </td>
@@ -349,7 +352,7 @@ export function FeaturePanel({ doc }: { doc: PlasmidDocument }) {
                   <td>{o.mwKda.toFixed(1)} kDa</td>
                   <td>{o.pI.toFixed(2)}</td>
                   <td className="text-right">
-                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), addOrfAsFeature(o))} aria-label="添加为特征">
+                    <Button size="sm" variant="ghost" onClick={(e) => (e.stopPropagation(), addOrfAsFeature(o))} aria-label={t('添加为特征')}>
                       <Plus size={12} />
                     </Button>
                   </td>
@@ -385,6 +388,7 @@ function Facts({ rows }: { rows: Array<[string, string]> }) {
 }
 
 export function Inspector({ doc }: { doc: PlasmidDocument }) {
+  const t = useT();
   const selection = useWorkbench((s) => s.selection);
   const highlight = useWorkbench((s) => s.highlight);
   const replaceDoc = useWorkbench((s) => s.replaceDoc);
@@ -396,24 +400,24 @@ export function Inspector({ doc }: { doc: PlasmidDocument }) {
 
   const copy = (text: string, what: string) =>
     navigator.clipboard?.writeText(text).then(
-      () => useWorkbench.getState().notify(`已复制${what}（${text.length.toLocaleString()} 个字符）`),
-      () => useWorkbench.getState().notify('无法访问剪贴板'),
+      () => useWorkbench.getState().notify(t('已复制{v0}（{v1} 个字符）', { v0: what, v1: text.length.toLocaleString() })),
+      () => useWorkbench.getState().notify(t('无法访问剪贴板')),
     );
 
   return (
     <div className="flex flex-col gap-3 p-3 text-xs">
-      <InspectorCard title="序列">
+      <InspectorCard title={t('序列')}>
         <div className="mb-2 break-words text-[13px] font-semibold">{doc.name}</div>
         <Facts
           rows={[
-            ['长度', `${doc.length.toLocaleString()} bp`],
-            ['拓扑', doc.topology === 'circular' ? '环状' : '线性'],
+            [t('长度'), `${doc.length.toLocaleString()} bp`],
+            [t('拓扑'), doc.topology === 'circular' ? t('环状') : t('线性')],
             ['GC', `${gc.toFixed(1)}%`],
-            ['特征 / 引物', `${doc.features.length} / ${doc.primers.length}`],
+            [t('特征 / 引物'), `${doc.features.length} / ${doc.primers.length}`],
           ]}
         />
-        <div className="mt-3 text-[11px] text-[var(--muted)]" title="影响酶切位点是否被甲基化阻断的判断">
-          宿主甲基化
+        <div className="mt-3 text-[11px] text-[var(--muted)]" title={t('影响酶切位点是否被甲基化阻断的判断')}>
+          {t('宿主甲基化')}
         </div>
         <div className="mt-1 flex gap-1.5">
           {(['dam', 'dcm', 'cpg'] as const).map((k) => (
@@ -440,43 +444,43 @@ export function Inspector({ doc }: { doc: PlasmidDocument }) {
           <b>AI 高亮 {highlight.start + 1}–{highlight.end}</b>：{highlight.reason}
         </section>
       )}
-      <InspectorCard title="选区">
+      <InspectorCard title={t('选区')}>
         {sel ? (
           <div className="flex flex-col gap-2">
             <Facts
               rows={[
-                ['位置', `${selection!.start + 1} – ${selection!.end}`],
-                ['长度', `${sel.length.toLocaleString()} bp`],
+                [t('位置'), `${selection!.start + 1} – ${selection!.end}`],
+                [t('长度'), `${sel.length.toLocaleString()} bp`],
                 ['GC', `${calcGcPercent(sel).toFixed(1)}%`],
                 ...(thermo
                   ? ([
                       ['Tm', `${thermo.tm.toFixed(1)} °C`],
                       ['ΔG37', `${thermo.deltaG37.toFixed(2)} kcal/mol`],
-                      ['发夹 ΔG', thermo.hairpinDeltaG.toFixed(2)],
-                      ['自二聚体 ΔG', thermo.selfDimerDeltaG.toFixed(2)],
+                      [t('发夹 ΔG'), thermo.hairpinDeltaG.toFixed(2)],
+                      [t('自二聚体 ΔG'), thermo.selfDimerDeltaG.toFixed(2)],
                     ] as Array<[string, string]>)
                   : []),
               ]}
             />
-            {thermo && <div className="text-[10px] text-[var(--muted)]">Tm：SantaLucia 1998 + Owczarzy 盐校正，50 mM Na⁺、2 mM Mg²⁺、0.8 mM dNTP</div>}
+            {thermo && <div className="text-[10px] text-[var(--muted)]">{t('Tm：SantaLucia 1998 + Owczarzy 盐校正，50 mM Na⁺、2 mM Mg²⁺、0.8 mM dNTP')}</div>}
             <div className="mono max-h-32 overflow-auto break-all rounded-md bg-[var(--bg)] p-1.5">{sel.length > 600 ? sel.slice(0, 600) + '…' : sel}</div>
             {sel.length % 3 === 0 && sel.length <= 3000 && (
               <div>
-                <div className="mb-0.5 text-[11px] text-[var(--muted)]">翻译（正链，第 1 框）</div>
+                <div className="mb-0.5 text-[11px] text-[var(--muted)]">{t('翻译（正链，第 1 框）')}</div>
                 <div className="mono max-h-24 overflow-auto break-all rounded-md bg-[var(--bg)] p-1.5 text-emerald-700 dark:text-emerald-400">{translateDna(sel)}</div>
               </div>
             )}
             <div className="grid grid-cols-2 gap-1.5">
-              <Button size="sm" className="justify-center" onClick={() => copy(sel, '序列')}>
-                <Copy size={12} /> 复制
+              <Button size="sm" className="justify-center" onClick={() => copy(sel, t('序列'))}>
+                <Copy size={12} /> {t('复制')}
               </Button>
-              <Button size="sm" className="justify-center" onClick={() => copy(reverseComplement(sel), '反向互补序列')}>
-                <Copy size={12} /> 反向互补
+              <Button size="sm" className="justify-center" onClick={() => copy(reverseComplement(sel), t('反向互补序列'))}>
+                <Copy size={12} /> {t('反向互补')}
               </Button>
             </div>
           </div>
         ) : (
-          <div className="leading-relaxed text-[var(--muted)]">在图谱上拖动，或在序列中拖选碱基；点击特征可选中整个特征。</div>
+          <div className="leading-relaxed text-[var(--muted)]">{t('在图谱上拖动，或在序列中拖选碱基；点击特征可选中整个特征。')}</div>
         )}
       </InspectorCard>
     </div>

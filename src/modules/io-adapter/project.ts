@@ -1,3 +1,4 @@
+import { t as translate } from '../../lib/i18n';
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Native .gatc project format: serialization, validation and version handling.
 import type {
@@ -25,7 +26,7 @@ export class ProjectVersionError extends Error {
     readonly supportedVersion: number,
   ) {
     super(
-      `该项目文件使用格式 v${foundVersion}，由更新版本的 GATC 保存；当前版本只支持到 v${supportedVersion}。请升级 GATC 后再打开，文件未被修改。`,
+      translate('该项目文件使用格式 v{v0}，由更新版本的 GATC 保存；当前版本只支持到 v{v1}。请升级 GATC 后再打开，文件未被修改。', { v0: foundVersion, v1: supportedVersion }),
     );
     this.name = 'ProjectVersionError';
   }
@@ -95,13 +96,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function validateDocument(raw: unknown, index: number, warnings: string[]): PlasmidDocument {
-  const where = `文档 #${index + 1}`;
-  if (!isRecord(raw)) throw new Error(`${where} 不是对象`);
-  if (typeof raw.id !== 'string' || !raw.id) throw new Error(`${where} 缺少 id`);
-  if (typeof raw.sequence !== 'string') throw new Error(`${where} 缺少序列`);
-  if (raw.topology !== 'circular' && raw.topology !== 'linear') throw new Error(`${where} 的拓扑无效`);
+  const where = translate('文档 #{v0}', { v0: index + 1 });
+  if (!isRecord(raw)) throw new Error(translate('{v0} 不是对象', { v0: where }));
+  if (typeof raw.id !== 'string' || !raw.id) throw new Error(translate('{v0} 缺少 id', { v0: where }));
+  if (typeof raw.sequence !== 'string') throw new Error(translate('{v0} 缺少序列', { v0: where }));
+  if (raw.topology !== 'circular' && raw.topology !== 'linear') throw new Error(translate('{v0} 的拓扑无效', { v0: where }));
   for (const key of ['features', 'primers', 'history'] as const) {
-    if (raw[key] !== undefined && !Array.isArray(raw[key])) throw new Error(`${where} 的 ${key} 不是数组`);
+    if (raw[key] !== undefined && !Array.isArray(raw[key])) throw new Error(translate('{v0} 的 {v1} 不是数组', { v0: where, v1: key }));
   }
   const name = typeof raw.name === 'string' && raw.name ? raw.name : raw.id;
   const doc = {
@@ -112,7 +113,7 @@ function validateDocument(raw: unknown, index: number, warnings: string[]): Plas
     history: raw.history ?? [],
   } as PlasmidDocument;
   if (doc.length !== doc.sequence.length) {
-    warnings.push(`${name}：记录长度 ${String(raw.length)} 与序列长度 ${doc.sequence.length} 不一致，已按序列修正`);
+    warnings.push(translate('{v0}：记录长度 {v1} 与序列长度 {v2} 不一致，已按序列修正', { v0: name, v1: String(raw.length), v2: doc.sequence.length }));
     doc.length = doc.sequence.length;
   }
   return doc;
@@ -125,16 +126,16 @@ function validateProject(raw: unknown): { project: ProjectFile; warnings: string
   const documents = raw.documents.map((d, i) => validateDocument(d, i, warnings));
   const ids = new Set<string>();
   for (const d of documents) {
-    if (ids.has(d.id)) throw new Error(`项目中有重复的文档 id：${d.id}`);
+    if (ids.has(d.id)) throw new Error(translate('项目中有重复的文档 id：{v0}', { v0: d.id }));
     ids.add(d.id);
   }
   const traces: ProjectFile['traces'] = {};
   if (raw.traces !== undefined) {
     if (!isRecord(raw.traces)) throw new Error('项目文件的测序数据格式无效');
     for (const [docId, list] of Object.entries(raw.traces)) {
-      if (!Array.isArray(list)) throw new Error(`文档 ${docId} 的测序数据不是数组`);
+      if (!Array.isArray(list)) throw new Error(translate('文档 {v0} 的测序数据不是数组', { v0: docId }));
       if (!ids.has(docId)) {
-        warnings.push(`忽略了 ${list.length} 条测序数据：所属文档 ${docId} 不在项目中`);
+        warnings.push(translate('忽略了 {v0} 条测序数据：所属文档 {v1} 不在项目中', { v0: list.length, v1: docId }));
         continue;
       }
       traces[docId] = list as ProjectFile['traces'][string];

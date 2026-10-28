@@ -7,6 +7,7 @@
 // written as a sequence that was provided directly, and the loss is reported rather than
 // papered over.
 import type { CloningHistoryNode, CloningOperationType, PlasmidDocument } from '../../types/schema';
+import { t as translate } from '../../lib/i18n';
 
 /** The schema version this mapping was written against. */
 export const OPENCLONING_SCHEMA_VERSION = '0.4.8';
@@ -177,7 +178,7 @@ export function exportCloningStrategy(
       if (primerIdByKey.has(key)) continue;
       // The schema only allows unambiguous bases in a primer.
       if (!/^[ACGTacgt]+$/.test(primer.sequence)) {
-        warnings.push(`引物 ${primer.name} 含非 ACGT 碱基，OpenCloning 的 Primer 不接受，已略过。`);
+        warnings.push(translate('引物 {v0} 含非 ACGT 碱基，OpenCloning 的 Primer 不接受，已略过。', { v0: primer.name }));
         continue;
       }
       const id = nextId;
@@ -212,13 +213,13 @@ export function exportCloningStrategy(
     const missing = (node?.parentSnapshots ?? []).length - parents.length;
     if (missing > 0) {
       warnings.push(
-        `${doc.name}：${missing} 个亲本不在导出范围内，这一步的来源连边会丢失（把亲本一起打开再导出即可保留）。`,
+        translate('{v0}：{v1} 个亲本不在导出范围内，这一步的来源连边会丢失（把亲本一起打开再导出即可保留）。', { v0: doc.name, v1: missing }),
       );
     }
 
     if (!mapped) {
       warnings.push(
-        `${doc.name}：${operation} 在 OpenCloning 模型里没有对应的操作类型，已写成「直接给出的序列」，谱系到此截断。`,
+        translate('{v0}：{v1} 在 OpenCloning 模型里没有对应的操作类型，已写成「直接给出的序列」，谱系到此截断。', { v0: doc.name, v1: operation }),
       );
       sources.push({
         id,
@@ -250,7 +251,7 @@ export function exportCloningStrategy(
       // The schema requires the enzymes; without them the record would not validate.
       source.restriction_enzymes = node?.enzymesUsed?.length ? [...node.enzymesUsed] : ['unknown'];
       if (!node?.enzymesUsed?.length) {
-        warnings.push(`${doc.name}：这一步没有记录所用的酶，已写成 unknown。`);
+        warnings.push(translate('{v0}：这一步没有记录所用的酶，已写成 unknown。', { v0: doc.name }));
       }
       source.circular = doc.topology === 'circular';
     }
@@ -326,7 +327,7 @@ export function importCloningStrategy(text: string): StrategyImport {
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    throw new Error(`不是合法的 JSON：${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(translate('不是合法的 JSON：{v0}', { v0: error instanceof Error ? error.message : String(error) }));
   }
   if (!parsed || typeof parsed !== 'object') throw new Error('不是 OpenCloning 克隆策略文件');
   const strategy = parsed as Partial<CloningStrategy>;
@@ -335,7 +336,7 @@ export function importCloningStrategy(text: string): StrategyImport {
   }
   if (strategy.schema_version && strategy.schema_version !== OPENCLONING_SCHEMA_VERSION) {
     warnings.push(
-      `文件的 schema 版本是 ${strategy.schema_version}，本程序按 ${OPENCLONING_SCHEMA_VERSION} 读取；字段若有变动可能读不全。`,
+      translate('文件的 schema 版本是 {v0}，本程序按 {v1} 读取；字段若有变动可能读不全。', { v0: strategy.schema_version, v1: OPENCLONING_SCHEMA_VERSION }),
     );
   }
 
@@ -355,14 +356,14 @@ export function importCloningStrategy(text: string): StrategyImport {
   const files: StrategyImport['files'] = [];
   for (const sequence of strategy.sequences) {
     if (sequence.sequence_file_format && sequence.sequence_file_format !== 'genbank') {
-      warnings.push(`序列 ${sequence.id} 的格式是 ${sequence.sequence_file_format}，按原样交给解析器。`);
+      warnings.push(translate('序列 {v0} 的格式是 {v1}，按原样交给解析器。', { v0: sequence.id, v1: sequence.sequence_file_format }));
     }
     const source = sourceById.get(sequence.id);
     const name = source?.output_name || `sequence_${sequence.id}`;
     const history: CloningHistoryNode[] = [];
     if (source) {
       const operation = OPERATION_BY_CLASS[source.type];
-      if (!operation) warnings.push(`未知的来源类型 ${source.type}（序列 ${sequence.id}），已记作手工编辑。`);
+      if (!operation) warnings.push(translate('未知的来源类型 {v0}（序列 {v1}），已记作手工编辑。', { v0: source.type, v1: sequence.id }));
       const enzymes = Array.isArray(source.restriction_enzymes)
         ? (source.restriction_enzymes as string[])
         : undefined;

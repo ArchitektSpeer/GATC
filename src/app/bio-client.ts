@@ -7,6 +7,7 @@ import type { PlasmidDocument } from '../types/schema';
 import { bioApi, type BioApi, type BioFn, type BioRequest, type BioResponse } from './bio-api';
 import { docRevision } from './revision';
 import { isDocCurrent } from './store';
+import { t as translate } from '../lib/i18n';
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 
@@ -39,7 +40,7 @@ function getWorkers(): Worker[] | null {
       // instead of leaving them (and edits queued behind them) waiting forever.
       w.onerror = (e) => {
         e.preventDefault?.();
-        failWorker(`计算线程出错：${e.message || '脚本加载失败'}`);
+        failWorker(translate('计算线程出错：{v0}', { v0: e.message || '脚本加载失败' }));
       };
       w.onmessageerror = () => failWorker('计算线程返回了无法读取的数据');
       return w;

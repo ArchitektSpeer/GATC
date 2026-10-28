@@ -10,6 +10,7 @@ import { callBio, callBioForDoc } from './bio-client';
 import { docRevision } from './revision';
 import { rangeError } from '../lib/ranges';
 import { ALL_COMMERCIAL_SET, enzymeSetKey, isDocCurrent, selectActiveDoc, useWorkbench, type WizardKind } from './store';
+import { t as translate } from '../lib/i18n';
 
 export const uid = (prefix = 'id') => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 
@@ -53,7 +54,7 @@ export function newDocument(name: string, sequence: string, topology: PlasmidDoc
     description,
     features: [],
     primers: [],
-    history: [historyNode('manual_edit', description ?? `新建 ${name}`)],
+    history: [historyNode('manual_edit', description ?? translate('新建 {v0}', { v0: name }))],
   };
 }
 
@@ -143,7 +144,7 @@ export async function digestToGel(doc: PlasmidDocument, enzymeNames: string[]): 
   const st = useWorkbench.getState();
   const { enzymes, missing } = resolveEnzymes(enzymeNames);
   if (!enzymes.length) {
-    st.notify(`未找到酶：${enzymeNames.join(', ')}`);
+    st.notify(translate('未找到酶：{v0}', { v0: enzymeNames.join(', ') }));
     return [];
   }
   const sites = await callBio('findCutSites', doc, enzymes);
@@ -160,9 +161,9 @@ export async function digestToGel(doc: PlasmidDocument, enzymeNames: string[]): 
   const blocked = sites.length - usable.length;
   st.notify(
     [
-      `${enzymes.map((e) => e.name).join('+')}：${fragments.length} 个片段 (${fragments.map((f) => f.length).join(', ')} bp)`,
-      blocked ? `${blocked} 个位点被甲基化阻断` : '',
-      missing.length ? `未知酶：${missing.join(', ')}` : '',
+      translate('{v0}：{v1} 个片段 ({v2} bp)', { v0: enzymes.map((e) => e.name).join('+'), v1: fragments.length, v2: fragments.map((f) => f.length).join(', ') }),
+      blocked ? translate('{v0} 个位点被甲基化阻断', { v0: blocked }) : '',
+      missing.length ? translate('未知酶：{v0}', { v0: missing.join(', ') }) : '',
     ]
       .filter(Boolean)
       .join('；'),
@@ -182,12 +183,12 @@ export function addPrimersToDoc(doc: PlasmidDocument, primers: Primer[], descrip
 export function openProduct(product: PlasmidDocument | null, warnings: string[] = []) {
   const st = useWorkbench.getState();
   if (!product) {
-    st.notify(`模拟失败：${warnings.join('；') || '未生成产物'}`);
+    st.notify(translate('模拟失败：{v0}', { v0: warnings.join('；') || '未生成产物' }));
     return;
   }
   st.openDocs([product]);
   st.setView('split');
-  st.notify(`已生成 ${product.name} (${product.length} bp)${warnings.length ? '；' + warnings.join('；') : ''}`);
+  st.notify(translate('已生成 {v0} ({v1} bp){v2}', { v0: product.name, v1: product.length, v2: warnings.length ? '；' + warnings.join('；') : '' }));
 }
 
 export const methodToWizard: Partial<Record<CloningHistoryNode['operation'], WizardKind>> = {
@@ -214,9 +215,9 @@ export function aiActionError(action: AIToolAction, doc: PlasmidDocument): strin
     case 'ADD_FEATURES':
       for (const f of action.payload.features ?? []) {
         const e = rangeError(doc, f.start, f.end);
-        if (e) return `特征 ${f.name ?? ''}：${e}`;
-        if (!FEATURE_TYPES.has(f.type)) return `特征 ${f.name ?? ''}：未知类型 ${String(f.type)}`;
-        if (f.strand !== 1 && f.strand !== -1 && f.strand !== 0) return `特征 ${f.name ?? ''}：链方向无效`;
+        if (e) return translate('特征 {v0}：{v1}', { v0: f.name ?? '', v1: e });
+        if (!FEATURE_TYPES.has(f.type)) return translate('特征 {v0}：未知类型 {v1}', { v0: f.name ?? '', v1: String(f.type) });
+        if (f.strand !== 1 && f.strand !== -1 && f.strand !== 0) return translate('特征 {v0}：链方向无效', { v0: f.name ?? '' });
       }
       return null;
     case 'DESIGN_PRIMERS': {
@@ -237,15 +238,15 @@ export function aiActionError(action: AIToolAction, doc: PlasmidDocument): strin
 export async function applyAIAction(action: AIToolAction, docId: string): Promise<void> {
   const st = useWorkbench.getState();
   const doc = selectActiveDoc(st);
-  if (!doc || doc.id !== docId) return st.notify('该建议针对的文档已不是当前文档，未执行');
+  if (!doc || doc.id !== docId) return st.notify(translate('该建议针对的文档已不是当前文档，未执行'));
   const invalid = aiActionError(action, doc);
-  if (invalid) return st.notify(`AI 建议的坐标与当前序列不符，未执行：${invalid}`);
+  if (invalid) return st.notify(translate('AI 建议的坐标与当前序列不符，未执行：{v0}', { v0: invalid }));
   switch (action.type) {
     case 'HIGHLIGHT_RANGE': {
       const { start, end, reason } = action.payload;
       st.setSelection({ start, end });
       st.setHighlight({ start, end, reason });
-      st.notify(`高亮 ${start + 1}–${end}：${reason}`);
+      st.notify(translate('高亮 {v0}–{v1}：{v2}', { v0: start + 1, v1: end, v2: reason }));
       return;
     }
     case 'ADD_FEATURES': {
@@ -254,9 +255,9 @@ export async function applyAIAction(action: AIToolAction, docId: string): Promis
         ...doc,
         features: [...doc.features, ...features],
         updatedAt: new Date().toISOString(),
-        history: [...doc.history, historyNode('manual_edit', `AI 添加 ${features.length} 个特征`)],
+        history: [...doc.history, historyNode('manual_edit', translate('AI 添加 {v0} 个特征', { v0: features.length }))],
       });
-      st.notify(`已添加特征：${features.map((f) => f.name).join(', ')}`);
+      st.notify(translate('已添加特征：{v0}', { v0: features.map((f) => f.name).join(', ') }));
       return;
     }
     case 'RUN_DIGESTION': {
@@ -268,18 +269,18 @@ export async function applyAIAction(action: AIToolAction, docId: string): Promis
       const p = action.payload;
       if (p.cloningMethod === 'mutagenesis') {
         // An empty mutationSeq is a deletion of the target range.
-        if (p.mutationSeq === undefined) return st.notify('AI 建议的定点突变缺少新序列，未执行');
+        if (p.mutationSeq === undefined) return st.notify(translate('AI 建议的定点突变缺少新序列，未执行'));
         const r = await callBioForDoc(doc, 'designMutagenesisPrimers', doc, { start: p.targetStart, end: p.targetEnd, newBases: p.mutationSeq }, COMMERCIAL_ENZYMES);
         if (!r) return st.notify(STALE_RESULT);
         st.replaceDoc(addPrimersToDoc(doc, [r.forward, r.reverse], 'AI 定点突变引物'));
-        st.notify(`已设计突变引物 ${r.forward.name} / ${r.reverse.name}${r.warnings.length ? '；' + r.warnings.join('；') : ''}`);
+        st.notify(translate('已设计突变引物 {v0} / {v1}{v2}', { v0: r.forward.name, v1: r.reverse.name, v2: r.warnings.length ? '；' + r.warnings.join('；') : '' }));
         return;
       }
       const r = await callBioForDoc(doc, 'designPrimerPair', doc, { start: p.targetStart, end: p.targetEnd }, { forwardTail: p.forwardTail, reverseTail: p.reverseTail });
       if (!r) return st.notify(STALE_RESULT);
-      st.replaceDoc(addPrimersToDoc(doc, [r.forward, r.reverse], `AI ${p.cloningMethod} 引物`));
+      st.replaceDoc(addPrimersToDoc(doc, [r.forward, r.reverse], translate('AI {v0} 引物', { v0: p.cloningMethod })));
       st.setSelection({ start: p.targetStart, end: p.targetEnd });
-      st.notify(`引物 Tm ${r.forward.tmAnnealing.toFixed(1)} / ${r.reverse.tmAnnealing.toFixed(1)} °C，产物 ${r.productLength} bp`);
+      st.notify(translate('引物 Tm {v0} / {v1} °C，产物 {v2} bp', { v0: r.forward.tmAnnealing.toFixed(1), v1: r.reverse.tmAnnealing.toFixed(1), v2: r.productLength }));
       return;
     }
     case 'SIMULATE_CLONING': {

@@ -201,7 +201,7 @@ describe('canvas-ui render smoke tests', () => {
         mode="publication"
       />,
     );
-    expect(html).toContain('Virtual agarose gel');
+    expect(html).toContain('虚拟琼脂糖凝胶');
     expect(html).toContain('EcoRI digest');
   });
 
@@ -209,7 +209,7 @@ describe('canvas-ui render smoke tests', () => {
     const html = renderToString(
       <CloningHistoryTree history={document.history} selectedId="h2" />,
     );
-    expect(html).toContain('Cloning lineage');
+    expect(html).toContain('构建谱系');
     expect(html).toContain('Gibson assembly');
   });
 
@@ -409,8 +409,8 @@ describe('canvas-ui render smoke tests', () => {
         featureTypes={['CDS', 'promoter', 'terminator']}
       />,
     );
-    expect(html).toContain('Map display');
-    expect(html).toContain('GC plot');
+    expect(html).toContain('图谱显示');
+    expect(html).toContain('GC 曲线');
     expect(html).toContain('terminator');
   });
 
@@ -440,7 +440,7 @@ describe('canvas-ui render smoke tests', () => {
     expect(html).toContain('kDa');
     expect(html).toContain('pI');
     expect(html).toContain('M');
-    expect(html).toContain('Hydrophobic');
+    expect(html).toContain('疏水');
   });
 
   it('draws Sanger coverage on request', () => {

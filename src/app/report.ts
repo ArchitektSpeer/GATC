@@ -10,6 +10,7 @@ import type { GelRunParams, GelSampleInput } from '../modules/alignment-gel';
 import { recommendDoubleDigestBuffer } from '../modules/seq-engine';
 import { gcPercentOf, resolveEnzyme } from '../modules/cloning-primer';
 import { APP_VERSION } from './autosave';
+import { t as translate } from '../lib/i18n';
 
 export interface ReportInput {
   doc: PlasmidDocument;
@@ -107,20 +108,20 @@ function extensionTime(productLength: number, secondsPerKb: number): string {
 function constructSection(doc: PlasmidDocument): string {
   const gc = gcPercentOf(doc.sequence);
   const rows: string[][] = [
-    ['名称', doc.name],
-    ['长度', `${doc.length.toLocaleString()} bp`],
-    ['拓扑', doc.topology === 'circular' ? '环状' : '线性'],
-    ['GC 含量', `${fixed(gc)} %`],
-    ['特征数', String(doc.features.length)],
-    ['引物数', String(doc.primers.length)],
+    [translate('名称'), doc.name],
+    [translate('长度'), `${doc.length.toLocaleString()} bp`],
+    [translate('拓扑'), doc.topology === 'circular' ? translate('环状') : translate('线性')],
+    [translate('GC 含量'), `${fixed(gc)} %`],
+    [translate('特征数'), String(doc.features.length)],
+    [translate('引物数'), String(doc.primers.length)],
   ];
   if (doc.topology === 'linear' && doc.linearEnds) {
     const describe = (end: { type: string; sequence: string }) =>
-      end.type === 'blunt' ? '平末端' : `${end.type === '5-prime' ? "5'" : "3'"} 突出 ${end.sequence}`;
-    rows.push(['左末端', describe(doc.linearEnds.left)], ['右末端', describe(doc.linearEnds.right)]);
+      end.type === 'blunt' ? translate('平末端') : translate('{v0} 突出 {v1}', { v0: end.type === '5-prime' ? "5'" : "3'", v1: end.sequence });
+    rows.push([translate('左末端'), describe(doc.linearEnds.left)], [translate('右末端'), describe(doc.linearEnds.right)]);
   }
-  if (doc.description) rows.push(['说明', doc.description]);
-  return `## 1. 构建体\n\n${table(['项目', '值'], rows)}`;
+  if (doc.description) rows.push([translate('说明'), doc.description]);
+  return translate('## 1. 构建体\n\n{v0}', { v0: table([translate('项目'), translate('值')], rows) });
 }
 
 function featureSection(doc: PlasmidDocument): string {
@@ -133,7 +134,7 @@ function featureSection(doc: PlasmidDocument): string {
     f.strand === -1 ? '−' : '+',
     `${f.end - f.start > 0 ? f.end - f.start : doc.length - f.start + f.end} bp`,
   ]);
-  return `## 2. 特征\n\n${table(['名称', '类型', '位置（1 起、含两端）', '链', '长度'], rows)}`;
+  return translate('## 2. 特征\n\n{v0}', { v0: table([translate('名称'), translate('类型'), translate('位置（1 起、含两端）'), translate('链'), translate('长度')], rows) });
 }
 
 function primerSection(doc: PlasmidDocument): string {
@@ -145,14 +146,14 @@ function primerSection(doc: PlasmidDocument): string {
     `${fixed(p.tmAnnealing)} / ${fixed(p.tmTotal)}`,
     `${fixed(p.gcPercent)} %`,
     `${p.bindingStart + 1}..${p.bindingEnd} ${p.strand === -1 ? '←' : '→'}`,
-    p.tailSequence ? `${p.tailSequence.length} nt 尾巴` : '无尾巴',
+    p.tailSequence ? translate('{v0} nt 尾巴', { v0: p.tailSequence.length }) : translate('无尾巴'),
   ]);
   return [
-    '## 3. 引物',
+    translate('## 3. 引物'),
     '',
-    table(['名称', '序列（5′→3′）', '长度', 'Tm 退火 / 全长 (°C)', 'GC', '结合位置', '备注'], rows),
+    table([translate('名称'), translate('序列（5′→3′）'), translate('长度'), translate('Tm 退火 / 全长 (°C)'), 'GC', translate('结合位置'), translate('备注')], rows),
     '',
-    'Tm 按 SantaLucia 1998 最近邻参数计算，并做 Owczarzy 2004 盐校正；与各厂商自家计算器会有几度差异。',
+    translate('Tm 按 SantaLucia 1998 最近邻参数计算，并做 Owczarzy 2004 盐校正；与各厂商自家计算器会有几度差异。'),
   ].join('\n');
 }
 
@@ -160,41 +161,41 @@ function pcrSection(doc: PlasmidDocument): string {
   const plans = pcrPlans(doc);
   if (!plans.length) return '';
   const blocks = plans.map((plan, index) => {
-    const header = `### 反应 ${index + 1}：${plan.forward.name} + ${plan.reverse.name}`;
+    const header = translate('### 反应 {v0}：{v1} + {v2}', { v0: index + 1, v1: plan.forward.name, v2: plan.reverse.name });
     const summary = table(
-      ['项目', '值'],
+      [translate('项目'), translate('值')],
       [
-        ['产物长度', `${plan.productLength.toLocaleString()} bp`],
-        ['较低的引物退火 Tm', `${fixed(plan.lowerTm)} °C`],
+        [translate('产物长度'), `${plan.productLength.toLocaleString()} bp`],
+        [translate('较低的引物退火 Tm'), `${fixed(plan.lowerTm)} °C`],
       ],
     );
     // Two rules of thumb, each the one its own supplier publishes; the Tm they are
     // applied to is this program's, not the supplier's calculator's.
     const program = table(
-      ['聚合酶', '退火温度', '延伸（72 °C）', '依据'],
+      [translate('聚合酶'), translate('退火温度'), translate('延伸（72 °C）'), translate('依据')],
       [
         [
-          'Taq 等常规聚合酶',
+          translate('Taq 等常规聚合酶'),
           `${fixed(plan.lowerTm - 5)} °C`,
           extensionTime(plan.productLength, 60),
-          'Ta = 较低 Tm − 5 °C；1 min/kb',
+          translate('Ta = 较低 Tm − 5 °C；1 min/kb'),
         ],
         [
-          'Q5 / Phusion 等高保真酶',
+          translate('Q5 / Phusion 等高保真酶'),
           `${fixed(plan.lowerTm + 3)} °C`,
           extensionTime(plan.productLength, 30),
-          'Ta = 较低 Tm + 3 °C；20–30 s/kb',
+          translate('Ta = 较低 Tm + 3 °C；20–30 s/kb'),
         ],
       ],
     );
     return [header, '', summary, '', program].join('\n');
   });
   return [
-    '## 4. PCR 推荐程序',
+    translate('## 4. PCR 推荐程序'),
     '',
-    '循环结构：初始变性 → (变性 / 退火 / 延伸) × 25–35 → 终延伸 72 °C 2 min → 4 °C。',
-    '下表只给退火温度与延伸时间；变性温度与时间、酶量、缓冲液请按所用聚合酶说明书。',
-    '表中数值是经验公式的结果，不是实测条件，首次扩增建议做温度梯度。',
+    translate('循环结构：初始变性 → (变性 / 退火 / 延伸) × 25–35 → 终延伸 72 °C 2 min → 4 °C。'),
+    translate('下表只给退火温度与延伸时间；变性温度与时间、酶量、缓冲液请按所用聚合酶说明书。'),
+    translate('表中数值是经验公式的结果，不是实测条件，首次扩增建议做温度梯度。'),
     '',
     ...blocks,
   ].join('\n');
@@ -215,7 +216,7 @@ function digestSection(
     byName.set(site.enzyme.name, entry);
   }
 
-  const parts: string[] = ['## 5. 酶切'];
+  const parts: string[] = [translate('## 5. 酶切')];
 
   // Single cutters in map order: the list a cloning plan is actually read off.
   const unique = [...byName.values()]
@@ -225,10 +226,10 @@ function digestSection(
   if (unique.length) {
     parts.push(
       '',
-      `单切点酶 ${unique.length} 种${unique.length > SHOWN ? `，按切点位置排序，下表列出前 ${SHOWN} 种` : '，按切点位置排序'}（取自当前酶集）：`,
+      translate('单切点酶 {v0} 种{v1}（取自当前酶集）：', { v0: unique.length, v1: unique.length > SHOWN ? `，按切点位置排序，下表列出前 ${SHOWN} 种` : translate('，按切点位置排序') }),
       '',
       table(
-        ['酶', '识别序列', '切点位置（1 起）', '末端', '备注'],
+        [translate('酶'), translate('识别序列'), translate('切点位置（1 起）'), translate('末端'), translate('备注')],
         unique.slice(0, SHOWN).map((entry) => {
           const site = entry.sites[0];
           return [
@@ -236,9 +237,9 @@ function digestSection(
             entry.enzyme.recognitionSeq,
             String(site.cutPositionTop + 1),
             site.overhangType === 'blunt'
-              ? '平末端'
-              : `${site.overhangType === '5-prime' ? "5'" : "3'"} 突出 ${site.overhangSeq}`,
-            site.isMethylationBlocked ? '该位点被甲基化阻断' : '',
+              ? translate('平末端')
+              : translate('{v0} 突出 {v1}', { v0: site.overhangType === '5-prime' ? "5'" : "3'", v1: site.overhangSeq }),
+            site.isMethylationBlocked ? translate('该位点被甲基化阻断') : '',
           ];
         }),
       ),
@@ -254,23 +255,23 @@ function digestSection(
     const dnaUl = Math.min(volumeUl / 2, Math.max(1, Math.round(volumeUl / 5)));
     const waterUl = Math.max(0, volumeUl - bufferUl - enzymeUl - dnaUl);
     const recipe = table(
-      ['组分', '体积', '说明'],
+      [translate('组分'), translate('体积'), translate('说明')],
       [
-        [`质粒 DNA（${doc.name}）`, `${dnaUl} µL`, `合计约 ${massUg} µg`],
+        [translate('质粒 DNA（{v0}）', { v0: doc.name }), `${dnaUl} µL`, translate('合计约 {v0} µg', { v0: massUg })],
         [
-          '10× 缓冲液',
+          translate('10× 缓冲液'),
           `${bufferUl} µL`,
-          plan.buffer === 'sequential' ? '无共用缓冲液，见下' : `NEB ${plan.buffer}`,
+          plan.buffer === 'sequential' ? translate('无共用缓冲液，见下') : `NEB ${plan.buffer}`,
         ],
-        ...enzymes.map((enzyme) => [enzyme.name, '1 µL', '约 10 U，按 ≥10 U/µg DNA 核算']),
-        ['灭菌水', `${waterUl} µL`, '补足体积'],
-        ['合计', `${volumeUl} µL`, ''],
+        ...enzymes.map((enzyme) => [enzyme.name, '1 µL', translate('约 10 U，按 ≥10 U/µg DNA 核算')]),
+        [translate('灭菌水'), `${waterUl} µL`, translate('补足体积')],
+        [translate('合计'), `${volumeUl} µL`, ''],
       ],
     );
 
     const notes: string[] = [];
     if (plan.buffer === 'sequential') {
-      notes.push('**没有一种缓冲液能让这些酶都保持 ≥75% 活性，需分步酶切：先切一种，纯化后换缓冲液再切下一种。**');
+      notes.push(translate('**没有一种缓冲液能让这些酶都保持 ≥75% 活性，需分步酶切：先切一种，纯化后换缓冲液再切下一种。**'));
     } else if (enzymes.length > 1) {
       notes.push(
         `共用缓冲液：NEB ${plan.buffer}，活性 ${Object.entries(plan.activities)
@@ -278,25 +279,25 @@ function digestSection(
           .join(' · ')}。`,
       );
     } else {
-      notes.push(`缓冲液：NEB ${plan.buffer}（活性 ${Object.values(plan.activities)[0]}%）。`);
+      notes.push(translate('缓冲液：NEB {v0}（活性 {v1}%）。', { v0: plan.buffer, v1: Object.values(plan.activities)[0] }));
     }
     if (plan.temperatureC.length) {
       notes.push(
         `孵育温度：${[...new Set(plan.temperatureC)].join(' / ')} °C${
-          new Set(plan.temperatureC).size > 1 ? '（各酶最适温度不同，需分步或取折中并延长时间）' : ''
+          new Set(plan.temperatureC).size > 1 ? translate('（各酶最适温度不同，需分步或取折中并延长时间）') : ''
         }。`,
       );
     }
     const inactivation = Object.entries(plan.heatInactivation).filter(([, how]) => how);
     if (inactivation.length) {
-      notes.push(`热失活：${inactivation.map(([name, how]) => `${name} ${how}`).join('；')}。`);
+      notes.push(translate('热失活：{v0}。', { v0: inactivation.map(([name, how]) => `${name} ${how}`).join('；') }));
     }
-    for (const warning of plan.starActivityWarning) notes.push(`星号活性提示：${warning}`);
-    notes.push('酶的甘油会抑制反应，酶的总体积不要超过反应体积的 1/10。');
+    for (const warning of plan.starActivityWarning) notes.push(translate('星号活性提示：{v0}', { v0: warning }));
+    notes.push(translate('酶的甘油会抑制反应，酶的总体积不要超过反应体积的 1/10。'));
 
     parts.push(
       '',
-      `### ${volumeUl} µL 体系（${enzymes.map((e) => e.name).join(' + ')}）`,
+      translate('### {v0} µL 体系（{v1}）', { v0: volumeUl, v1: enzymes.map((e) => e.name).join(' + ') }),
       '',
       recipe,
       '',
@@ -315,13 +316,13 @@ function gelSection(samples: GelSampleInput[], params?: GelRunParams): string {
     sample.ladder
       ? `Marker：${sample.ladder}`
       : (sample.fragments ?? [])
-          .map((f) => `${f.sizeBp.toLocaleString()} bp${f.conformation && f.conformation !== 'linear' ? `（${f.conformation === 'supercoiled' ? '超螺旋' : '开环'}）` : ''}`)
-          .join('、') || '空',
+          .map((f) => `${f.sizeBp.toLocaleString()} bp${f.conformation && f.conformation !== 'linear' ? `（${f.conformation === 'supercoiled' ? translate('超螺旋') : translate('开环')}）` : ''}`)
+          .join('、') || translate('空'),
   ]);
   const run = params
-    ? `凝胶条件：${params.agarosePercent}% 琼脂糖${params.voltage ? `，${params.voltage} V` : ''}${params.minutes ? `，${params.minutes} min` : ''}。`
+    ? translate('凝胶条件：{v0}% 琼脂糖{v1}{v2}。', { v0: params.agarosePercent, v1: params.voltage ? `，${params.voltage} V` : '', v2: params.minutes ? `，${params.minutes} min` : '' })
     : '';
-  return ['## 6. 虚拟电泳', '', table(['泳道', '样品', '条带'], rows), '', run].filter(Boolean).join('\n');
+  return [translate('## 6. 虚拟电泳'), '', table([translate('泳道'), translate('样品'), translate('条带')], rows), '', run].filter(Boolean).join('\n');
 }
 
 function historySection(doc: PlasmidDocument): string {
@@ -331,13 +332,13 @@ function historySection(doc: PlasmidDocument): string {
     node.operation,
     node.description,
     [
-      node.enzymesUsed?.length ? `酶：${node.enzymesUsed.join(', ')}` : '',
-      node.parentSnapshots?.length ? `亲本：${node.parentSnapshots.map((p) => `${p.name} (${p.length} bp)`).join('、')}` : '',
+      node.enzymesUsed?.length ? translate('酶：{v0}', { v0: node.enzymesUsed.join(', ') }) : '',
+      node.parentSnapshots?.length ? translate('亲本：{v0}', { v0: node.parentSnapshots.map((p) => `${p.name} (${p.length} bp)`).join('、') }) : '',
     ]
       .filter(Boolean)
       .join('；'),
   ]);
-  return `## 7. 构建历史\n\n${table(['时间', '操作', '说明', '来源'], rows)}`;
+  return translate('## 7. 构建历史\n\n{v0}', { v0: table([translate('时间'), translate('操作'), translate('说明'), translate('来源')], rows) });
 }
 
 function traceSection(traces: SangerTraceData[]): string {
@@ -345,21 +346,21 @@ function traceSection(traces: SangerTraceData[]): string {
   const rows = traces.map((trace) => {
     const [from, to] = trace.trimRange;
     const quality = trace.qualityScores.length
-      ? `平均 Q ${fixed(trace.qualityScores.reduce((a, b) => a + b, 0) / trace.qualityScores.length, 0)}`
-      : '无质量值';
+      ? translate('平均 Q {v0}', { v0: fixed(trace.qualityScores.reduce((a, b) => a + b, 0) / trace.qualityScores.length, 0) })
+      : translate('无质量值');
     const aligned = trace.alignment
       ? `${trace.alignment.refStart + 1}..${trace.alignment.refEnd} ${trace.alignment.strand === -1 ? '←' : '→'}，一致度 ${fixed(
           trace.alignment.identityPercent,
         )}%，${trace.alignment.mismatches.length} 处差异`
-      : '未比对';
+      : translate('未比对');
     return [
       trace.fileName || trace.id,
-      `${trace.calledSequence.length} nt（高质量区 ${from + 1}..${to}）`,
+      translate('{v0} nt（高质量区 {v1}..{v2}）', { v0: trace.calledSequence.length, v1: from + 1, v2: to }),
       quality,
       aligned,
     ];
   });
-  return `## 8. 测序数据\n\n${table(['样品', '读长', '质量', '与参考序列的比对'], rows)}`;
+  return translate('## 8. 测序数据\n\n{v0}', { v0: table([translate('样品'), translate('读长'), translate('质量'), translate('与参考序列的比对')], rows) });
 }
 
 /** The whole record, as Markdown. */
@@ -378,9 +379,9 @@ export function buildReportMarkdown(input: ReportInput): string {
   } = input;
 
   const sections = [
-    `# 实验记录：${doc.name}`,
+    translate('# 实验记录：{v0}', { v0: doc.name }),
     '',
-    `生成时间：${now.toLocaleString('zh-CN')} · GATC ${APP_VERSION} · 本文由软件根据当前工作区自动生成`,
+    translate('生成时间：{v0} · GATC {v1} · 本文由软件根据当前工作区自动生成', { v0: now.toLocaleString('zh-CN'), v1: APP_VERSION }),
     '',
     constructSection(doc),
     featureSection(doc),
@@ -395,21 +396,21 @@ export function buildReportMarkdown(input: ReportInput): string {
   if (includeSequence) {
     const wrapped = doc.sequence.replace(/(.{60})/g, '$1\n').trimEnd();
     sections.push(
-      ['## 附录：序列', '', '```', `>${doc.name} ${doc.length} bp ${doc.topology}`, wrapped, '```'].join('\n'),
+      [translate('## 附录：序列'), '', '```', `>${doc.name} ${doc.length} bp ${doc.topology}`, wrapped, '```'].join('\n'),
     );
   }
 
   sections.push(
     [
-      '## 依据与声明',
+      translate('## 依据与声明'),
       '',
-      '- 熔解温度：SantaLucia JR 1998, *PNAS* **95**: 1460–1465；盐校正 Owczarzy R et al. 2004, *Biochemistry* **43**: 3537–3554。',
-      '- 限制性内切酶识别序列与切点：REBASE（Roberts RJ, Vincze T, Posfai J, Macelis D 2023, *Nucleic Acids Res* **51**: D629–D630）。',
-      '- 缓冲液活性与孵育条件：NEB 公布的双酶切兼容性数据。',
-      '- PCR 退火温度与延伸时间是经验公式的结果，不是实测条件。',
-      '- 虚拟电泳迁移率是模型估计，用于判断条带是否可分辨，不能当作定量结果。',
+      translate('- 熔解温度：SantaLucia JR 1998, *PNAS* **95**: 1460–1465；盐校正 Owczarzy R et al. 2004, *Biochemistry* **43**: 3537–3554。'),
+      translate('- 限制性内切酶识别序列与切点：REBASE（Roberts RJ, Vincze T, Posfai J, Macelis D 2023, *Nucleic Acids Res* **51**: D629–D630）。'),
+      translate('- 缓冲液活性与孵育条件：NEB 公布的双酶切兼容性数据。'),
+      translate('- PCR 退火温度与延伸时间是经验公式的结果，不是实测条件。'),
+      translate('- 虚拟电泳迁移率是模型估计，用于判断条带是否可分辨，不能当作定量结果。'),
       '',
-      '本记录由 GATC 生成，内容取自当前工作区，未经实验验证。',
+      translate('本记录由 GATC 生成，内容取自当前工作区，未经实验验证。'),
     ].join('\n'),
   );
 
@@ -435,7 +436,7 @@ function inline(text: string): string {
  * Renders the Markdown this module produces - headings, tables, lists, fenced blocks
  * and paragraphs - and nothing else, so no Markdown library is needed.
  */
-export function reportToHtml(markdown: string, opts: { title: string; mapSvg?: string } = { title: 'GATC 实验记录' }): string {
+export function reportToHtml(markdown: string, opts: { title: string; mapSvg?: string } = { title: translate('GATC 实验记录') }): string {
   const out: string[] = [];
   const lines = markdown.split('\n');
   let index = 0;

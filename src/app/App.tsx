@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Command } from 'cmdk';
 import {
   Bot,
+  Languages,
   Download,
   SlidersHorizontal,
   FileUp,
@@ -64,6 +65,7 @@ import { OligoAnnealDialog } from './OligoAnneal';
 import { MocloAssemblerDialog } from './MocloAssembler';
 import { GenomeEditingDialog } from './GenomeEditing';
 import { buildReportMarkdown, reportToHtml } from './report';
+import { LOCALES, getLocale, setLocale, useT, useLocale } from '../lib/i18n';
 import { APP_VERSION } from './autosave';
 import { loadSampleLibrary } from './samples';
 import { download, openProject, recordSave, saveFile, saveProject } from './files';
@@ -90,6 +92,8 @@ const THEME_NAMES = { light: '浅色', publication: '出版白底', dark: '深�
 const MAX_FASTQ_TRACES = 200;
 
 export default function App() {
+  const t = useT();
+  const locale = useLocale();
   const s = useWorkbench();
   const doc = selectActiveDoc(s);
   const cutSites = selectCutSites(s, doc);
@@ -204,7 +208,7 @@ export default function App() {
       try {
         if (/\.(ab1|abi|scf)$/i.test(file.name)) {
           const active = selectActiveDoc(useWorkbench.getState());
-          if (!active) throw new Error('请先打开参考质粒');
+          if (!active) throw new Error(t('请先打开参考质粒'));
           const trace = await callBio('parseAb1Trace', await file.arrayBuffer(), file.name);
           st.addTraces(active.id, [trace]);
           st.setView('sanger');
@@ -212,12 +216,12 @@ export default function App() {
         }
         if (/\.(fastq|fq)$/i.test(file.name)) {
           const active = selectActiveDoc(useWorkbench.getState());
-          if (!active) throw new Error('请先打开参考序列');
+          if (!active) throw new Error(t('请先打开参考序列'));
           // Parsed in the worker so a large file does not block the page; only the first reads are kept.
           const { traces, total } = await callBio('fastqToTraces', await file.text(), MAX_FASTQ_TRACES);
           st.addTraces(active.id, traces);
           st.setView('sanger');
-          st.notify(`已载入 ${traces.length} / ${total} 条读长，正在比对到 ${active.name}`);
+          st.notify(t('已载入 {loaded} / {total} 条读长，正在比对到 {name}', { loaded: traces.length, total, name: active.name }));
           continue;
         }
         const binary = /\.(dna|prot|xdna|cm5)$/i.test(file.name);
@@ -242,22 +246,24 @@ export default function App() {
             ]);
           }
           st.notify(
-            `已导入 OpenCloning 克隆策略：${opened.length} 条序列、${strategy.primers.length} 条引物` +
-              (strategy.warnings.length ? `；${strategy.warnings[0]}` : ''),
+            t('已导入 OpenCloning 克隆策略：{docs} 条序列、{primers} 条引物', {
+              docs: opened.length,
+              primers: strategy.primers.length,
+            }) + (strategy.warnings.length ? `；${strategy.warnings[0]}` : ''),
           );
           continue;
         }
         if (isProteinFile(file.name, data)) {
           const proteins = await parseProteinFile(file.name, data);
           st.openProteins(proteins);
-          st.notify(`已打开蛋白 ${proteins.map((p) => p.name).join(', ')}`);
+          st.notify(t('已打开蛋白 {names}', { names: proteins.map((p) => p.name).join(', ') }));
           continue;
         }
         const docs = await parseBioFile(file.name, data);
         st.openDocs(docs, true, { saved: true });
-        st.notify(`已打开 ${docs.map((d) => d.name).join(', ')}`);
+        st.notify(t('已打开 {names}', { names: docs.map((d) => d.name).join(', ') }));
       } catch (e) {
-        st.notify(`无法读取 ${file.name}：${e instanceof Error ? e.message : String(e)}`);
+        st.notify(t('无法读取 {name}：{reason}', { name: file.name, reason: e instanceof Error ? e.message : String(e) }));
       }
     }
   }, []);
@@ -269,7 +275,7 @@ export default function App() {
     (edit: SequenceEdit) => {
       if (!doc) return;
       const st = useWorkbench.getState();
-      if (!isDocCurrent(doc.id, docRevision(doc))) return st.notify('序列已在别处更新，这次编辑未应用，请重试');
+      if (!isDocCurrent(doc.id, docRevision(doc))) return st.notify(t('序列已在别处更新，这次编辑未应用，请重试'));
       st.replaceDoc(callBioSync('mutatePlasmidSequence', doc, edit));
     },
     [doc],
@@ -294,10 +300,10 @@ export default function App() {
           ...d,
           features: [...d.features, ...found],
           updatedAt: new Date().toISOString(),
-          history: [...d.history, historyNode('manual_edit', `自动注释 ${found.length} 个特征`)],
+          history: [...d.history, historyNode('manual_edit', t('自动注释 {n} 个特征', { n: found.length }))],
         };
       });
-      if (next) st.notify(`自动注释新增 ${added} 个特征`);
+      if (next) st.notify(t('自动注释新增 {n} 个特征', { n: added }));
     }
     if (kind === 'topology') await updateDoc(doc.id, (d) => ({ ...d, topology: d.topology === 'circular' ? 'linear' : 'circular' }));
   };
@@ -310,12 +316,13 @@ export default function App() {
     const keep = (name: string, content: string | Uint8Array<ArrayBuffer>, type: string, ext: string) =>
       saveFile(name, content, type, ext)
         .then((outcome) => recordSave([doc.id], outcome, ` ${name}`))
-        .catch((e) => s.notify(`保存失败：${e instanceof Error ? e.message : String(e)}`));
+        .catch((e) => s.notify(t('保存失败：{reason}', { reason: e instanceof Error ? e.message : String(e) })));
     if (fmt === 'dna') void keep(`${doc.name}.dna`, exportPlasmidToSnapGene(doc) as Uint8Array<ArrayBuffer>, 'application/octet-stream', '.dna');
     if (fmt === 'fasta') download(`${doc.name}.fasta`, exportPlasmidToFasta(doc));
     if (fmt === 'json') void keep(`${doc.name}.json`, exportPlasmidToSnapGeneJson(doc), 'application/json', '.json');
     if (fmt === 'project') void saveProject();
-    if ((fmt === 'gbk' || fmt === 'fasta') && isDirty(s, doc)) s.notify(`已导出 ${fmt === 'gbk' ? 'GenBank' : 'FASTA'}；该格式不保留全部信息，「未保存」标记保留。完整保存请用 Ctrl+S`);
+    if ((fmt === 'gbk' || fmt === 'fasta') && isDirty(s, doc))
+      s.notify(t('已导出 {format}；该格式不保留全部信息，「未保存」标记保留。完整保存请用 Ctrl+S', { format: fmt === 'gbk' ? 'GenBank' : 'FASTA' }));
     if (fmt === 'print-seq') return printSequenceText(doc, { bpPerLine: 60, showFeatures: true });
     if (fmt === 'opencloning' || fmt === 'pydna') {
       // Both describe how the open documents were built, so both take all of them.
@@ -328,16 +335,16 @@ export default function App() {
         });
         download(`${doc.name}-cloning-strategy.json`, strategy.json, 'application/json');
         s.notify(
-          `已导出 OpenCloning 克隆策略：${docs.length} 条序列` +
-            (strategy.warnings.length ? `；${strategy.warnings.length} 处信息无法无损表达，见文件旁的说明` : ''),
+          t('已导出 OpenCloning 克隆策略：{n} 条序列', { n: docs.length }) +
+            (strategy.warnings.length ? t('；{n} 处信息无法无损表达，见文件旁的说明', { n: strategy.warnings.length }) : ''),
         );
         if (strategy.warnings.length) console.warn('OpenCloning export notes:', strategy.warnings);
       } else {
         const script = exportPydnaScript(docs, { toGenBank: exportPlasmidToGenBank, title: `${doc.name} (GATC ${APP_VERSION})` });
         download(`${doc.name}-pydna.py`, script.code, 'text/x-python');
         s.notify(
-          `已导出 pydna 脚本：${script.reproduced} 步由 pydna 重建并自检` +
-            (script.literal ? `，${script.literal} 步无法表达、按记录的序列给出` : ''),
+          t('已导出 pydna 脚本：{n} 步由 pydna 重建并自检', { n: script.reproduced }) +
+            (script.literal ? t('，{n} 步无法表达、按记录的序列给出', { n: script.literal }) : ''),
         );
         if (script.warnings.length) console.warn('pydna export notes:', script.warnings);
       }
@@ -352,14 +359,14 @@ export default function App() {
         gelParams: s.gelParams,
       });
       if (fmt === 'report-md') {
-        download(`${doc.name}-实验记录.md`, markdown, 'text/markdown;charset=utf-8');
+        download(`${doc.name}-${t('实验记录')}.md`, markdown, 'text/markdown;charset=utf-8');
       } else {
         // The map only exists once it has been drawn; without it the record is still complete.
         const svg = mapRef.current?.outerHTML;
-        if (!svg) s.notify('实验记录已导出，但当前视图没有图谱；切到环形图谱再导出可一并收录');
+        if (!svg) s.notify(t('实验记录已导出，但当前视图没有图谱；切到环形图谱再导出可一并收录'));
         download(
-          `${doc.name}-实验记录.html`,
-          reportToHtml(markdown, { title: `${doc.name} 实验记录`, mapSvg: svg }),
+          `${doc.name}-${t('实验记录')}.html`,
+          reportToHtml(markdown, { title: `${doc.name} ${t('实验记录')}`, mapSvg: svg }),
           'text/html;charset=utf-8',
         );
       }
@@ -373,7 +380,7 @@ export default function App() {
       else printSvg(mapRef.current, { title: `${doc.name} (${doc.length} bp)` });
     } else if (figure) {
       s.setView('map');
-      s.notify('请在环形图谱视图中再次导出');
+      s.notify(t('请在环形图谱视图中再次导出'));
     }
   };
 
@@ -441,18 +448,18 @@ export default function App() {
   const mapView = mapProps && (
     <div className="flex h-full w-full flex-col">
       <div className="relative flex shrink-0 items-center justify-end gap-2 border-b border-[var(--border)] px-2 py-1">
-        <span className="text-[11px] text-[var(--muted)]">形状</span>
+        <span className="text-[11px] text-[var(--muted)]">{t('形状')}</span>
         <Tabs
           value={s.mapShape}
           onChange={s.setMapShape}
           items={[
-            { value: 'auto', label: '自动' },
-            { value: 'circular', label: '环形' },
-            { value: 'linear', label: '线性' },
+            { value: 'auto', label: t('自动') },
+            { value: 'circular', label: t('环形') },
+            { value: 'linear', label: t('线性') },
           ]}
         />
-        <Button size="sm" variant={optionsOpen ? 'primary' : 'default'} onClick={() => setOptionsOpen(!optionsOpen)} title="图谱显示选项">
-          <SlidersHorizontal size={13} /> 显示
+        <Button size="sm" variant={optionsOpen ? 'primary' : 'default'} onClick={() => setOptionsOpen(!optionsOpen)} title={t('图谱显示选项')}>
+          <SlidersHorizontal size={13} /> {t('显示')}
         </Button>
         {optionsOpen && (
           <div className="absolute right-2 top-10 z-20 w-72 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 shadow-xl">
@@ -513,8 +520,8 @@ export default function App() {
             <span className="text-blue-600">C</span>
           </span>
         </div>
-        <Button size="sm" onClick={() => fileRef.current?.click()} title="打开文件 (Ctrl+O)">
-          <FileUp size={14} /> 打开
+        <Button size="sm" onClick={() => fileRef.current?.click()} title={t('打开文件 (Ctrl+O)')}>
+          <FileUp size={14} /> {t('打开')}
         </Button>
         <input
           ref={fileRef}
@@ -524,8 +531,8 @@ export default function App() {
           accept=".gatc,.dna,.prot,.gb,.gbk,.gp,.genbank,.ape,.seq,.xdna,.cm5,.fasta,.fa,.fas,.faa,.embl,.gff,.ab1,.abi,.fastq,.fq,.json,.xml,.sbol,.txt,.geneious"
           onChange={(e) => e.target.files && openFiles(e.target.files)}
         />
-        <Button size="sm" onClick={() => saveProject()} disabled={!s.docs.length} title="保存全部文档为 GATC 项目 (Ctrl+S)">
-          <Save size={14} /> 保存
+        <Button size="sm" onClick={() => saveProject()} disabled={!s.docs.length} title={t('保存全部文档为 GATC 项目 (Ctrl+S)')}>
+          <Save size={14} /> {t('保存')}
         </Button>
         <Menu
           label="导出"
@@ -553,15 +560,15 @@ export default function App() {
           ]}
         />
         <div className="mx-1.5 h-5 w-px bg-[var(--border)]" />
-        <Button size="icon" variant="ghost" onClick={() => temporal.getState().undo()} title={`撤销 (Ctrl+Z)\n${UNDO_SCOPE}`} aria-label="撤销">
+        <Button size="icon" variant="ghost" onClick={() => temporal.getState().undo()} title={`${t('撤销 (Ctrl+Z)')}\n${t(UNDO_SCOPE)}`} aria-label={t('撤销')}>
           <Undo2 size={15} />
         </Button>
-        <Button size="icon" variant="ghost" onClick={() => temporal.getState().redo()} title={`重做 (Ctrl+Shift+Z)\n${UNDO_SCOPE}`} aria-label="重做">
+        <Button size="icon" variant="ghost" onClick={() => temporal.getState().redo()} title={`${t('重做 (Ctrl+Shift+Z)')}\n${t(UNDO_SCOPE)}`} aria-label={t('重做')}>
           <Redo2 size={15} />
         </Button>
         <div className="mx-1.5 h-5 w-px bg-[var(--border)]" />
-        <Button size="sm" variant="primary" onClick={() => s.setWizard('restriction')} disabled={!doc} title="PCR、酶切连接、Gibson、Golden Gate、定点突变等">
-          <FlaskConical size={14} /> 克隆向导
+        <Button size="sm" variant="primary" onClick={() => s.setWizard('restriction')} disabled={!doc} title={t('PCR、酶切连接、Gibson、Golden Gate、定点突变等')}>
+          <FlaskConical size={14} /> {t('克隆向导')}
         </Button>
         <Menu
           label="工具"
@@ -588,25 +595,34 @@ export default function App() {
         <button
           className="hidden h-7 w-60 items-center gap-2 whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--muted)] hover:border-blue-400 md:flex"
           onClick={() => s.setPaletteOpen(true)}
-          title="命令面板 (Ctrl+K)：搜索命令、切换视图，或输入「酶切 EcoRI BamHI」"
+          title={t('命令面板 (Ctrl+K)：搜索命令、切换视图，或输入「酶切 EcoRI BamHI」')}
         >
           <Search size={13} />
-          <span className="flex-1 truncate text-left">搜索命令…</span>
+          <span className="flex-1 truncate text-left">{t('搜索命令…')}</span>
           <kbd className="rounded border border-[var(--border)] px-1 text-[10px]">Ctrl K</kbd>
         </button>
-        <Button size="icon" variant="ghost" className="md:hidden" onClick={() => s.setPaletteOpen(true)} aria-label="命令面板">
+        <Button size="icon" variant="ghost" className="md:hidden" onClick={() => s.setPaletteOpen(true)} aria-label={t('命令面板')}>
           <Search size={15} />
         </Button>
         <Button
           size="icon"
           variant="ghost"
           onClick={() => s.setTheme(s.theme === 'dark' ? 'light' : s.theme === 'light' ? 'publication' : 'dark')}
-          title={`主题：${THEME_NAMES[s.theme]}（点击切换）`}
+          title={t('主题：{name}（点击切换）', { name: t(THEME_NAMES[s.theme]) })}
         >
           {dark ? <Moon size={15} /> : <Sun size={15} />}
         </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
+          title={t('界面语言（点击切换）')}
+          aria-label={t('界面语言')}
+        >
+          <Languages size={14} /> {LOCALES.find((l) => l.value === locale)?.label}
+        </Button>
         <Button size="sm" variant={s.copilotOpen ? 'primary' : 'default'} onClick={() => s.setCopilotOpen(!s.copilotOpen)} disabled={!doc}>
-          <Bot size={14} /> AI 导师
+          <Bot size={14} /> {t('AI 导师')}
         </Button>
       </header>
 
@@ -635,24 +651,24 @@ export default function App() {
               {s.view === 'gel' && (
                 <div className="flex h-full flex-col">
                   <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] p-2 text-xs">
-                    <span className="text-[var(--muted)]">泳道：</span>
+                    <span className="text-[var(--muted)]">{t('泳道：')}</span>
                     {s.gelSamples.map((g, i) => (
                       <span key={g.id ?? i} className="inline-flex items-center gap-1 rounded bg-[var(--bg)] px-1.5 py-0.5">
                         {g.label}
                         <button
                           className="-m-1 rounded p-1 text-[var(--muted)] hover:bg-[var(--panel)] hover:text-red-600"
                           onClick={() => s.setGelSamples(s.gelSamples.filter((_, j) => j !== i))}
-                          aria-label="移除泳道"
+                          aria-label={t('移除泳道')}
                         >
                           <X size={11} />
                         </button>
                       </span>
                     ))}
                     <Button size="sm" onClick={() => s.addGelSample(uncutPlasmidSample(doc))}>
-                      + 未酶切 {doc.name}
+                      {t('+ 未酶切 {name}', { name: doc.name })}
                     </Button>
                     <Select
-                      aria-label="添加 Ladder"
+                      aria-label={t('添加 Ladder')}
                       value=""
                       onChange={(e) => {
                         const ladder = e.target.value as LadderName;
@@ -687,7 +703,7 @@ export default function App() {
           )}
         </main>
         {doc && !protein && (
-          <aside className="hidden w-72 shrink-0 overflow-auto border-l border-[var(--border)] bg-[var(--panel)] xl:block" aria-label="文档信息">
+          <aside className="hidden w-72 shrink-0 overflow-auto border-l border-[var(--border)] bg-[var(--panel)] xl:block" aria-label={t('文档信息')}>
             <Inspector doc={doc} />
           </aside>
         )}
@@ -719,7 +735,7 @@ export default function App() {
       )}
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center border-4 border-dashed border-blue-500 bg-blue-500/10 text-lg font-semibold text-blue-700">
-          释放以打开文件
+          {t('释放以打开文件')}
         </div>
       )}
 
@@ -755,6 +771,7 @@ function CommandPalette({
   onExport: (f: ExportFormat) => void;
   onTransform: (k: 'revcomp' | 'origin' | 'annotate' | 'topology') => void;
 }) {
+  const t = useT();
   const open = useWorkbench((s) => s.paletteOpen);
   const setOpen = useWorkbench((s) => s.setPaletteOpen);
   const st = useWorkbench.getState;
@@ -787,69 +804,69 @@ function CommandPalette({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-[12vh]" onMouseDown={() => setOpen(false)}>
       <div onMouseDown={(e) => e.stopPropagation()}>
-        <Command label="命令面板" loop>
-          <Command.Input autoFocus value={query} onValueChange={setQuery} placeholder="输入命令，或「酶切 EcoRI BamHI」…" />
+        <Command label={t('命令面板')} loop>
+          <Command.Input autoFocus value={query} onValueChange={setQuery} placeholder={t('输入命令，或「酶切 EcoRI BamHI」…')} />
           <Command.List>
-            <Command.Empty>无匹配命令</Command.Empty>
+            <Command.Empty>{t('无匹配命令')}</Command.Empty>
             {enzymeQuery && doc && (
-              <Command.Group heading="快速酶切">
+              <Command.Group heading={t('快速酶切')}>
                 <Command.Item value={`digest ${query}`} onSelect={run(() => digestToGel(doc, enzymeQuery).then(() => st().setView('gel')))}>
-                  酶切 {doc.name}：{enzymeQuery.join(' + ')} 并跑胶
+                  {t('酶切 {name}：{enzymes} 并跑胶', { name: doc.name, enzymes: enzymeQuery.join(' + ') })}
                 </Command.Item>
               </Command.Group>
             )}
-            <Command.Group heading="视图">
+            <Command.Group heading={t('视图')}>
               {VIEWS.map((v) => (
                 <Command.Item key={v.value} onSelect={run(() => st().setView(v.value))}>
-                  切换到 {v.label}
+                  {t('切换到 {view}', { view: t(v.label) })}
                 </Command.Item>
               ))}
             </Command.Group>
-            <Command.Group heading="克隆">
+            <Command.Group heading={t('克隆')}>
               {wizards.map(([k, label]) => (
                 <Command.Item key={k} onSelect={run(() => st().setWizard(k))}>
-                  {label}
+                  {t(label)}
                 </Command.Item>
               ))}
             </Command.Group>
-            <Command.Group heading="序列">
-              <Command.Item onSelect={run(() => st().setTool('find'))}>查找序列 / 蛋白模式</Command.Item>
-              <Command.Item onSelect={run(() => st().setTool('backtranslate'))}>反向翻译 / 密码子优化</Command.Item>
-              <Command.Item onSelect={run(() => onTransform('annotate'))}>自动注释特征</Command.Item>
-              <Command.Item onSelect={run(() => onTransform('revcomp'))}>反向互补整条序列</Command.Item>
-              <Command.Item onSelect={run(() => onTransform('origin'))}>将选区起点设为新原点</Command.Item>
-              <Command.Item onSelect={run(() => onTransform('topology'))}>切换环状/线性</Command.Item>
+            <Command.Group heading={t('序列')}>
+              <Command.Item onSelect={run(() => st().setTool('find'))}>{t('查找序列 / 蛋白模式')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('backtranslate'))}>{t('反向翻译 / 密码子优化')}</Command.Item>
+              <Command.Item onSelect={run(() => onTransform('annotate'))}>{t('自动注释特征')}</Command.Item>
+              <Command.Item onSelect={run(() => onTransform('revcomp'))}>{t('反向互补整条序列')}</Command.Item>
+              <Command.Item onSelect={run(() => onTransform('origin'))}>{t('将选区起点设为新原点')}</Command.Item>
+              <Command.Item onSelect={run(() => onTransform('topology'))}>{t('切换环状/线性')}</Command.Item>
             </Command.Group>
-            <Command.Group heading="文件">
-              <Command.Item onSelect={run(onOpen)}>打开文件…</Command.Item>
-              <Command.Item onSelect={run(() => onExport('project'))}>保存项目 (.gatc)</Command.Item>
-              <Command.Item onSelect={run(() => st().setTool('ncbi'))}>从 NCBI 导入（登录号）</Command.Item>
-              <Command.Item onSelect={run(() => st().setTool('vectors'))}>载体库（内置质粒）</Command.Item>
-              <Command.Item onSelect={run(() => st().setTool('primerlib'))}>引物库</Command.Item>
-              <Command.Item onSelect={run(() => st().setTool('oligo'))}>寡核苷酸退火（短片段直接连接）</Command.Item>
-              <Command.Item onSelect={run(() => st().setTool('moclo'))}>组合克隆（MoClo / Golden Gate 矩阵）</Command.Item>
-              <Command.Item onSelect={run(() => st().setTool('genome'))}>基因组编辑（CRISPR 打靶 / 同源重组）</Command.Item>
-              <Command.Item onSelect={run(() => onExport('opencloning'))}>导出 OpenCloning 克隆策略</Command.Item>
-              <Command.Item onSelect={run(() => onExport('pydna'))}>导出 pydna 复现脚本</Command.Item>
-              <Command.Item onSelect={run(() => onExport('report-md'))}>导出实验记录 Markdown</Command.Item>
-              <Command.Item onSelect={run(() => onExport('report-html'))}>导出实验记录网页（含图谱）</Command.Item>
-              <Command.Item onSelect={run(() => onExport('print-map'))}>打印图谱</Command.Item>
-              <Command.Item onSelect={run(() => onExport('print-seq'))}>打印序列</Command.Item>
-              <Command.Item onSelect={run(() => onExport('dna'))}>导出 SnapGene .dna</Command.Item>
-              <Command.Item onSelect={run(() => onExport('gbk'))}>导出 GenBank</Command.Item>
-              <Command.Item onSelect={run(() => onExport('fasta'))}>导出 FASTA</Command.Item>
-              <Command.Item onSelect={run(() => onExport('svg'))}>导出图谱 SVG</Command.Item>
-              <Command.Item onSelect={run(() => onExport('png'))}>导出图谱 PNG</Command.Item>
-              <Command.Item onSelect={run(() => onExport('pdf'))}>导出图谱 PDF</Command.Item>
+            <Command.Group heading={t('文件')}>
+              <Command.Item onSelect={run(onOpen)}>{t('打开文件…')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('project'))}>{t('保存项目 (.gatc)')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('ncbi'))}>{t('从 NCBI 导入（登录号）')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('vectors'))}>{t('载体库（内置质粒）')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('primerlib'))}>{t('引物库')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('oligo'))}>{t('寡核苷酸退火（短片段直接连接）')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('moclo'))}>{t('组合克隆（MoClo / Golden Gate 矩阵）')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('genome'))}>{t('基因组编辑（CRISPR 打靶 / 同源重组）')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('opencloning'))}>{t('导出 OpenCloning 克隆策略')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('pydna'))}>{t('导出 pydna 复现脚本')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('report-md'))}>{t('导出实验记录 Markdown')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('report-html'))}>{t('导出实验记录网页（含图谱）')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('print-map'))}>{t('打印图谱')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('print-seq'))}>{t('打印序列')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('dna'))}>{t('导出 SnapGene .dna')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('gbk'))}>{t('导出 GenBank')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('fasta'))}>{t('导出 FASTA')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('svg'))}>{t('导出图谱 SVG')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('png'))}>{t('导出图谱 PNG')}</Command.Item>
+              <Command.Item onSelect={run(() => onExport('pdf'))}>{t('导出图谱 PDF')}</Command.Item>
             </Command.Group>
-            <Command.Group heading="其他">
-              <Command.Item onSelect={run(startDemo)}>演示模式（自动演示主要功能）</Command.Item>
-              <Command.Item onSelect={run(() => st().setCopilotOpen(true))}>打开 AI 实验导师</Command.Item>
-              <Command.Item onSelect={run(() => useWorkbench.temporal.getState().undo())}>撤销</Command.Item>
-              <Command.Item onSelect={run(() => useWorkbench.temporal.getState().redo())}>重做</Command.Item>
-              <Command.Item onSelect={run(() => st().setTheme('dark'))}>深色主题</Command.Item>
-              <Command.Item onSelect={run(() => st().setTheme('light'))}>浅色主题</Command.Item>
-              <Command.Item onSelect={run(() => st().setTheme('publication'))}>出版白底主题</Command.Item>
+            <Command.Group heading={t('其他')}>
+              <Command.Item onSelect={run(startDemo)}>{t('演示模式（自动演示主要功能）')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setCopilotOpen(true))}>{t('打开 AI 实验导师')}</Command.Item>
+              <Command.Item onSelect={run(() => useWorkbench.temporal.getState().undo())}>{t('撤销')}</Command.Item>
+              <Command.Item onSelect={run(() => useWorkbench.temporal.getState().redo())}>{t('重做')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTheme('dark'))}>{t('深色主题')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTheme('light'))}>{t('浅色主题')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTheme('publication'))}>{t('出版白底主题')}</Command.Item>
             </Command.Group>
           </Command.List>
         </Command>

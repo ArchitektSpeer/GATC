@@ -10,6 +10,7 @@ import { CloningHistoryTree } from '../modules/canvas-ui';
 import { methodToWizard, openProduct, uid } from './actions';
 import { useWorkbench, type WorkbenchState } from './store';
 import { Badge, Button } from './ui';
+import { t as translate, useT } from '../lib/i18n';
 
 const OPERATION_LABEL: Record<CloningHistoryNode['operation'], string> = {
   import: '导入',
@@ -42,6 +43,7 @@ function snapshotAfterStep(doc: PlasmidDocument, index: number): PlasmidDocument
 }
 
 export function HistoryView({ doc, theme }: { doc: PlasmidDocument; theme: 'light' | 'dark' | 'publication' }) {
+  const t = useT();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const docs = useWorkbench((s) => s.docs);
   const openWizard = useWorkbench((s) => s.openWizard);
@@ -64,7 +66,7 @@ export function HistoryView({ doc, theme }: { doc: PlasmidDocument; theme: 'ligh
 
   const restore = () => {
     if (!snapshot || !node) return;
-    openProduct({ ...snapshot, id: uid('doc'), name: `${doc.name}@步骤${index + 1}` });
+    openProduct({ ...snapshot, id: uid('doc'), name: t('{v0}@步骤{v1}', { v0: doc.name, v1: index + 1 }) });
   };
 
   const replay = () => {
@@ -84,13 +86,13 @@ export function HistoryView({ doc, theme }: { doc: PlasmidDocument; theme: 'ligh
       <aside className="w-72 shrink-0 overflow-auto border-l border-[var(--border)] p-3 text-xs">
         {!node ? (
           <div className="text-[var(--muted)]">
-            <History size={14} className="mb-1 inline" /> 点击历史树中的一个步骤，可回到该步骤后的序列版本，或用相同参数重新模拟。
+            <History size={14} className="mb-1 inline" /> {t('点击历史树中的一个步骤，可回到该步骤后的序列版本，或用相同参数重新模拟。')}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             <div>
               <Badge tone="blue">
-                步骤 {index + 1} · {OPERATION_LABEL[node.operation]}
+                {t('步骤 {n} · {op}', { n: index + 1, op: t(OPERATION_LABEL[node.operation]) })}
               </Badge>
               <div className="mt-1.5 font-medium">{node.description}</div>
               <div className="text-[var(--muted)]">{new Date(node.timestamp).toLocaleString()}</div>
@@ -99,25 +101,25 @@ export function HistoryView({ doc, theme }: { doc: PlasmidDocument; theme: 'ligh
             {!!node.primersUsed?.length && <div>引物：{node.primersUsed.join(', ')}</div>}
             {!!node.parentSnapshots?.length && (
               <div>
-                来源：
+                {t('来源：')}
                 <ul className="list-disc pl-4">
                   {node.parentSnapshots.map((p) => (
                     <li key={p.id}>
-                      {p.name} ({p.length} bp){openParents.some((d) => d.id === p.id || d.name === p.name) ? '' : ' · 未打开'}
+                      {p.name} ({p.length} bp){openParents.some((d) => d.id === p.id || d.name === p.name) ? '' : t(' · 未打开')}
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            <Button disabled={!snapshot} onClick={restore} title={snapshot ? '' : '本次会话中没有该步骤的快照（例如从文件导入的历史）'}>
-              <RotateCcw size={13} /> 打开该步骤后的版本
+            <Button disabled={!snapshot} onClick={restore} title={snapshot ? '' : t('本次会话中没有该步骤的快照（例如从文件导入的历史）')}>
+              <RotateCcw size={13} /> {t('打开该步骤后的版本')}
             </Button>
             {wizard && (
               <Button variant="primary" onClick={replay}>
-                用相同参数重新模拟
+                {t('用相同参数重新模拟')}
               </Button>
             )}
-            {!snapshot && <div className="text-[var(--muted)]">从文件导入的历史只记录步骤信息，没有中间序列。</div>}
+            {!snapshot && <div className="text-[var(--muted)]">{t('从文件导入的历史只记录步骤信息，没有中间序列。')}</div>}
           </div>
         )}
       </aside>

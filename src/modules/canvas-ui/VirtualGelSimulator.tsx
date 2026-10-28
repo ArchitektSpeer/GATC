@@ -7,6 +7,7 @@ import { FlaskConical, Microscope, Sun, Timer, Zap } from 'lucide-react';
 import type { VirtualGelLane } from '../../types/schema';
 import { getTheme } from './theme';
 import { clamp, formatBp, trimNumber } from './utils';
+import { t as translate, useT } from '../../lib/i18n';
 import {
   bandFillColor,
   bandThickness,
@@ -45,8 +46,8 @@ function safeId(value: string): string {
 }
 
 function conformationLabel(value: VirtualGelLane['bands'][number]['conformation']): string {
-  if (value === 'supercoiled') return 'supercoiled';
-  if (value === 'nicked') return 'nicked / open circle';
+  if (value === 'supercoiled') return translate('超螺旋');
+  if (value === 'nicked') return translate('开环');
   return 'linear';
 }
 
@@ -59,6 +60,7 @@ export function VirtualGelSimulator({
   mode,
   onModeChange,
 }: VirtualGelSimulatorProps) {
+  const t = useT();
   const [localMode, setLocalMode] = useState<'uv' | 'publication'>('uv');
   const activeMode = mode ?? localMode;
   const tokens = getTheme(activeMode === 'uv' ? 'dark' : 'publication');
@@ -180,9 +182,14 @@ export function VirtualGelSimulator({
             <FlaskConical size={18} />
           </span>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>Virtual agarose gel</div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{t('虚拟琼脂糖凝胶')}</div>
             <div style={{ fontSize: 11, color: tokens.muted }}>
-              {trimNumber(params.agarosePercent, 1)}% agarose · {params.voltage} V · {params.minutes} min · {lanes.length} lanes
+              {t('{gel}% 琼脂糖 · {v} V · {min} min · {lanes} 条泳道', {
+                gel: trimNumber(params.agarosePercent, 1),
+                v: params.voltage,
+                min: params.minutes,
+                lanes: lanes.length,
+              })}
             </div>
           </div>
         </div>
@@ -210,7 +217,7 @@ export function VirtualGelSimulator({
             onClick={() => chooseMode('publication')}
             style={modeButton(tokens, activeMode === 'publication')}
           >
-            <Microscope size={13} /> Publication
+            <Microscope size={13} /> {t('出版')}
           </button>
         </div>
       </div>
@@ -228,7 +235,7 @@ export function VirtualGelSimulator({
       >
         <Slider
           icon={<FlaskConical size={13} />}
-          label="Agarose"
+          label={t('琼脂糖')}
           value={params.agarosePercent}
           min={0.5}
           max={3}
@@ -239,7 +246,7 @@ export function VirtualGelSimulator({
         />
         <Slider
           icon={<Zap size={13} />}
-          label="Voltage"
+          label={t('电压')}
           value={params.voltage}
           min={20}
           max={250}
@@ -250,7 +257,7 @@ export function VirtualGelSimulator({
         />
         <Slider
           icon={<Timer size={13} />}
-          label="Run time"
+          label={t('电泳时间')}
           value={params.minutes}
           min={10}
           max={180}
@@ -266,7 +273,7 @@ export function VirtualGelSimulator({
           viewBox="0 0 960 540"
           width="100%"
           role="img"
-          aria-label="Simulated agarose gel electrophoresis"
+          aria-label={t('模拟琼脂糖凝胶电泳')}
           style={{ display: 'block', width: '100%', height: 'auto', borderRadius: 14 }}
         >
           <defs>
@@ -297,10 +304,10 @@ export function VirtualGelSimulator({
           <rect width="960" height="540" rx="14" fill={activeMode === 'uv' ? '#040b14' : '#ffffff'} />
           <rect x="26" y="24" width="908" height="492" rx="16" fill={`url(#osg-gel-buffer-${uid})`} stroke={activeMode === 'uv' ? '#1b3a52' : '#d9dee5'} strokeWidth="1.2" />
           <text x="48" y="52" fill={activeMode === 'uv' ? '#7fa7bc' : '#64748b'} fontSize="9.5" fontWeight="700" letterSpacing="0.16em">
-            {activeMode === 'uv' ? 'UV TRANSILLUMINATOR · 302 nm' : 'AGAROSE GEL · REVERSE-PHASE VIEW'}
+            {activeMode === 'uv' ? t('紫外透射仪 · 302 nm') : t('琼脂糖凝胶 · 反相视图')}
           </text>
           <text x="912" y="52" textAnchor="end" fill={activeMode === 'uv' ? '#7fa7bc' : '#64748b'} fontSize="9.5" fontFamily={tokens.fontMono}>
-            {trimNumber(multiplier, 2)}× mobility
+            {t('迁移率 {x}×', { x: trimNumber(multiplier, 2) })}
           </text>
 
           <rect x="52" y="156" width="13" height="168" rx="4" fill={activeMode === 'uv' ? '#142d40' : '#e2e8f0'} stroke={activeMode === 'uv' ? '#2a5068' : '#cbd5e1'} />
@@ -345,7 +352,7 @@ export function VirtualGelSimulator({
             <g>
               <line x1={GEL.x + 12} y1={GEL.y + 44} x2={GEL.x + GEL.width - 12} y2={GEL.y + 44} stroke={activeMode === 'uv' ? 'rgba(125, 211, 252, 0.14)' : 'rgba(100, 116, 139, 0.16)'} strokeWidth="0.8" />
               <text x={GEL.x + 15} y={GEL.y + 39} fill={activeMode === 'uv' ? '#5f8ba1' : '#94a3b8'} fontSize="7.5" letterSpacing="0.12em">
-                WELLS
+                {t('加样孔')}
               </text>
             </g>
 
@@ -367,7 +374,7 @@ export function VirtualGelSimulator({
                   />
                   {lane.isLadder ? (
                     <text x={center} y={GEL.y + 38} textAnchor="middle" fill={activeMode === 'uv' ? '#7dd3fc' : '#475569'} fontSize="7" fontWeight="700">
-                      LADDER
+                      {t('Marker')}
                     </text>
                   ) : null}
                 </g>
@@ -466,7 +473,7 @@ export function VirtualGelSimulator({
               fill={activeMode === 'uv' ? '#3d6a82' : '#94a3b8'}
             />
             <text x="938" y={GEL.y + GEL.height / 2} fill={activeMode === 'uv' ? '#5f8ba1' : '#94a3b8'} fontSize="7.5" letterSpacing="0.12em" transform={`rotate(90 938 ${GEL.y + GEL.height / 2})`} textAnchor="middle">
-              MIGRATION
+              {t('迁移方向')}
             </text>
           </g>
 
@@ -474,7 +481,7 @@ export function VirtualGelSimulator({
             {trimNumber(params.agarosePercent, 1)}% · {params.voltage} V · {params.minutes} min
           </text>
           <text x={GEL.x + GEL.width} y="522" textAnchor="end" fill={activeMode === 'uv' ? '#5f8ba1' : '#94a3b8'} fontSize="8.5">
-            {activeMode === 'uv' ? 'Fluorescence detection' : 'Coomassie / reverse-phase contrast'}
+            {activeMode === 'uv' ? t('荧光检测') : t('考马斯亮蓝 / 反相对比')}
           </text>
         </svg>
 
@@ -508,7 +515,7 @@ export function VirtualGelSimulator({
             </div>
             <div style={{ opacity: 0.78 }}>
               {conformationLabel(hoveredBand.conformation)}
-              {hoveredBand.fragmentDoc ? ` · ${formatBp(hoveredBand.fragmentDoc.length)} bp fragment` : ''}
+              {hoveredBand.fragmentDoc ? t(' · {bp} bp 片段', { bp: formatBp(hoveredBand.fragmentDoc.length) }) : ''}
             </div>
             {source ? (
               <>
@@ -519,16 +526,16 @@ export function VirtualGelSimulator({
                 <div style={{ opacity: 0.72 }}>Right {source.rightOverhang}</div>
               </>
             ) : (
-              <div style={{ marginTop: 4, opacity: 0.55 }}>No linked fragment document</div>
+              <div style={{ marginTop: 4, opacity: 0.55 }}>{t('没有关联的片段文档')}</div>
             )}
           </div>
         ) : null}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', fontSize: 9.5, color: tokens.muted }}>
-        <span>Hover any band for size, mass fraction, source coordinates and overhangs.</span>
+        <span>{t('把鼠标移到任意条带上可看大小、质量占比、来源坐标与末端。')}</span>
         <span style={{ fontFamily: tokens.fontMono }}>
-          {lanes.reduce((sum, lane) => sum + lane.bands.length, 0)} bands
+          {t('{n} 条条带', { n: lanes.reduce((sum, lane) => sum + lane.bands.length, 0) })}
         </span>
       </div>
     </div>

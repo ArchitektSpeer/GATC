@@ -16,6 +16,7 @@ import {
 import { canConfirmSave, saveProject } from './files';
 import { selectDirtyIds, useWorkbench } from './store';
 import { Button, Dialog } from './ui';
+import { t as translate, useT } from '../lib/i18n';
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -102,11 +103,13 @@ export async function recoverRecord(record: SnapshotRecord, store: SnapshotStore
   if (plan.activeDocId) st.setActive(plan.activeDocId);
   const count = plan.openSaved.length + plan.openDirty.length + plan.replace.length;
   if (!(await flush())) {
-    st.notify('已恢复到界面，但无法写入新的自动保存，原恢复数据已保留。请尽快用 Ctrl+S 保存项目');
+    st.notify(translate('已恢复到界面，但无法写入新的自动保存，原恢复数据已保留。请尽快用 Ctrl+S 保存项目'));
     return 'kept';
   }
   await store.remove(record.sessionId);
-  st.notify([`已恢复 ${count} 个文档（${new Date(record.savedAt).toLocaleString()} 的自动保存）`, ...plan.warnings].join('；'));
+  st.notify(
+    [translate('已恢复 {n} 个文档（{time} 的自动保存）', { n: count, time: new Date(record.savedAt).toLocaleString() }), ...plan.warnings].join('；'),
+  );
   return 'retired';
 }
 
@@ -156,7 +159,7 @@ function useAutosave(onOrphans: (records: SnapshotRecord[], store: SnapshotStore
           clean.forEach((r) => void store.remove(r.sessionId).catch(() => {}));
           if (!disposed && orphans.length) onOrphans(orphans, store);
         })
-        .catch((e) => useWorkbench.getState().notify(`无法读取自动保存的恢复数据：${e instanceof Error ? e.message : String(e)}`));
+        .catch((e) => useWorkbench.getState().notify(translate('无法读取自动保存的恢复数据：{v0}', { v0: e instanceof Error ? e.message : String(e) })));
     });
     return () => {
       disposed = true;
@@ -233,6 +236,7 @@ async function closeWindowNow() {
 
 /** Recovery banner, close prompts and autosave wiring. Render once in the app. */
 export function SessionManager() {
+  const t = useT();
   const [orphans, setOrphans] = useState<{ records: SnapshotRecord[]; store: SnapshotStore } | null>(null);
   useAutosave((records, store) => {
     // A record without unsaved documents has nothing to recover.
@@ -252,7 +256,7 @@ export function SessionManager() {
       await (restore ? recoverRecord(record, orphans.store, flushAutosave) : orphans.store.remove(record.sessionId));
       setOrphans((o) => (o ? { ...o, records: o.records.filter((r) => r !== record) } : o));
     } catch (e) {
-      useWorkbench.getState().notify(`恢复失败：${e instanceof Error ? e.message : String(e)}。恢复数据已保留，可稍后重试。`);
+      useWorkbench.getState().notify(translate('恢复失败：{v0}。恢复数据已保留，可稍后重试。', { v0: e instanceof Error ? e.message : String(e) }));
     } finally {
       busy.current = false;
     }
@@ -278,7 +282,7 @@ export function SessionManager() {
         >
           <History size={14} />
           <span className="min-w-0 flex-1">
-            发现上次未正常关闭时留下的未保存工作（{new Date(r.savedAt).toLocaleString()}）：{r.names.join('、')}
+            {t('发现上次未正常关闭时留下的未保存工作（{v0}）：{v1}', { v0: new Date(r.savedAt).toLocaleString(), v1: r.names.join('、') })}
           </span>
           <Button size="sm" variant="primary" onClick={() => dismiss(r, true)}>
             恢复
@@ -288,20 +292,20 @@ export function SessionManager() {
           </Button>
         </div>
       ))}
-      <Dialog open={!!prompt && (prompt.kind === 'window' || !!target)} onClose={closePrompt} title="有未保存的修改" width={460}>
+      <Dialog open={!!prompt && (prompt.kind === 'window' || !!target)} onClose={closePrompt} title={translate('有未保存的修改')} width={460}>
         <div className="flex items-start gap-3 text-sm">
           <AlertTriangle className="mt-0.5 shrink-0 text-amber-500" size={18} />
           <div>
             {target ? <>「{target.name}」的修改尚未保存到文件。</> : <>以下文档的修改尚未保存到文件：{dirtyNames.join('、')}。</>}
             <div className="mt-1 text-xs text-[var(--muted)]">
-              {target ? '不保存直接关闭后，可用撤销（Ctrl+Z）重新打开。' : '不保存直接关闭后，修改只留在本机的自动恢复数据中，下次启动时可以恢复。'}
+              {target ? t('不保存直接关闭后，可用撤销（Ctrl+Z）重新打开。') : t('不保存直接关闭后，修改只留在本机的自动恢复数据中，下次启动时可以恢复。')}
             </div>
           </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <Button onClick={closePrompt}>取消</Button>
+          <Button onClick={closePrompt}>{translate('取消')}</Button>
           <Button variant="danger" onClick={finish}>
-            不保存，关闭
+            {t('不保存，关闭')}
           </Button>
           {/* Close only after a save that is known to have been written; a plain
               download cannot be confirmed, so then the user checks the file and closes again. */}
@@ -313,7 +317,7 @@ export function SessionManager() {
               else closePrompt();
             }}
           >
-            {canConfirmSave() ? '保存项目并关闭' : '保存项目（下载）'}
+            {canConfirmSave() ? t('保存项目并关闭') : t('保存项目（下载）')}
           </Button>
         </div>
       </Dialog>

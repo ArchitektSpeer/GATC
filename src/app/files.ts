@@ -5,6 +5,7 @@ import { PROJECT_FILE_EXTENSION, PROJECT_MIME_TYPE, serializeProject, type Proje
 import { APP_VERSION } from './autosave';
 import { remapDocIds } from './doc-ids';
 import { useWorkbench, type ViewMode } from './store';
+import { t as translate } from '../lib/i18n';
 
 export function download(name: string, content: string | Uint8Array<ArrayBuffer>, type = 'text/plain') {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -57,12 +58,12 @@ export async function saveFile(name: string, content: string | Uint8Array<ArrayB
 /** Record a save of these documents and tell the user what is known about it. */
 export function recordSave(ids: string[], outcome: SaveOutcome, what: string): void {
   const st = useWorkbench.getState();
-  if (outcome === 'cancelled') return st.notify('已取消保存');
+  if (outcome === 'cancelled') return st.notify(translate('已取消保存'));
   st.markSaved(ids, { confirmed: outcome === 'confirmed' });
   st.notify(
     outcome === 'confirmed'
-      ? `已保存${what}`
-      : `已开始下载${what}。浏览器无法确认文件已写入，请在下载目录核对；本次会话内仍保留自动恢复数据`,
+      ? translate('已保存{v0}', { v0: what })
+      : translate('已开始下载{v0}。浏览器无法确认文件已写入，请在下载目录核对；本次会话内仍保留自动恢复数据', { v0: what }),
   );
 }
 
@@ -91,7 +92,7 @@ export async function saveProject(ids?: string[]): Promise<SaveOutcome> {
   const s = useWorkbench.getState();
   const { text, docs } = projectText(ids);
   if (!docs.length) {
-    s.notify('没有可保存的文档');
+    s.notify(translate('没有可保存的文档'));
     return 'cancelled';
   }
   const active = docs.find((d) => d.id === s.activeId) ?? docs[0];

@@ -7,6 +7,7 @@ import type { CloningHistoryNode } from '../../types/schema';
 import type { VizTheme } from './theme';
 import { getTheme, OPERATION_LABEL, OPERATION_TINT } from './theme';
 import { formatBp } from './utils';
+import { t as translate, useT } from '../../lib/i18n';
 import {
   layoutHistoryTree,
   relatedNodeIds,
@@ -35,6 +36,7 @@ export function CloningHistoryTree({
   onSelectNode,
   theme = 'light',
 }: CloningHistoryTreeProps) {
+  const t = useT();
   const tokens = getTheme(theme);
   const rawUid = useId();
   const uid = safeId(rawUid);
@@ -76,8 +78,8 @@ export function CloningHistoryTree({
         }}
       >
         <GitBranch size={26} strokeWidth={1.5} />
-        <div style={{ fontSize: 12.5, fontWeight: 600 }}>No cloning history yet</div>
-        <div style={{ fontSize: 11 }}>History nodes appear here after the first assembly or edit.</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{t('还没有构建历史')}</div>
+        <div style={{ fontSize: 11 }}>{t('完成第一次组装或编辑后，这里会出现历史节点。')}</div>
       </div>
     );
   }
@@ -118,7 +120,7 @@ export function CloningHistoryTree({
             <Workflow size={16} />
           </span>
           <div>
-            <div style={{ fontSize: 13.5, fontWeight: 700 }}>Cloning lineage</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('构建谱系')}</div>
             <div style={{ fontSize: 10.5, color: tokens.muted }}>
               {history.length} steps · {layout.layerCount} generations · {layout.nodes.length} constructs
             </div>
@@ -161,7 +163,7 @@ export function CloningHistoryTree({
           height={layout.height}
           viewBox={`0 0 ${layout.width} ${layout.height}`}
           role="img"
-          aria-label="Cloning history directed acyclic graph"
+          aria-label={t('构建历史有向无环图')}
           style={{ display: 'block', minWidth: layout.width }}
         >
           <defs>
@@ -324,7 +326,7 @@ export function CloningHistoryTree({
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 9.5, color: tokens.muted }}>
-        <span>Select a node to trace its ancestors and descendants.</span>
+        <span>{t('点击一个节点可追溯它的上游与下游。')}</span>
         <span style={{ fontFamily: tokens.fontMono }}>{layout.nodes.filter((node) => node.synthetic).length} input constructs</span>
       </div>
     </div>

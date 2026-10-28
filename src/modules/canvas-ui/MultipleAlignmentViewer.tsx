@@ -7,6 +7,7 @@ import { Rows3 } from 'lucide-react';
 import type { VizTheme } from './theme';
 import { baseColor, getTheme } from './theme';
 import { formatBp, hexToRgba } from './utils';
+import { t as translate, useT } from '../../lib/i18n';
 import {
   clampColumn,
   clustalColor,
@@ -88,6 +89,7 @@ export function MultipleAlignmentViewer({
   referenceRowId,
   onColumnClick,
 }: MultipleAlignmentViewerProps) {
+  const t = useT();
   const tokens = getTheme(theme);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -377,7 +379,7 @@ export function MultipleAlignmentViewer({
       ref={rootRef}
       className="osg-msa-root"
       role="region"
-      aria-label="Multiple sequence alignment"
+      aria-label={t('多序列比对')}
       style={{
         position: 'relative',
         display: 'flex',
@@ -756,8 +758,8 @@ export function MultipleAlignmentViewer({
                   }}
                 >
                   <Rows3 size={28} strokeWidth={1.4} />
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>No aligned sequences</div>
-                  <div style={{ fontSize: 11.5 }}>Provide aligned rows, a consensus and conservation scores.</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{t('没有已比对的序列')}</div>
+                  <div style={{ fontSize: 11.5 }}>{t('需要提供比对后的序列行、一致序列与保守性分值。')}</div>
                 </div>
               ) : null}
 
@@ -834,7 +836,7 @@ export function MultipleAlignmentViewer({
                 height={CONSENSUS_HEIGHT}
                 viewBox={`0 0 ${innerWidth} ${CONSENSUS_HEIGHT}`}
                 style={{ display: 'block' }}
-                aria-label="Consensus sequence"
+                aria-label={t('一致序列')}
               >
                 <title>{`Consensus ${consensus}`}</title>
                 <rect width={innerWidth} height={CONSENSUS_HEIGHT} fill={tokens.panelAlt} />

@@ -8,6 +8,7 @@ import type { PlasmidDocument } from '../../types/schema';
 import { fetchFromNCBI } from '../../modules/io-adapter';
 import { loadSample } from '../samples';
 import { VECTOR_LIBRARY, type VectorCategory, type VectorEntry } from './catalog';
+import { t as translate } from '../../lib/i18n';
 
 export { VECTOR_LIBRARY, VECTOR_CATEGORIES } from './catalog';
 export type { VectorEntry, VectorCategory } from './catalog';
@@ -35,14 +36,14 @@ export async function openVector(entry: VectorEntry): Promise<PlasmidDocument> {
 
 async function fromBundle(entry: VectorEntry): Promise<PlasmidDocument> {
   const read = FILES[`./data/${entry.id}.gb`];
-  if (!read) throw new Error(`${entry.name} 标记为内置，但缺少 data/${entry.id}.gb`);
+  if (!read) throw new Error(translate('{v0} 标记为内置，但缺少 data/{v1}.gb', { v0: entry.name, v1: entry.id }));
   return loadSample(await read(), entry.name);
 }
 
 async function fromNCBI(entry: VectorEntry): Promise<PlasmidDocument> {
   const fetched = await fetchFromNCBI(entry.accession, { db: 'nuccore' });
   if (!('topology' in fetched)) {
-    throw new Error(`${entry.accession} 返回的不是核酸记录`);
+    throw new Error(translate('{v0} 返回的不是核酸记录', { v0: entry.accession }));
   }
   // GenBank marks few plasmid records as circular even when they are.
   return { ...fetched, topology: 'circular' };

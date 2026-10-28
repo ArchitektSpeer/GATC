@@ -11,6 +11,7 @@ import { addPrimersToDoc, replaceIfCurrent, digestToGel, newDocument, openProduc
 import { loadDemoLibrary } from './samples/demo';
 import { useWorkbench } from './store';
 import { Button } from './ui';
+import { t as translate, useT } from '../lib/i18n';
 
 const STEP_DELAY_MS = 4200;
 
@@ -23,7 +24,7 @@ interface DemoStep {
 const st = () => useWorkbench.getState();
 const byName = (name: string): PlasmidDocument => {
   const d = st().docs.find((x) => x.name === name);
-  if (!d) throw new Error(`演示需要的序列 ${name} 未打开`);
+  if (!d) throw new Error(translate('演示需要的序列 {v0} 未打开', { v0: name }));
   return d;
 };
 const activate = (name: string, view: Parameters<ReturnType<typeof st>['setView']>[0]) => {
@@ -32,7 +33,7 @@ const activate = (name: string, view: Parameters<ReturnType<typeof st>['setView'
 };
 const cds = (doc: PlasmidDocument, pattern: RegExp) => {
   const f = doc.features.find((x) => x.type === 'CDS' && pattern.test(x.name)) ?? doc.features.find((x) => x.type === 'CDS');
-  if (!f) throw new Error(`${doc.name} 中没有 CDS`);
+  if (!f) throw new Error(translate('{v0} 中没有 CDS', { v0: doc.name }));
   return f;
 };
 
@@ -69,7 +70,7 @@ const STEPS: DemoStep[] = [
       activate('pGEX-4T-1', 'features');
       const doc = byName('pGEX-4T-1');
       const found = await callBio('autoAnnotateFeatures', doc);
-      st().notify(`自动注释：pGEX-4T-1 共 ${doc.features.length} 个特征${found.length ? `，新增 ${found.length} 个` : '（均已注释）'}`);
+      st().notify(translate('自动注释：pGEX-4T-1 共 {v0} 个特征{v1}', { v0: doc.features.length, v1: found.length ? translate('，新增 {v0} 个', { v0: found.length }) : translate('（均已注释）') }));
     },
   },
   {
@@ -100,7 +101,7 @@ const STEPS: DemoStep[] = [
       activate('pBR322', 'sequence');
       const hits = await callBio('searchMotif', byName('pBR322'), 'GRATYC', { bothStrands: true });
       if (hits[0]) st().setSelection({ start: hits[0].start, end: hits[0].end });
-      st().notify(`GRATYC（BamHI/BglII/BstYI 兼容位点）在 pBR322 上命中 ${hits.length} 处`);
+      st().notify(translate('GRATYC（BamHI/BglII/BstYI 兼容位点）在 pBR322 上命中 {v0} 处', { v0: hits.length }));
     },
   },
   {
@@ -112,9 +113,9 @@ const STEPS: DemoStep[] = [
       const pair = await callBio('designPrimerPair', doc, { start: f.start, end: f.end }, { enzymeSiteForward: 'BamHI', enzymeSiteReverse: 'NotI', leaderBases: 'GCG' });
       pair.forward.name = 'mCherry-BamHI-F';
       pair.reverse.name = 'mCherry-NotI-R';
-      if (!replaceIfCurrent(doc, addPrimersToDoc(doc, [pair.forward, pair.reverse], '演示：BamHI/NotI 克隆引物'))) return st().setDemo(null);
+      if (!replaceIfCurrent(doc, addPrimersToDoc(doc, [pair.forward, pair.reverse], translate('演示：BamHI/NotI 克隆引物')))) return st().setDemo(null);
       activate('mCherry', 'features');
-      st().notify(`引物 Tm ${pair.forward.tmAnnealing.toFixed(1)} / ${pair.reverse.tmAnnealing.toFixed(1)} °C，产物 ${pair.productLength} bp`);
+      st().notify(translate('引物 Tm {v0} / {v1} °C，产物 {v2} bp', { v0: pair.forward.tmAnnealing.toFixed(1), v1: pair.reverse.tmAnnealing.toFixed(1), v2: pair.productLength }));
     },
   },
   {
@@ -160,8 +161,8 @@ const STEPS: DemoStep[] = [
       const egfp = cds(doc, /egfp/i);
       const at = egfp.start + 65 * 3;
       const r = await callBio('designMutagenesisPrimers', doc, { start: at, end: at + 3, newBases: 'CAC', mode: 'q5_back_to_back' });
-      if (!replaceIfCurrent(doc, addPrimersToDoc(doc, [r.forward, r.reverse], '演示：EGFP Y66H 突变引物'))) return st().setDemo(null);
-      openProduct({ ...r.mutatedDoc, name: 'pEGFP-N1_Y66H' }, [`${r.silentSiteSuggestions.length} 个静默位点建议`]);
+      if (!replaceIfCurrent(doc, addPrimersToDoc(doc, [r.forward, r.reverse], translate('演示：EGFP Y66H 突变引物')))) return st().setDemo(null);
+      openProduct({ ...r.mutatedDoc, name: 'pEGFP-N1_Y66H' }, [translate('{v0} 个静默位点建议', { v0: r.silentSiteSuggestions.length })]);
       st().setView('sequence');
       st().setSelection({ start: at, end: at + 3 });
     },
@@ -185,7 +186,7 @@ const STEPS: DemoStep[] = [
     run: async () => {
       const r = await callBio('simulateRecombinase', [byName('pBR322-loxP-tet-loxP')], 'Cre');
       r.products.forEach((p) => openProduct(p, r.events));
-      if (!r.products.length) st().notify(r.warnings.join('；') || '未发生重组');
+      if (!r.products.length) st().notify(r.warnings.join('；') || translate('未发生重组'));
       st().setView('map');
     },
   },
@@ -197,7 +198,7 @@ const STEPS: DemoStep[] = [
       if (!gfp) return;
       const avoid = ['EcoRI', 'BamHI', 'NotI'].map((n) => getEnzymeByName(n)!.recognitionSeq);
       const dna = await callBio('backTranslate', gfp.sequence, 'E. coli', { strategy: 'most-frequent', avoidSites: avoid });
-      openProduct(newDocument('GFP_Ecoli_optimized', dna, 'linear', '演示：GFP 反向翻译（E. coli）'));
+      openProduct(newDocument('GFP_Ecoli_optimized', dna, 'linear', translate('演示：GFP 反向翻译（E. coli）')));
       st().setActiveProtein(gfp.id);
     },
   },
@@ -210,6 +211,7 @@ const STEPS: DemoStep[] = [
 
 /** Floating control bar; demo steps run real computations against the workbench. */
 export function DemoPlayer() {
+  const t = useT();
   const demo = useWorkbench((s) => s.demo);
   const setDemo = useWorkbench((s) => s.setDemo);
   const [busy, setBusy] = useState(false);
@@ -248,26 +250,26 @@ export function DemoPlayer() {
   const step = STEPS[demo.step];
   const last = demo.step + 1 >= STEPS.length;
   return (
-    <div className="fixed bottom-16 left-4 z-40 w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3 shadow-2xl" role="region" aria-label="演示模式">
+    <div className="fixed bottom-16 left-4 z-40 w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3 shadow-2xl" role="region" aria-label={translate('演示模式')}>
       <div className="mb-1 flex items-center gap-2 text-[11px] text-[var(--muted)]">
         演示 {demo.step + 1} / {STEPS.length}
         <div className="h-1 flex-1 overflow-hidden rounded bg-[var(--bg)]">
           <div className="h-full bg-blue-600 transition-all" style={{ width: `${((demo.step + 1) / STEPS.length) * 100}%` }} />
         </div>
       </div>
-      <div className="text-sm font-semibold">{step.title}</div>
-      <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{step.text}</p>
+      <div className="text-sm font-semibold">{t(step.title)}</div>
+      <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{t(step.text)}</p>
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       <div className="mt-2 flex items-center gap-1.5">
         <Button size="sm" variant="primary" onClick={() => setDemo({ ...demo, playing: !demo.playing })} disabled={last && !demo.playing}>
-          {demo.playing ? <Pause size={12} /> : <Play size={12} />} {demo.playing ? '暂停' : '继续'}
+          {demo.playing ? <Pause size={12} /> : <Play size={12} />} {demo.playing ? translate('暂停') : translate('继续')}
         </Button>
         <Button size="sm" disabled={busy || last} onClick={() => setDemo({ ...demo, step: demo.step + 1 })}>
           <SkipForward size={12} /> 下一步
         </Button>
         <div className="flex-1" />
-        {busy && <span className="text-[11px] text-[var(--muted)]">运行中…</span>}
-        <Button size="sm" variant="ghost" onClick={() => setDemo(null)} aria-label="退出演示">
+        {busy && <span className="text-[11px] text-[var(--muted)]">{translate('运行中…')}</span>}
+        <Button size="sm" variant="ghost" onClick={() => setDemo(null)} aria-label={translate('退出演示')}>
           <X size={13} />
         </Button>
       </div>

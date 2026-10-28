@@ -7,6 +7,7 @@ import { Fingerprint, Ruler, TestTubeDiagonal } from 'lucide-react';
 import type { VizTheme } from './theme';
 import { getTheme } from './theme';
 import { formatBp, hexToRgba, trimNumber } from './utils';
+import { t as translate, useT } from '../../lib/i18n';
 import {
   classifyResidue,
   proteinColumnGroups,
@@ -50,8 +51,8 @@ const RESIDUE_COLORS: Record<ProteinResidueClass, Record<VizTheme, string>> = {
 };
 
 const CLASS_LABEL: Record<ProteinResidueClass, string> = {
-  hydrophobic: 'Hydrophobic',
-  charged: 'Charged',
+  hydrophobic: '疏水',
+  charged: '带电',
   polar: 'Polar',
   special: 'Other',
 };
@@ -77,6 +78,7 @@ export function ProteinSequenceView({
   residuesPerRow = 50,
   height = 620,
 }: ProteinSequenceViewProps) {
+  const t = useT();
   const tokens = getTheme(theme);
   const sequence = protein.sequence.toUpperCase();
   const length = sequence.length;
@@ -328,7 +330,7 @@ export function ProteinSequenceView({
                 textOverflow: 'ellipsis',
               }}
             >
-              {protein.name || 'Untitled protein'}
+              {protein.name || t('未命名蛋白')}
             </div>
             <div style={{ fontSize: 11, color: tokens.muted }}>
               {formatBp(length)} aa · {trimNumber(stats.mwKda, 2)} kDa · pI{' '}
@@ -371,7 +373,7 @@ export function ProteinSequenceView({
           >
             <Ruler size={11} />
             {selectionLength > 0
-              ? `${formatBp(selectionLength)} aa selected`
+              ? t('已选 {n} aa', { n: formatBp(selectionLength) })
               : `${perRow} per row`}
           </span>
         </div>

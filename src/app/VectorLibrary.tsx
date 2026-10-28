@@ -8,8 +8,10 @@ import { Download, Search } from 'lucide-react';
 import { useWorkbench } from './store';
 import { Badge, Button, Dialog, Input, Select } from './ui';
 import { openVector, searchVectors, VECTOR_CATEGORIES, type VectorCategory, type VectorEntry } from './vectors';
+import { t as translate, useT } from '../lib/i18n';
 
 export function VectorLibraryDialog() {
+  const t = useT();
   const open = useWorkbench((s) => s.tool === 'vectors');
   const setTool = useWorkbench((s) => s.setTool);
   const [query, setQuery] = useState('');
@@ -35,7 +37,7 @@ export function VectorLibraryDialog() {
   }
 
   return (
-    <Dialog open={open} onClose={() => setTool(null)} title="载体库" width={860}>
+    <Dialog open={open} onClose={() => setTool(null)} title={t('载体库')} width={860}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-64 flex-1">
@@ -43,24 +45,23 @@ export function VectorLibraryDialog() {
             <Input
               autoFocus
               className="pl-7"
-              placeholder="搜索名称、登录号或抗性标记，例如 pUC、U55762、AmpR"
+              placeholder={t('搜索名称、登录号或抗性标记，例如 pUC、U55762、AmpR')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
           <Select value={category} onChange={(e) => setCategory(e.target.value as VectorCategory | 'all')}>
-            <option value="all">全部分类</option>
+            <option value="all">{t('全部分类')}</option>
             {VECTOR_CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>
-                {c.label}
+                {t(c.label)}
               </option>
             ))}
           </Select>
         </div>
 
         <p className="text-xs text-[var(--muted)]">
-          共 {results.length} 个载体，其中 {bundledCount} 个已内置、可离线打开；其余按 GenBank 登录号从 NCBI 获取。
-          每个条目都对应一条公开的 GenBank 记录。
+          {t('共 {v0} 个载体，其中 {v1} 个已内置、可离线打开；其余按 GenBank 登录号从 NCBI 获取。每个条目都对应一条公开的 GenBank 记录。', { v0: results.length, v1: bundledCount })}
         </p>
 
         {error && <p className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-600">{error}</p>}
@@ -69,10 +70,10 @@ export function VectorLibraryDialog() {
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 bg-[var(--panel)] text-xs text-[var(--muted)]">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">载体</th>
-                <th className="px-3 py-2 text-left font-medium">长度</th>
-                <th className="px-3 py-2 text-left font-medium">标记</th>
-                <th className="px-3 py-2 text-left font-medium">说明</th>
+                <th className="px-3 py-2 text-left font-medium">{t('载体')}</th>
+                <th className="px-3 py-2 text-left font-medium">{t('长度')}</th>
+                <th className="px-3 py-2 text-left font-medium">{t('标记')}</th>
+                <th className="px-3 py-2 text-left font-medium">{t('说明')}</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
@@ -95,10 +96,10 @@ export function VectorLibraryDialog() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-xs text-[var(--muted)]">{v.notes}</td>
+                  <td className="px-3 py-2 text-xs text-[var(--muted)]">{t(v.notes)}</td>
                   <td className="px-3 py-2 text-right">
                     <Button size="sm" disabled={busy !== null} onClick={() => open_(v)}>
-                      {busy === v.id ? '打开中…' : v.bundled ? '打开' : <><Download size={12} /> 获取</>}
+                      {busy === v.id ? t('打开中…') : v.bundled ? t('打开') : <><Download size={12} />{t('获取')}</>}
                     </Button>
                   </td>
                 </tr>
@@ -106,8 +107,7 @@ export function VectorLibraryDialog() {
               {results.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-sm text-[var(--muted)]">
-                    没有匹配的载体。商业载体（pET-28a、pcDNA3.1、pQE 等）没有公开的 GenBank 记录，
-                    不在库内；可用「从 NCBI 导入」或直接打开厂商提供的文件。
+                    {t('没有匹配的载体。商业载体（pET-28a、pcDNA3.1、pQE 等）没有公开的 GenBank 记录，不在库内；可用「从 NCBI 导入」或直接打开厂商提供的文件。')}
                   </td>
                 </tr>
               )}

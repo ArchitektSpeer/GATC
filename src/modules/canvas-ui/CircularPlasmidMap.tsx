@@ -50,6 +50,7 @@ import {
   type MapDisplayOptions,
 } from './mapDisplayOptions';
 import { computeGcProfile } from './layout/linearMapLayout';
+import { t as translate, useT } from '../../lib/i18n';
 
 interface DragState {
   anchor: number;
@@ -134,6 +135,7 @@ export function CircularPlasmidMap({
   showPrimers = true,
   svgRef,
 }: CircularPlasmidMapProps) {
+  const t = useT();
   const tokens = getTheme(theme);
   const size = Math.max(360, requestedSize);
   // The ring is square but the enzyme and primer names need a column either side, so the
@@ -548,7 +550,7 @@ export function CircularPlasmidMap({
               {doc.name || 'Untitled plasmid'}
             </div>
             <div style={{ fontSize: 11.5, color: tokens.muted }}>
-              {formatBp(length)} bp · {circular ? '环状' : '线性'} · GC {trimNumber(stats.gc)}% · {stats.features} 个特征
+              {t('{v0} bp · {v1} · GC {v2}% · {v3} 个特征', { v0: formatBp(length), v1: circular ? '环状' : '线性', v2: trimNumber(stats.gc), v3: stats.features })}
             </div>
           </div>
         </div>
@@ -1175,8 +1177,8 @@ export function CircularPlasmidMap({
               fontSize={10.5}
             >
               {selectedBp > 0
-                ? `已选 ${formatBp(selectedBp)} bp`
-                : `${stats.cuts} 个切点 · ${stats.primers} 条引物`}
+                ? t('已选 {v0} bp', { v0: formatBp(selectedBp) })
+                : t('{v0} 个切点 · {v1} 条引物', { v0: stats.cuts, v1: stats.primers })}
             </text>
             <text
               x={geometry.cx}
@@ -1278,7 +1280,7 @@ export function CircularPlasmidMap({
       >
         <span>在环上拖动可选择区段，点击特征查看详情。</span>
         <span style={{ fontFamily: tokens.fontMono }}>
-          {stats.cuts} 个切点 · {stats.primers} 条引物 · {stats.features} 个特征
+          {t('{v0} 个切点 · {v1} 条引物 · {v2} 个特征', { v0: stats.cuts, v1: stats.primers, v2: stats.features })}
         </span>
       </div>
     </div>

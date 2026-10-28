@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t as translate, useT } from '../../lib/i18n';
 import {
   AlertTriangle,
   Bot,
@@ -112,11 +113,11 @@ function describeAction(action: AIToolAction): string {
   switch (action.type) {
     case 'DESIGN_PRIMERS': {
       const tails: string[] = [];
-      if (action.payload.forwardTail) tails.push(`F 尾 ${action.payload.forwardTail}`);
-      if (action.payload.reverseTail) tails.push(`R 尾 ${action.payload.reverseTail}`);
-      if (action.payload.mutationSeq) tails.push(`突变序列 ${action.payload.mutationSeq}`);
+      if (action.payload.forwardTail) tails.push(translate('F 尾 {v0}', { v0: action.payload.forwardTail }));
+      if (action.payload.reverseTail) tails.push(translate('R 尾 {v0}', { v0: action.payload.reverseTail }));
+      if (action.payload.mutationSeq) tails.push(translate('突变序列 {v0}', { v0: action.payload.mutationSeq }));
       return [
-        `目标区间 [${action.payload.targetStart}, ${action.payload.targetEnd})`,
+        translate('目标区间 [{v0}, {v1})', { v0: action.payload.targetStart, v1: action.payload.targetEnd }),
         CLONING_METHOD_LABELS[action.payload.cloningMethod],
         ...tails,
       ].join(' · ');
@@ -127,13 +128,13 @@ function describeAction(action: AIToolAction): string {
         .map((feature) => `${feature.name} [${feature.start}, ${feature.end})`)
         .join('、')}${action.payload.features.length > 4 ? ' …' : ''}`;
     case 'RUN_DIGESTION':
-      return `推荐酶组合：${action.payload.enzymeNames.join(' + ')}`;
+      return translate('推荐酶组合：{v0}', { v0: action.payload.enzymeNames.join(' + ') });
     case 'HIGHLIGHT_RANGE':
-      return `区间 [${action.payload.start}, ${action.payload.end}) · ${action.payload.reason}`;
+      return translate('区间 [{v0}, {v1}) · {v2}', { v0: action.payload.start, v1: action.payload.end, v2: action.payload.reason });
     case 'SIMULATE_CLONING':
       return [
         action.payload.method,
-        `${action.payload.fragmentIds.length} 个片段`,
+        translate('{v0} 个片段', { v0: action.payload.fragmentIds.length }),
         action.payload.enzymes && action.payload.enzymes.length > 0
           ? action.payload.enzymes.join(' + ')
           : '',
@@ -162,6 +163,7 @@ function QuickIcon({ id }: { id: string }) {
 }
 
 export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
+  const t = useT();
   const { doc, cutSites, selection, traces, onApplyAction, open, onClose } = props;
   const [config, setConfig] = useState<AIConfig | null>(() => loadAIConfig());
   const [configOpen, setConfigOpen] = useState(false);
@@ -250,7 +252,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
         setDraft(prompt);
         setForm(formFromConfig(null));
         setConfigOpen(true);
-        setNotice('请先保存 AI 服务配置，再发送这条指令。');
+        setNotice(t('请先保存 AI 服务配置，再发送这条指令。'));
         return;
       }
 
@@ -326,10 +328,10 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
 
         const rejectionNote =
           rejectedCount > 0
-            ? `\n\n（${rejectedCount} 个建议操作因坐标或参数不符合规范已被安全忽略。）`
+            ? t('\n\n（{v0} 个建议操作因坐标或参数不符合规范已被安全忽略。）', { v0: rejectedCount })
             : '';
         const finalContent =
-          (parsed.content || (validActions.length > 0 ? '已生成可执行操作建议，请查看下方卡片。' : 'AI 未返回文本内容，请重试。')) +
+          (parsed.content || (validActions.length > 0 ? t('已生成可执行操作建议，请查看下方卡片。') : t('AI 未返回文本内容，请重试。'))) +
           rejectionNote;
 
         setMessages((previous) =>
@@ -351,8 +353,8 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                 ? {
                     ...message,
                     content: message.content
-                      ? `${message.content}\n\n（已停止生成）`
-                      : '（已停止生成）',
+                      ? t('{v0}\n\n（已停止生成）', { v0: message.content })
+                      : t('（已停止生成）'),
                   }
                 : message,
             ),
@@ -361,14 +363,14 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
           const message =
             caught instanceof Error && caught.message
               ? caught.message
-              : '请求失败，请检查网络连接与 API 配置。';
+              : t('请求失败，请检查网络连接与 API 配置。');
           setError(message);
           setMessages((previous) =>
             previous
               .map((item) =>
                 item.id === assistantId
                   ? item.content
-                    ? { ...item, content: `${item.content}\n\n（生成中断）` }
+                    ? { ...item, content: t('{v0}\n\n（生成中断）', { v0: item.content }) }
                     : null
                   : item,
               )
@@ -393,9 +395,9 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
     try {
       onApplyAction(action);
       setAppliedActions((previous) => ({ ...previous, [key]: true }));
-      setNotice(`已应用：${ACTION_META[action.type].label}`);
+      setNotice(t('已应用：{v0}', { v0: t(ACTION_META[action.type].label) }));
     } catch {
-      setError('应用该操作时出现问题，请稍后重试。');
+      setError(t('应用该操作时出现问题，请稍后重试。'));
     }
   };
 
@@ -414,25 +416,25 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
     const model = form.model.trim();
 
     if (!apiKey) {
-      setFormError('请填写 API Key。');
+      setFormError(t('请填写 API Key。'));
       return;
     }
     if (!baseUrl) {
-      setFormError('请填写 Base URL。');
+      setFormError(t('请填写 Base URL。'));
       return;
     }
     try {
       const parsed = new URL(baseUrl);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        setFormError('Base URL 必须使用 http:// 或 https://。');
+        setFormError(t('Base URL 必须使用 http:// 或 https://。'));
         return;
       }
     } catch {
-      setFormError('Base URL 格式无效。');
+      setFormError(t('Base URL 格式无效。'));
       return;
     }
     if (!model) {
-      setFormError('请填写模型名称。');
+      setFormError(t('请填写模型名称。'));
       return;
     }
 
@@ -440,7 +442,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
     if (form.temperature.trim().length > 0) {
       const parsedTemperature = Number(form.temperature);
       if (!Number.isFinite(parsedTemperature) || parsedTemperature < 0 || parsedTemperature > 2) {
-        setFormError('Temperature 必须是 0 到 2 之间的数字。');
+        setFormError(t('Temperature 必须是 0 到 2 之间的数字。'));
         return;
       }
       temperature = parsedTemperature;
@@ -454,9 +456,9 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
       setConfig(nextConfig);
       setConfigOpen(false);
       setFormError(null);
-      setNotice('AI 配置已保存在本机浏览器。');
+      setNotice(t('AI 配置已保存在本机浏览器。'));
     } catch (caught) {
-      setFormError(caught instanceof Error ? caught.message : '配置保存失败。');
+      setFormError(caught instanceof Error ? caught.message : t('配置保存失败。'));
     }
   };
 
@@ -466,7 +468,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
     setForm(formFromConfig(null));
     setFormError(null);
     setShowApiKey(false);
-    setNotice('已清除本机保存的 API Key 与模型配置。');
+    setNotice(t('已清除本机保存的 API Key 与模型配置。'));
   };
 
   if (!open) return <></>;
@@ -476,7 +478,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
   return (
     <aside
       className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-700/80 bg-slate-900 text-slate-100 shadow-2xl"
-      aria-label="AI 实验导师"
+      aria-label={t('AI 实验导师')}
     >
       <header className="flex items-center gap-3 border-b border-slate-800 px-4 py-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-500/15 text-teal-300 ring-1 ring-teal-400/30">
@@ -484,23 +486,23 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-sm font-semibold tracking-wide">AI 实验导师</h2>
+            <h2 className="truncate text-sm font-semibold tracking-wide">{t('AI 实验导师')}</h2>
             <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-teal-300">
               BYOK
             </span>
           </div>
           <p className="truncate text-xs text-slate-400">
             {config
-              ? `${PROVIDER_LABELS[config.provider]} · ${config.model}`
-              : '浏览器直连模型 API，不经过第三方服务器'}
+              ? `${t(PROVIDER_LABELS[config.provider])} · ${config.model}`
+              : t('浏览器直连模型 API，不经过第三方服务器')}
           </p>
         </div>
         <button
           type="button"
           onClick={() => setConfigOpen(true)}
           className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
-          aria-label="打开 AI 服务设置"
-          title="AI 服务设置"
+          aria-label={t('打开 AI 服务设置')}
+          title={t('AI 服务设置')}
         >
           <Settings className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -508,8 +510,8 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
           type="button"
           onClick={handleClose}
           className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
-          aria-label="关闭 AI 实验导师"
-          title="关闭"
+          aria-label={t('关闭 AI 实验导师')}
+          title={t('关闭')}
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -528,7 +530,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
             >
               <span aria-hidden="true">{quickPrompt.icon}</span>
               <QuickIcon id={quickPrompt.id} />
-              <span>{quickPrompt.label}</span>
+              <span>{t(quickPrompt.label)}</span>
             </button>
           ))}
         </div>
@@ -538,9 +540,9 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
         <div className="mx-4 mt-3 flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-amber-200">尚未配置 AI 服务</p>
+            <p className="font-medium text-amber-200">{t('尚未配置 AI 服务')}</p>
             <p className="mt-0.5 text-amber-100/80">
-              API Key 只保存在本机 localStorage，并直接发送给所选服务商。
+              {t('API Key 只保存在本机 localStorage，并直接发送给所选服务商。')}
             </p>
           </div>
           <button
@@ -561,7 +563,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
             type="button"
             onClick={() => setError(null)}
             className="shrink-0 rounded p-0.5 text-rose-300 hover:bg-rose-500/20"
-            aria-label="关闭错误提示"
+            aria-label={t('关闭错误提示')}
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -576,7 +578,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
             type="button"
             onClick={() => setNotice(null)}
             className="shrink-0 rounded p-0.5 text-teal-300 hover:bg-teal-500/20"
-            aria-label="关闭提示"
+            aria-label={t('关闭提示')}
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -589,10 +591,9 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-300 ring-1 ring-teal-400/20">
               <Bot className="h-7 w-7" aria-hidden="true" />
             </div>
-            <h3 className="mt-4 text-sm font-semibold text-slate-200">从一个实验问题开始</h3>
+            <h3 className="mt-4 text-sm font-semibold text-slate-200">{t('从一个实验问题开始')}</h3>
             <p className="mt-2 max-w-xs text-xs leading-relaxed text-slate-400">
-              我会读取当前质粒的注释、单酶切位点、Type IIS 位点、Sanger 突变与选中区域上下文，
-              给出可执行的克隆建议。全序列不会发送给模型。
+              {t('我会读取当前质粒的注释、单酶切位点、Type IIS 位点、Sanger 突变与选中区域上下文，给出可执行的克隆建议。全序列不会发送给模型。')}
             </p>
             <div className="mt-4 grid w-full max-w-xs grid-cols-1 gap-2 text-left">
               {QUICK_PROMPTS.slice(0, 3).map((quickPrompt) => (
@@ -604,7 +605,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                   className="flex items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-800/50 px-3 py-2 text-xs text-slate-300 transition hover:border-teal-500/50 hover:text-teal-200 disabled:opacity-50"
                 >
                   <span aria-hidden="true">{quickPrompt.icon}</span>
-                  <span>{quickPrompt.label}</span>
+                  <span>{t(quickPrompt.label)}</span>
                   <ChevronDown className="ml-auto h-3.5 w-3.5 -rotate-90 text-slate-500" aria-hidden="true" />
                 </button>
               ))}
@@ -619,12 +620,12 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                   <div className="mb-1 flex items-center gap-1.5 px-1 text-[10px] uppercase tracking-wide text-slate-500">
                     {isUser ? (
                       <>
-                        <span>你</span>
+                        <span>{t('你')}</span>
                       </>
                     ) : (
                       <>
                         <Bot className="h-3 w-3" aria-hidden="true" />
-                        <span>AI 导师</span>
+                        <span>{t('AI 导师')}</span>
                       </>
                     )}
                   </div>
@@ -635,7 +636,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                         : 'whitespace-pre-wrap break-words rounded-2xl rounded-tl-sm border border-slate-700/70 bg-slate-800/80 px-3.5 py-2.5 text-sm leading-relaxed text-slate-100 shadow-sm'
                     }
                   >
-                    {message.content || (busy ? '正在分析质粒上下文…' : '（空回复）')}
+                    {message.content || (busy ? t('正在分析质粒上下文…') : t('（空回复）'))}
                   </div>
 
                   {message.proposedActions && message.proposedActions.length > 0 && (
@@ -652,7 +653,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                             <div className="flex items-center gap-2 text-teal-300">
                               <ActionIcon kind={meta.icon} />
                               <span className="text-[11px] font-semibold uppercase tracking-wide">
-                                {meta.label}
+                                {t(meta.label)}
                               </span>
                             </div>
                             <p className="mt-1.5 break-words text-xs leading-relaxed text-slate-300">
@@ -669,7 +670,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                               ) : (
                                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                               )}
-                              {applied ? '已应用' : meta.button}
+                              {applied ? t('已应用') : t(meta.button)}
                             </button>
                           </div>
                         );
@@ -703,35 +704,35 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
             rows={2}
             placeholder={
               config
-                ? '描述你的克隆目标、酶切问题或测序疑问…（Enter 发送，Shift+Enter 换行）'
-                : '配置 API 后可发送问题；也可以先点击上方快捷指令…'
+                ? t('描述你的克隆目标、酶切问题或测序疑问…（Enter 发送，Shift+Enter 换行）')
+                : t('配置 API 后可发送问题；也可以先点击上方快捷指令…')
             }
             className="max-h-40 min-h-[44px] w-full resize-none bg-transparent text-sm leading-relaxed text-slate-100 placeholder:text-slate-500 focus:outline-none"
-            aria-label="向 AI 实验导师提问"
+            aria-label={t('向 AI 实验导师提问')}
           />
           <div className="mt-1 flex items-center justify-between gap-2">
             <span className="truncate text-[10px] text-slate-500">
-              {config ? 'AI 建议需人工验证，不会自动执行实验操作' : 'Key 仅存于本机浏览器'}
+              {config ? t('AI 建议需人工验证，不会自动执行实验操作') : t('Key 仅存于本机浏览器')}
             </span>
             {busy ? (
               <button
                 type="button"
                 onClick={handleStop}
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:border-rose-500/50 hover:text-rose-200"
-                aria-label="停止生成"
+                aria-label={t('停止生成')}
               >
                 <Square className="h-3.5 w-3.5" aria-hidden="true" />
-                停止
+                {t('停止')}
               </button>
             ) : (
               <button
                 type="submit"
                 disabled={!draft.trim()}
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-teal-500 px-2.5 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-teal-400 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="发送问题"
+                aria-label={t('发送问题')}
               >
                 <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                发送
+                {t('发送')}
               </button>
             )}
           </div>
@@ -739,7 +740,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
         {busy && (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-teal-300">
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-            <span>正在流式生成，可随时停止</span>
+            <span>{t('正在流式生成，可随时停止')}</span>
           </div>
         )}
       </form>
@@ -761,17 +762,17 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 id="ai-config-title" className="text-sm font-semibold text-slate-100">
-                  AI 服务设置
+                  {t('AI 服务设置')}
                 </h3>
                 <p className="mt-0.5 text-[11px] text-slate-400">
-                  BYOK · 浏览器直连 · 配置仅保存在本机
+                  {t('BYOK · 浏览器直连 · 配置仅保存在本机')}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setConfigOpen(false)}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-                aria-label="关闭设置"
+                aria-label={t('关闭设置')}
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -779,7 +780,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
 
             <div className="mt-4 space-y-3">
               <label className="block">
-                <span className="mb-1 block text-[11px] font-medium text-slate-300">服务提供商</span>
+                <span className="mb-1 block text-[11px] font-medium text-slate-300">{t('服务提供商')}</span>
                 <select
                   value={form.provider}
                   onChange={(event) => handleProviderChange(event.target.value as AIProviderType)}
@@ -787,7 +788,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                 >
                   {(Object.keys(PROVIDER_LABELS) as AIProviderType[]).map((provider) => (
                     <option key={provider} value={provider}>
-                      {PROVIDER_LABELS[provider]}
+                      {t(PROVIDER_LABELS[provider])}
                     </option>
                   ))}
                 </select>
@@ -796,7 +797,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
               <label className="block">
                 <span className="mb-1 flex items-center justify-between text-[11px] font-medium text-slate-300">
                   <span>API Key</span>
-                  <span className="font-normal text-slate-500">仅保存在本机 localStorage</span>
+                  <span className="font-normal text-slate-500">{t('仅保存在本机 localStorage')}</span>
                 </span>
                 <div className="flex items-center rounded-lg border border-slate-700 bg-slate-950 focus-within:border-teal-500">
                   <KeyRound className="ml-3 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
@@ -813,8 +814,8 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                     type="button"
                     onClick={() => setShowApiKey((previous) => !previous)}
                     className="mr-1 rounded-md p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
-                    aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
-                    title={showApiKey ? '隐藏' : '显示'}
+                    aria-label={showApiKey ? t('隐藏 API Key') : t('显示 API Key')}
+                    title={showApiKey ? t('隐藏') : t('显示')}
                   >
                     {showApiKey ? (
                       <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -838,14 +839,14 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                 />
                 {form.provider === 'custom_openai' && (
                   <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">
-                    可填写 Ollama（如 http://localhost:11434/v1）或 OpenRouter 等 OpenAI 兼容端点。
+                    {t('可填写 Ollama（如 http://localhost:11434/v1）或 OpenRouter 等 OpenAI 兼容端点。')}
                   </span>
                 )}
               </label>
 
               <div className="grid grid-cols-[1fr_104px] gap-3">
                 <label className="block">
-                  <span className="mb-1 block text-[11px] font-medium text-slate-300">模型名称</span>
+                  <span className="mb-1 block text-[11px] font-medium text-slate-300">{t('模型名称')}</span>
                   <input
                     type="text"
                     value={form.model}
@@ -867,7 +868,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                     onChange={(event) =>
                       setForm((previous) => ({ ...previous, temperature: event.target.value }))
                     }
-                    placeholder="默认"
+                    placeholder={t('默认')}
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-500 focus:outline-none"
                   />
                 </label>
@@ -875,13 +876,13 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
 
               <div className="rounded-xl border border-slate-700/70 bg-slate-950/50 px-3 py-2 text-[10px] leading-relaxed text-slate-400">
                 <p>
-                  请求由当前浏览器直接发往所选服务商。Anthropic 使用官方浏览器直连头；Gemini 使用
+                  {t('请求由当前浏览器直接发往所选服务商。Anthropic 使用官方浏览器直连头；Gemini 使用')}
                   <code className="mx-1 rounded bg-slate-800 px-1 py-0.5 text-slate-300">
                     streamGenerateContent?alt=sse
                   </code>
-                  端点。不会经过 GATC 或任何第三方服务器。
+                  {t('端点。不会经过 GATC 或任何第三方服务器。')}
                 </p>
-                <p className="mt-1.5">请勿在共享电脑上保存生产环境密钥。可随时一键清除本机配置。</p>
+                <p className="mt-1.5">{t('请勿在共享电脑上保存生产环境密钥。可随时一键清除本机配置。')}</p>
               </div>
 
               {formError && (
@@ -899,7 +900,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                   className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 px-2.5 py-2 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  清除本机配置
+                  {t('清除本机配置')}
                 </button>
                 <div className="flex items-center gap-2">
                   <button
@@ -915,7 +916,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-teal-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-teal-400"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    保存配置
+                    {t('保存配置')}
                   </button>
                 </div>
               </div>

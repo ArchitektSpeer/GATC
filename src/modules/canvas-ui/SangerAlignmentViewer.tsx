@@ -23,6 +23,7 @@ import {
   type CoverageStatus,
 } from './layout/coverage';
 import { complementBase } from './layout/linearLayout';
+import { t as translate, useT } from '../../lib/i18n';
 
 export interface SangerAlignmentViewerProps {
   doc: PlasmidDocument;
@@ -337,6 +338,7 @@ export function SangerAlignmentViewer({
   showCoverage = false,
   onCoverageClick,
 }: SangerAlignmentViewerProps) {
+  const t = useT();
   const tokens = getTheme(theme);
   const plotRootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -556,8 +558,8 @@ export function SangerAlignmentViewer({
               }}
             >
               <Dna size={30} strokeWidth={1.4} />
-              <div style={{ fontSize: 13, fontWeight: 600 }}>No sequencing reads loaded</div>
-              <div style={{ fontSize: 11.5 }}>Open one or more .ab1 traces to align against this reference.</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{t('还没有载入测序读长')}</div>
+              <div style={{ fontSize: 11.5 }}>{t('打开一个或多个 .ab1 峰图文件，即可与这条参考序列比对。')}</div>
             </div>
           ) : (
             <div ref={scrollRef} className="osg-sanger-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: tokens.panel }}>
@@ -630,7 +632,7 @@ export function SangerAlignmentViewer({
                         viewBox={`0 0 ${plotWidth} 62`}
                         style={{ display: 'block', flexShrink: 0, cursor: 'pointer' }}
                         role="img"
-                        aria-label="Read coverage and per-base consistency"
+                        aria-label={t('读长覆盖度与逐碱基一致性')}
                         onClick={jumpToCoveragePosition}
                       >
                         <rect width={plotWidth} height={62} fill={tokens.panelAlt} />
@@ -688,7 +690,7 @@ export function SangerAlignmentViewer({
                   ) : null}
                   <div style={{ display: 'flex' }}>
                   <div style={{ width: LABEL_WIDTH, flexShrink: 0, padding: '10px 10px', borderRight: `1px solid ${tokens.border}` }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tokens.muted }}>REFERENCE</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tokens.muted }}>{t('参考序列')}</div>
                     <div style={{ fontSize: 10.5, color: tokens.muted, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {doc.name}
                     </div>
@@ -868,7 +870,7 @@ export function SangerAlignmentViewer({
             }}
           >
             <div style={{ padding: '10px 12px', borderBottom: `1px solid ${tokens.border}` }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tokens.muted }}>VARIANTS</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tokens.muted }}>{t('差异位点')}</div>
               <div style={{ fontSize: 11, color: tokens.muted, marginTop: 3 }}>
                 Click a variant to center its chromatogram.
               </div>

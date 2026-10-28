@@ -9,6 +9,7 @@
 // with an assertion against the sequence GATC recorded, so running the script is itself
 // the check that the translation was faithful.
 import type { CloningHistoryNode, PlasmidDocument, Primer } from '../../types/schema';
+import { t as translate } from '../../lib/i18n';
 
 export interface PydnaScript {
   code: string;
@@ -123,11 +124,11 @@ export function exportPydnaScript(
     } else {
       if (node && node.operation !== 'import') {
         const reason = allParentsPresent
-          ? `pydna 没有直接对应的写法（${node.operation}）`
+          ? translate('pydna 没有直接对应的写法（{v0}）', { v0: node.operation })
           : '亲本不在导出范围内';
-        warnings.push(`${doc.name}：${reason}，脚本里按已记录的序列直接给出。`);
+        warnings.push(translate('{v0}：{v1}，脚本里按已记录的序列直接给出。', { v0: doc.name, v1: reason }));
         lines.push(`# TODO: ${node.description}`);
-        lines.push(`#       ${reason}；下面这条是 GATC 记录的产物序列。`);
+        lines.push(translate('#       {v0}；下面这条是 GATC 记录的产物序列。', { v0: reason }));
         literal += 1;
       }
       lines.push(`${variable} = ${recorded}`);

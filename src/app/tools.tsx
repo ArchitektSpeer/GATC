@@ -12,8 +12,10 @@ import { callBio } from './bio-client';
 import { newDocument, openProduct, resolveEnzymes } from './actions';
 import { selectActiveDoc, useWorkbench } from './store';
 import { Badge, Button, Dialog, Field, Input, Select, cn } from './ui';
+import { t as translate, useT } from '../lib/i18n';
 
 export function FindDialog() {
+  const t = useT();
   const open = useWorkbench((s) => s.tool === 'find');
   const setTool = useWorkbench((s) => s.setTool);
   const doc = useWorkbench(selectActiveDoc);
@@ -54,11 +56,11 @@ export function FindDialog() {
   };
 
   return (
-    <Dialog open={open} onClose={() => setTool(null)} title="查找序列" width={620}>
+    <Dialog open={open} onClose={() => setTool(null)} title={t('查找序列')} width={620}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-56 flex-1">
-            <Field label={protein ? '氨基酸模式（X 为任意）' : 'DNA 模式（支持 IUPAC：N R Y W S …）'}>
+            <Field label={protein ? t('氨基酸模式（X 为任意）') : t('DNA 模式（支持 IUPAC：N R Y W S …）')}>
               <Input
                 autoFocus
                 className="mono"
@@ -69,14 +71,14 @@ export function FindDialog() {
               />
             </Field>
           </div>
-          <Field label="类型">
+          <Field label={t('类型')}>
             <Select value={protein ? 'protein' : 'dna'} onChange={(e) => setProtein(e.target.value === 'protein')}>
               <option value="dna">DNA</option>
-              <option value="protein">蛋白（6 框翻译）</option>
+              <option value="protein">{t('蛋白（6 框翻译）')}</option>
             </Select>
           </Field>
           {!protein && (
-            <Field label="允许错配">
+            <Field label={t('允许错配')}>
               <Select value={mismatches} onChange={(e) => setMismatches(Number(e.target.value))}>
                 {[0, 1, 2, 3].map((n) => (
                   <option key={n} value={n}>
@@ -89,7 +91,7 @@ export function FindDialog() {
         </div>
         {hits && (
           <div className="flex items-center gap-2 text-xs">
-            <span>{hits.length ? `第 ${current + 1} / ${hits.length} 个命中` : '无命中'}</span>
+            <span>{hits.length ? t('第 {v0} / {v1} 个命中', { v0: current + 1, v1: hits.length }) : t('无命中')}</span>
             <Button size="sm" disabled={!hits.length} onClick={() => go(current - 1)}>
               上一个
             </Button>
@@ -128,6 +130,7 @@ export function FindDialog() {
 const ORGANISMS = Object.keys(CODON_USAGE) as CodonUsageOrganism[];
 
 export function BackTranslateDialog() {
+  const t = useT();
   const open = useWorkbench((s) => s.tool === 'backtranslate');
   const setTool = useWorkbench((s) => s.setTool);
   const [protein, setProtein] = useState('');
@@ -146,7 +149,7 @@ export function BackTranslateDialog() {
     setError(null);
     const names = avoid.split(/[,\s]+/).filter(Boolean);
     const { enzymes, missing } = resolveEnzymes(names);
-    if (missing.length) return setError(`未知酶：${missing.join(', ')}`);
+    if (missing.length) return setError(t('未知酶：{v0}', { v0: missing.join(', ') }));
     try {
       const dna = await callBio('backTranslate', aa, organism, { strategy, avoidSites: enzymes.map((e) => e.recognitionSeq), seed: 1 });
       setComputed({ dna, organism, strategy, aa });
@@ -156,9 +159,9 @@ export function BackTranslateDialog() {
   };
 
   return (
-    <Dialog open={open} onClose={() => setTool(null)} title="反向翻译 / 密码子优化" width={720}>
+    <Dialog open={open} onClose={() => setTool(null)} title={t('反向翻译 / 密码子优化')} width={720}>
       <div className="flex flex-col gap-3">
-        <Field label={`蛋白序列（${aa.length} aa）`}>
+        <Field label={t('蛋白序列（{v0} aa）', { v0: aa.length })}>
           <textarea
             className="mono h-28 w-full rounded-md border border-[var(--border)] bg-[var(--panel)] p-2 text-xs outline-none focus:ring-2 focus:ring-blue-500/40"
             value={protein}
@@ -167,32 +170,32 @@ export function BackTranslateDialog() {
           />
         </Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="宿主">
+          <Field label={t('宿主')}>
             <Select value={organism} onChange={(e) => setOrganism(e.target.value as CodonUsageOrganism)}>
               {ORGANISMS.map((o) => (
                 <option key={o}>{o}</option>
               ))}
             </Select>
           </Field>
-          <Field label="策略">
+          <Field label={t('策略')}>
             <Select value={strategy} onChange={(e) => setStrategy(e.target.value as typeof strategy)}>
-              <option value="most-frequent">最高频密码子</option>
-              <option value="weighted">按使用频率加权</option>
+              <option value="most-frequent">{t('最高频密码子')}</option>
+              <option value="weighted">{t('按使用频率加权')}</option>
             </Select>
           </Field>
-          <Field label="避开酶切位点">
+          <Field label={t('避开酶切位点')}>
             <Input value={avoid} onChange={(e) => setAvoid(e.target.value)} />
           </Field>
         </div>
         <div className="flex gap-2">
           <Button variant="primary" disabled={aa.length < 2} onClick={run}>
-            <Play size={14} /> 反向翻译
+            <Play size={14} /> {t('反向翻译')}
           </Button>
           {computed && (
             <Button
               onClick={() => {
                 const { dna, organism: host, strategy: how } = computed;
-                openProduct(newDocument(`backtranslated_${host.replace(/[^A-Za-z]/g, '')}`, dna, 'linear', `反向翻译（${host}，${how}）`));
+                openProduct(newDocument(`backtranslated_${host.replace(/[^A-Za-z]/g, '')}`, dna, 'linear', t('反向翻译（{v0}，{v1}）', { v0: host, v1: how })));
                 setTool(null);
               }}
             >
@@ -221,6 +224,7 @@ function regionOf(doc: PlasmidDocument, useSelection: boolean, sel: { start: num
 }
 
 export function AlignView({ theme }: { theme: 'light' | 'dark' | 'publication' }) {
+  const t = useT();
   const docs = useWorkbench((s) => s.docs);
   const activeId = useWorkbench((s) => s.activeId);
   const selection = useWorkbench((s) => s.selection);
@@ -245,10 +249,10 @@ export function AlignView({ theme }: { theme: 'light' | 'dark' | 'publication' }
   const run = async (wanted: string[] = ids) => {
     const docs = useWorkbench.getState().docs;
     const picked = wanted.map((id) => docs.find((d) => d.id === id)).filter((d): d is PlasmidDocument => !!d);
-    if (picked.length < 2) return setError('至少选择 2 条序列');
+    if (picked.length < 2) return setError(t('至少选择 2 条序列'));
     const inputs = picked.map((d) => ({ id: d.id, name: d.name, sequence: regionOf(d, useSelection && d.id === activeId, selection) }));
     const total = inputs.reduce((a, x) => a + x.sequence.length, 0);
-    if (total > 120_000) return setError(`序列总长 ${total.toLocaleString()} bp 过大（上限 120 kb），请缩小范围`);
+    if (total > 120_000) return setError(t('序列总长 {v0} bp 过大（上限 120 kb），请缩小范围', { v0: total.toLocaleString() }));
     setBusy(true);
     setError(null);
     const t0 = performance.now();
@@ -276,16 +280,16 @@ export function AlignView({ theme }: { theme: 'light' | 'dark' | 'publication' }
         </label>
         <div className="flex-1" />
         <Select value={scheme} onChange={(e) => setScheme(e.target.value as typeof scheme)}>
-          <option value="nucleotide">按碱基着色</option>
-          <option value="identity">按一致性着色</option>
-          <option value="clustal">Clustal 配色</option>
-          <option value="none">不着色</option>
+          <option value="nucleotide">{t('按碱基着色')}</option>
+          <option value="identity">{t('按一致性着色')}</option>
+          <option value="clustal">{t('Clustal 配色')}</option>
+          <option value="none">{t('不着色')}</option>
         </Select>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={diffOnly} onChange={(e) => setDiffOnly(e.target.checked)} /> 只显示差异
         </label>
         <Button variant="primary" size="sm" disabled={busy} onClick={() => run()}>
-          <Play size={13} /> {busy ? '比对中…' : '多序列比对'}
+          <Play size={13} /> {busy ? t('比对中…') : t('多序列比对')}
         </Button>
       </div>
       {error && <div className="p-2 text-xs text-red-600">{error}</div>}
@@ -304,7 +308,7 @@ export function AlignView({ theme }: { theme: 'light' | 'dark' | 'publication' }
           </div>
           <div className="overflow-auto border-t border-[var(--border)] p-2 text-xs">
             <div className="mb-1 text-[var(--muted)]">
-              {result.rows.length} 条序列 · {result.columns.toLocaleString()} 列 · {elapsed.toFixed(0)} ms · 同一性矩阵 (%)
+              {t('{v0} 条序列 · {v1} 列 · {v2} ms · 同一性矩阵 (%)', { v0: result.rows.length, v1: result.columns.toLocaleString(), v2: elapsed.toFixed(0) })}
             </div>
             <table className="mono">
               <tbody>
@@ -331,7 +335,7 @@ export function AlignView({ theme }: { theme: 'light' | 'dark' | 'publication' }
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 items-center justify-center text-xs text-[var(--muted)]">选择 2 条以上序列后点击「多序列比对」</div>
+        <div className="flex flex-1 items-center justify-center text-xs text-[var(--muted)]">{t('选择 2 条以上序列后点击「多序列比对」')}</div>
       )}
     </div>
   );

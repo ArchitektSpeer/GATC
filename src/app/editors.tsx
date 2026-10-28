@@ -9,6 +9,7 @@ import { evaluateOligoThermodynamics } from '../modules/cloning-primer';
 import { historyNode, uid } from './actions';
 import { useWorkbench } from './store';
 import { Button, Dialog, Field, Input, Select } from './ui';
+import { t as translate, useT } from '../lib/i18n';
 
 export const FEATURE_TYPES: FeatureType[] = [
   'CDS',
@@ -57,6 +58,7 @@ export function FeatureEditor({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const replaceDoc = useWorkbench((s) => s.replaceDoc);
   const selection = useWorkbench((s) => s.selection);
   const [draft, setDraft] = useState({ name: '', type: 'misc_feature' as FeatureType, start: 1, end: 1, strand: 1 as StrandDirection, color: '', note: '' });
@@ -84,9 +86,9 @@ export function FeatureEditor({
   const save = () => {
     const start = Math.round(draft.start) - 1;
     const end = Math.round(draft.end);
-    if (!draft.name.trim()) return setError('名称不能为空');
-    if (start < 0 || start >= doc.length || end < 1 || end > doc.length) return setError(`坐标必须在 1–${doc.length} 之间`);
-    if (start >= end && doc.topology === 'linear') return setError('线性序列的起点必须小于终点');
+    if (!draft.name.trim()) return setError(t('名称不能为空'));
+    if (start < 0 || start >= doc.length || end < 1 || end > doc.length) return setError(t('坐标必须在 1–{v0} 之间', { v0: doc.length }));
+    if (start >= end && doc.topology === 'linear') return setError(t('线性序列的起点必须小于终点'));
     const next: SequenceFeature = {
       ...(feature ?? { id: uid('f') }),
       name: draft.name.trim(),
@@ -98,52 +100,52 @@ export function FeatureEditor({
       notes: withNote(feature?.notes, draft.note.trim()),
     };
     const features = feature ? doc.features.map((f) => (f.id === feature.id ? next : f)) : [...doc.features, next];
-    replaceDoc(edited(doc, { features }, feature ? `编辑特征 ${next.name}` : `添加特征 ${next.name}`));
+    replaceDoc(edited(doc, { features }, feature ? t('编辑特征 {v0}', { v0: next.name }) : t('添加特征 {v0}', { v0: next.name })));
     onClose();
   };
 
   const set = <K extends keyof typeof draft>(k: K, v: (typeof draft)[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
   return (
-    <Dialog open={open} onClose={onClose} title={feature ? `编辑特征：${feature.name}` : '添加特征'} width={520}>
+    <Dialog open={open} onClose={onClose} title={feature ? t('编辑特征：{v0}', { v0: feature.name }) : t('添加特征')} width={520}>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="名称">
+        <Field label={t('名称')}>
           <Input value={draft.name} onChange={(e) => set('name', e.target.value)} />
         </Field>
-        <Field label="类型">
+        <Field label={t('类型')}>
           <Select value={draft.type} onChange={(e) => set('type', e.target.value as FeatureType)}>
             {FEATURE_TYPES.map((t) => (
               <option key={t}>{t}</option>
             ))}
           </Select>
         </Field>
-        <Field label="起点 (1-based)" hint={doc.topology === 'circular' ? '起点 > 终点表示跨越零点' : undefined}>
+        <Field label={t('起点 (1-based)')} hint={doc.topology === 'circular' ? t('起点 > 终点表示跨越零点') : undefined}>
           <Input type="number" value={draft.start} onChange={(e) => set('start', Number(e.target.value))} />
         </Field>
-        <Field label="终点 (含)">
+        <Field label={t('终点 (含)')}>
           <Input type="number" value={draft.end} onChange={(e) => set('end', Number(e.target.value))} />
         </Field>
-        <Field label="方向">
+        <Field label={t('方向')}>
           <Select value={String(draft.strand)} onChange={(e) => set('strand', Number(e.target.value) as StrandDirection)}>
-            <option value="1">正向 →</option>
-            <option value="-1">反向 ←</option>
-            <option value="0">无方向</option>
+            <option value="1">{t('正向 →')}</option>
+            <option value="-1">{t('反向 ←')}</option>
+            <option value="0">{t('无方向')}</option>
           </Select>
         </Field>
-        <Field label="颜色">
+        <Field label={t('颜色')}>
           <Input type="color" value={draft.color || TYPE_COLORS[draft.type] || '#64748b'} onChange={(e) => set('color', e.target.value)} />
         </Field>
         <div className="col-span-2">
-          <Field label="注释">
+          <Field label={t('注释')}>
             <Input value={draft.note} onChange={(e) => set('note', e.target.value)} />
           </Field>
         </div>
       </div>
       {error && <div className="mt-3 text-xs text-red-600">{error}</div>}
       <div className="mt-4 flex justify-end gap-2">
-        <Button onClick={onClose}>取消</Button>
+        <Button onClick={onClose}>{t('取消')}</Button>
         <Button variant="primary" onClick={save}>
-          保存
+          {t('保存')}
         </Button>
       </div>
     </Dialog>
@@ -181,6 +183,7 @@ export function locatePrimer(doc: PlasmidDocument, oligo: string): { start: numb
 }
 
 export function PrimerEditor({ doc, open, onClose }: { doc: PlasmidDocument; open: boolean; onClose: () => void }) {
+  const t = useT();
   const replaceDoc = useWorkbench((s) => s.replaceDoc);
   const [name, setName] = useState('Primer');
   const [sequence, setSequence] = useState('');
@@ -200,9 +203,9 @@ export function PrimerEditor({ doc, open, onClose }: { doc: PlasmidDocument; ope
   const site = oligo.length >= 15 && !invalid ? locatePrimer(doc, oligo) : null;
 
   const save = () => {
-    if (invalid) return setError(`序列含无效字符：${invalid}`);
-    if (oligo.length < 15) return setError('引物至少 15 nt');
-    if (!site) return setError('未在序列任一链上找到 ≥15 nt 的 3′ 端结合区');
+    if (invalid) return setError(t('序列含无效字符：{v0}', { v0: invalid }));
+    if (oligo.length < 15) return setError(t('引物至少 15 nt'));
+    if (!site) return setError(t('未在序列任一链上找到 ≥15 nt 的 3′ 端结合区'));
     const annealing = oligo.slice(site.tail.length);
     const thermoAnneal = evaluateOligoThermodynamics(annealing);
     const thermoFull = evaluateOligoThermodynamics(oligo);
@@ -221,33 +224,33 @@ export function PrimerEditor({ doc, open, onClose }: { doc: PlasmidDocument; ope
       hairpinDeltaG: thermoFull.hairpinDeltaG,
       selfDimerDeltaG: thermoFull.selfDimerDeltaG,
     };
-    replaceDoc(edited(doc, { primers: [...doc.primers, primer] }, `添加引物 ${primer.name}`));
+    replaceDoc(edited(doc, { primers: [...doc.primers, primer] }, t('添加引物 {v0}', { v0: primer.name })));
     onClose();
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="添加引物" width={560}>
+    <Dialog open={open} onClose={onClose} title={t('添加引物')} width={560}>
       <div className="flex flex-col gap-3">
-        <Field label="名称">
+        <Field label={t('名称')}>
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="序列 5′→3′" hint="3′ 端 ≥15 nt 与模板完全互补即可，5′ 多出的碱基视为尾巴">
+        <Field label={t('序列 5′→3′')} hint={t('3′ 端 ≥15 nt 与模板完全互补即可，5′ 多出的碱基视为尾巴')}>
           <Input className="mono" value={sequence} onChange={(e) => setSequence(e.target.value)} placeholder="ACGT…" />
         </Field>
         {oligo.length >= 15 && (
           <div className="text-xs text-[var(--muted)]">
             {invalid
-              ? `含无效字符：${invalid}`
+              ? t('含无效字符：{v0}', { v0: invalid })
               : site
-              ? `结合位置 ${site.start + 1}–${site.end}（${site.strand === 1 ? '正链' : '负链'}）${site.tail ? `，5′ 尾巴 ${site.tail.length} nt` : ''}`
-              : '未找到结合位点'}
+              ? t('结合位置 {v0}–{v1}（{v2}）{v3}', { v0: site.start + 1, v1: site.end, v2: site.strand === 1 ? t('正链') : t('负链'), v3: site.tail ? `，5′ 尾巴 ${site.tail.length} nt` : '' })
+              : t('未找到结合位点')}
           </div>
         )}
         {error && <div className="text-xs text-red-600">{error}</div>}
         <div className="flex justify-end gap-2">
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={onClose}>{t('取消')}</Button>
           <Button variant="primary" onClick={save}>
-            添加
+            {t('添加')}
           </Button>
         </div>
       </div>
