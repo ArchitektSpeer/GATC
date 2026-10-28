@@ -17,8 +17,12 @@ import {
 import { computeCircularGeometry, groupCutSites } from './layout/circularLayout';
 import {
   buildCdsCodons,
+  buildCutLabelRowMap,
+  buildCutRowMap,
   buildFeatureRowMap,
   buildTranslationCodons,
+  CUT_LABEL_STEP,
+  getLinearTrackLayout,
   reverseComplement,
   translateCodon,
 } from './layout/linearLayout';
@@ -371,5 +375,74 @@ describe('cloning history DAG layout', () => {
     const lines = wrapText('a '.repeat(80).trim(), 20, 2);
     expect(lines).toHaveLength(2);
     expect(lines[1].endsWith('…')).toBe(true);
+  });
+});
+
+describe('enzyme names above the cut track', () => {
+  const cut = (id: string, name: string, position: number): CutSite => ({
+    id,
+    enzyme: { name, recognitionSeq: 'GAATTC', cutIndexTop: 1, cutIndexBottom: 5 },
+    position,
+    strand: 1,
+    cutPositionTop: position,
+    cutPositionBottom: position + 4,
+    overhangType: '5-prime',
+    overhangSeq: 'AATT',
+    isMethylationBlocked: false,
+    totalCutsInPlasmid: 1,
+  });
+  const geometry = { bpPerRow: 60, cell: 20, gutter: 58, plotRight: 1258, length: 600, fontSize: 7 };
+
+  it('keeps every name inside the plot and never lets two overlap', () => {
+    // Four single cutters a base apart: on one line their names would collide.
+    const sites = [cut('a', 'BstAPI', 10), cut('b', 'FauNDI', 11), cut('c', 'NdeI', 12), cut('d', 'Mly113I', 13)];
+    const { labels, tiers } = buildCutLabelRowMap(buildCutRowMap(sites, 60), geometry);
+    const placed = labels.get(0)!;
+    expect(placed).toHaveLength(4);
+    expect(tiers).toBeGreaterThan(1);
+
+    const boxes = placed.map((p) => {
+      const half = (p.cut.enzyme.name.length * 7 * 0.62) / 2 + 2;
+      return { left: p.x - half, right: p.x + half, tier: p.tier };
+    });
+    for (const box of boxes) {
+      expect(box.left).toBeGreaterThanOrEqual(geometry.gutter - 0.01);
+      expect(box.right).toBeLessThanOrEqual(geometry.plotRight + 0.01);
+    }
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        if (boxes[i].tier !== boxes[j].tier) continue;
+        expect(boxes[i].right <= boxes[j].left || boxes[j].right <= boxes[i].left).toBe(true);
+      }
+    }
+  });
+
+  it('uses one tier when the names are far apart, and reserves no extra height for it', () => {
+    const sites = [cut('a', 'EcoRI', 2), cut('b', 'BamHI', 40)];
+    const { labels, tiers } = buildCutLabelRowMap(buildCutRowMap(sites, 60), geometry);
+    expect(tiers).toBe(1);
+    expect(labels.get(0)!.every((p) => p.tier === 0)).toBe(true);
+    expect(getLinearTrackLayout('none', 1).rowHeight).toBe(getLinearTrackLayout('none').rowHeight);
+    // Every extra tier pushes the tracks below it down by exactly one step.
+    expect(getLinearTrackLayout('none', 3).cutTop - getLinearTrackLayout('none', 1).cutTop).toBe(2 * CUT_LABEL_STEP);
+    expect(getLinearTrackLayout('none', 3).rowHeight - getLinearTrackLayout('none', 1).rowHeight).toBe(2 * CUT_LABEL_STEP);
+  });
+
+  it('leaves names out rather than stacking past the tier limit, and draws none when the bases are tiny', () => {
+    const crowded = Array.from({ length: 12 }, (_, i) => cut(`c${i}`, `Enzyme${i}I`, 10 + i));
+    // Twelve long names on top of each other cannot all be placed in two tiers.
+    const { labels } = buildCutLabelRowMap(buildCutRowMap(crowded, 60), { ...geometry, maxTiers: 2 });
+    expect(labels.get(0)!.length).toBeLessThan(crowded.length);
+    expect(labels.get(0)!.every((p) => p.tier < 2)).toBe(true);
+
+    const tiny = buildCutLabelRowMap(buildCutRowMap(crowded, 60), { ...geometry, cell: 2 });
+    expect(tiny.labels.size).toBe(0);
+    expect(tiny.tiers).toBe(1);
+  });
+
+  it('skips enzymes that cut more than once, which the map does not label', () => {
+    const multi = { ...cut('m', 'HaeIII', 10), totalCutsInPlasmid: 4 };
+    const { labels } = buildCutLabelRowMap(buildCutRowMap([multi, cut('s', 'EcoRI', 30)], 60), geometry);
+    expect(labels.get(0)!.map((p) => p.cut.enzyme.name)).toEqual(['EcoRI']);
   });
 });

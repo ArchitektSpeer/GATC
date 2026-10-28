@@ -487,6 +487,45 @@ await check('同源重组：敲除设计与鉴定引物', async () => {
   return `${sizes[0]}；${t}`;
 });
 
+await check('序列视图：酶名与特征名不重叠', async () => {
+  await closeDialogs();
+  await tab('pUC19');
+  await view('序列');
+  await page.waitForTimeout(1200);
+  // Scroll to the MCS, where the cut sites and the features are at their densest.
+  await page.mouse.move(700, 500);
+  await page.mouse.wheel(0, 1200);
+  await page.waitForTimeout(800);
+  const report = await page.evaluate(() => {
+    const boxes = [];
+    for (const t of document.querySelectorAll('svg text')) {
+      const text = (t.textContent || '').trim();
+      // Single bases and amino-acid letters are allowed to sit in their own grid.
+      if (text.length < 2) continue;
+      const r = t.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      // Rotated text (the circular map) reports a box that is not its ink.
+      if (t.getAttribute('transform')) continue;
+      boxes.push({ text, x: r.x, y: r.y, w: r.width, h: r.height });
+    }
+    const hits = [];
+    const pad = 2; // the glyph box carries ascender and descender padding
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i];
+        const b = boxes[j];
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y + pad < b.y + b.h - pad && b.y + pad < a.y + a.h - pad) {
+          hits.push(`${a.text} / ${b.text}`);
+        }
+      }
+    }
+    return { labels: boxes.length, hits };
+  });
+  if (report.hits.length) throw new Error(`${report.hits.length} overlapping labels: ${report.hits.slice(0, 5).join(' | ')}`);
+  await shot('24-sequence-labels');
+  return `${report.labels} labels, none overlapping`;
+});
+
 await browser.close();
 const report = { url: URL, passed: results.filter((r) => r.ok).length, total: results.length, results, consoleErrors: errors.slice(0, 30) };
 writeFileSync(`${out}/report.json`, JSON.stringify(report, null, 2));

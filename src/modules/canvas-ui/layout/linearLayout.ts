@@ -554,23 +554,44 @@ export interface LinearTrackLayout {
   translationLineHeight: number;
   translationLines: number;
   featureTop: number;
+  /** Total height of the feature track: one lane per overlapping group. */
   featureHeight: number;
+  /** Height of a single feature lane. */
+  featureLaneHeight: number;
 }
 
-export function getLinearTrackLayout(mode: TranslationMode): LinearTrackLayout {
+/** Vertical distance between two tiers of stacked enzyme names. */
+export const CUT_LABEL_STEP = 10;
+
+/**
+ * `labelTiers` is how many rows of enzyme names have to fit above the cut track.
+ * Every track below moves down by the same amount so the row keeps one height for
+ * the whole document, which is what the virtualised list needs.
+ */
+export const FEATURE_LANE_HEIGHT = 15;
+
+export function getLinearTrackLayout(
+  mode: TranslationMode,
+  labelTiers = 1,
+  featureLanes = 1,
+): LinearTrackLayout {
   const translationLines = mode === 'none' ? 0 : mode === 'cds' ? 1 : mode === 'frame3' ? 3 : 6;
-  const cutTop = 10;
-  const cutBottom = 40;
-  const plusY = 62;
-  const minusY = 84;
-  const translationTop = mode === 'none' ? 96 : 102;
+  // The row starts with the ruler numbers; the enzyme names are stacked below them,
+  // which is why the cut track never begins before y = 22.
+  const band = Math.max(0, labelTiers - 1) * CUT_LABEL_STEP;
+  const cutTop = 22 + band;
+  const cutBottom = 52 + band;
+  const plusY = 74 + band;
+  const minusY = 96 + band;
+  const translationTop = (mode === 'none' ? 108 : 114) + band;
   const translationLineHeight = mode === 'cds' ? 22 : 17;
   const translationHeight = translationLines * translationLineHeight;
   const featureTop =
     mode === 'none'
-      ? 96
+      ? 108 + band
       : translationTop + translationHeight + (translationLines > 0 ? 8 : 0);
-  const featureHeight = 20;
+  // Features that overlap each other get a lane of their own, the way the maps draw them.
+  const featureHeight = Math.max(1, featureLanes) * FEATURE_LANE_HEIGHT;
   return {
     rowHeight: featureTop + featureHeight + 12,
     cutTop,
@@ -583,7 +604,81 @@ export function getLinearTrackLayout(mode: TranslationMode): LinearTrackLayout {
     translationLines,
     featureTop,
     featureHeight,
+    featureLaneHeight: FEATURE_LANE_HEIGHT,
   };
+}
+
+export interface CutLabelPlacement {
+  cut: CutSite;
+  /** Where the name is centred, already kept inside the plot. */
+  x: number;
+  /** Where the cut itself is, so a leader can be drawn when the two differ. */
+  anchorX: number;
+  tier: number;
+}
+
+/**
+ * Lays out the enzyme names above the cut track so they never overlap: names are
+ * taken in order along the row and each one drops onto the lowest tier whose
+ * previous name has already ended. Names that still do not fit within `maxTiers`
+ * are left out - the cut mark and its tooltip remain.
+ */
+export function buildCutLabelRowMap(
+  cutRowMap: Map<number, CutSite[]>,
+  options: {
+    bpPerRow: number;
+    cell: number;
+    gutter: number;
+    plotRight: number;
+    length: number;
+    fontSize: number;
+    maxTiers?: number;
+  },
+): { labels: Map<number, CutLabelPlacement[]>; tiers: number } {
+  const { bpPerRow, cell, gutter, plotRight, length, fontSize } = options;
+  const maxTiers = Math.max(1, options.maxTiers ?? 4);
+  const labels = new Map<number, CutLabelPlacement[]>();
+  let tiers = 1;
+  if (cell < 5 || length <= 0) return { labels, tiers };
+
+  for (const [row, cuts] of cutRowMap) {
+    const rowStart = row * bpPerRow;
+    const placements: CutLabelPlacement[] = [];
+    const candidates = cuts
+      .filter((cut) => cut.totalCutsInPlasmid === 1)
+      .map((cut) => {
+        const topX = clampNumber(gutter + (mod(cut.cutPositionTop, length) - rowStart) * cell, gutter, plotRight);
+        const bottomX = clampNumber(gutter + (mod(cut.cutPositionBottom, length) - rowStart) * cell, gutter, plotRight);
+        const anchorX = (topX + bottomX) / 2;
+        // An average glyph of this font is about 0.62 em wide; 4 px keeps names apart.
+        const half = (cut.enzyme.name.length * fontSize * 0.62) / 2 + 2;
+        return { cut, anchorX, half };
+      })
+      .sort((a, b) => a.anchorX - b.anchorX || a.cut.enzyme.name.localeCompare(b.cut.enzyme.name));
+
+    const tierEnds: number[] = [];
+    for (const candidate of candidates) {
+      const x = clampNumber(candidate.anchorX, gutter + candidate.half, Math.max(gutter + candidate.half, plotRight - candidate.half));
+      const left = x - candidate.half;
+      let tier = tierEnds.findIndex((end) => left >= end);
+      if (tier === -1) {
+        if (tierEnds.length >= maxTiers) continue;
+        tier = tierEnds.length;
+        tierEnds.push(-Infinity);
+      }
+      tierEnds[tier] = x + candidate.half;
+      placements.push({ cut: candidate.cut, x, anchorX: candidate.anchorX, tier });
+    }
+    if (placements.length) {
+      labels.set(row, placements);
+      tiers = Math.max(tiers, tierEnds.length);
+    }
+  }
+  return { labels, tiers };
+}
+
+function clampNumber(value: number, low: number, high: number): number {
+  return value < low ? low : value > high ? high : value;
 }
 
 export function clampSelection(

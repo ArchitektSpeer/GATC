@@ -13,6 +13,7 @@ import type {
 import type { VizTheme } from './theme';
 import { baseColor, getTheme } from './theme';
 import {
+  assignFeatureTracks,
   clamp,
   formatBp,
   hexToRgba,
@@ -22,6 +23,7 @@ import {
 } from './utils';
 import {
   AMINO_ACID_NAME,
+  buildCutLabelRowMap,
   buildCutRowMap,
   buildFeatureGapRowMap,
   buildFeatureRowMap,
@@ -29,6 +31,7 @@ import {
   buildTranslationCodons,
   buildTranslationRowMap,
   complementBase,
+  CUT_LABEL_STEP,
   getLinearTrackLayout,
 } from './layout/linearLayout';
 
@@ -51,6 +54,8 @@ export interface LinearSequenceEditorProps {
 }
 
 const GUTTER = 58;
+/** Font size of the enzyme names above the cut track. */
+const CUT_LABEL_FONT = 7;
 const RIGHT_PAD = 12;
 
 function primerPolygon(
@@ -114,7 +119,6 @@ export function LinearSequenceEditor({
   const sequence = doc.sequence.toUpperCase();
   const length = doc.length || sequence.length;
   const circular = doc.topology === 'circular';
-  const layout = useMemo(() => getLinearTrackLayout(translationMode), [translationMode]);
   const totalRows = Math.max(1, Math.ceil(length / bpPerRow));
   const scrollHeight = Math.max(240, height - 54);
 
@@ -168,12 +172,6 @@ export function LinearSequenceEditor({
   const baseFont = Math.max(6.5, Math.min(14, cell * 0.92));
   const chordFont = Math.max(6, Math.min(9.5, cell * 2.1));
 
-  const visibleStart = Math.max(0, Math.floor(scrollTop / layout.rowHeight) - 2);
-  const visibleEnd = Math.min(
-    totalRows - 1,
-    Math.ceil((scrollTop + scrollHeight) / layout.rowHeight) + 2,
-  );
-
   const featureRowMap = useMemo(
     () => buildFeatureRowMap(doc.features, bpPerRow, length, circular),
     [doc.features, bpPerRow, length, circular],
@@ -185,6 +183,41 @@ export function LinearSequenceEditor({
   const cutRowMap = useMemo(
     () => buildCutRowMap(cutSites, bpPerRow),
     [cutSites, bpPerRow],
+  );
+  // Enzyme names are stacked into as many tiers as the busiest row needs, and every
+  // row reserves that much space so all rows stay the same height.
+  const cutLabels = useMemo(
+    () =>
+      buildCutLabelRowMap(cutRowMap, {
+        bpPerRow,
+        cell,
+        gutter: GUTTER,
+        plotRight,
+        length,
+        fontSize: CUT_LABEL_FONT,
+      }),
+    [cutRowMap, bpPerRow, cell, plotRight, length],
+  );
+  // Overlapping features are given separate lanes so neither the bars nor their
+  // names are drawn on top of each other.
+  const featureLanes = useMemo(
+    () => assignFeatureTracks(doc.features, length, circular),
+    [doc.features, length, circular],
+  );
+  const laneCount = Math.max(1, Math.min(8, featureLanes.lanes.length));
+  const laneOf = useCallback(
+    (feature: SequenceFeature) => Math.min(laneCount - 1, featureLanes.laneById.get(feature.id) ?? 0),
+    [featureLanes, laneCount],
+  );
+  const layout = useMemo(
+    () => getLinearTrackLayout(translationMode, cutLabels.tiers, laneCount),
+    [translationMode, cutLabels.tiers, laneCount],
+  );
+
+  const visibleStart = Math.max(0, Math.floor(scrollTop / layout.rowHeight) - 2);
+  const visibleEnd = Math.min(
+    totalRows - 1,
+    Math.ceil((scrollTop + scrollHeight) / layout.rowHeight) + 2,
   );
   const primerRowMap = useMemo(
     () => buildPrimerRowMap(doc.primers, bpPerRow),
@@ -697,6 +730,30 @@ export function LinearSequenceEditor({
                     />
                   ))}
 
+                  {(cutLabels.labels.get(row) ?? []).map((label) => {
+                    const blocked = label.cut.isMethylationBlocked;
+                    const color = blocked ? tokens.blocked : tokens.enzymeSingle;
+                    const y = layout.cutTop - 3 - label.tier * CUT_LABEL_STEP;
+                    const shifted = Math.abs(label.x - label.anchorX) > 0.5;
+                    return (
+                      <g key={`cutlabel-${row}-${label.cut.id}`} pointerEvents="none">
+                        {(label.tier > 0 || shifted) && (
+                          // A leader ties the name back to the cut it belongs to.
+                          <polyline
+                            points={`${label.x},${y + 1.5} ${label.x},${layout.cutTop - 3.5} ${label.anchorX},${layout.cutTop - 1}`}
+                            fill="none"
+                            stroke={color}
+                            strokeWidth={0.5}
+                            opacity={0.55}
+                          />
+                        )}
+                        <text x={label.x} y={y} textAnchor="middle" fill={color} fontSize={CUT_LABEL_FONT} fontWeight={700}>
+                          {label.cut.enzyme.name}
+                        </text>
+                      </g>
+                    );
+                  })}
+
                   {rowCuts.map((cut) => {
                     const blocked = cut.isMethylationBlocked;
                     const single = cut.totalCutsInPlasmid === 1;
@@ -705,17 +762,11 @@ export function LinearSequenceEditor({
                     const topX = clamp(GUTTER + (topPos - rowStart) * cell, GUTTER, plotRight);
                     const bottomX = clamp(GUTTER + (bottomPos - rowStart) * cell, GUTTER, plotRight);
                     const color = blocked ? tokens.blocked : single ? tokens.enzymeSingle : tokens.enzymeMulti;
-                    const center = (topX + bottomX) / 2;
                     return (
                       <g key={`cut-${row}-${cut.id}`} pointerEvents="none">
                         <line x1={topX} y1={layout.cutTop} x2={topX} y2={layout.cutCenter} stroke={blocked ? tokens.blocked : tokens.cutTop} strokeWidth={single ? 1.5 : 1.1} strokeDasharray={blocked ? '2 2' : undefined} />
                         <line x1={bottomX} y1={layout.cutCenter} x2={bottomX} y2={layout.cutBottom} stroke={blocked ? tokens.blocked : tokens.cutBottom} strokeWidth={single ? 1.5 : 1.1} strokeDasharray={blocked ? '2 2' : undefined} />
                         <line x1={topX} y1={layout.cutCenter} x2={bottomX} y2={layout.cutCenter} stroke={color} strokeWidth={0.9} opacity={0.7} />
-                        {single && cell >= 5 ? (
-                          <text x={center} y={layout.cutTop - 3} textAnchor="middle" fill={color} fontSize={7} fontWeight={700}>
-                            {cut.enzyme.name}
-                          </text>
-                        ) : null}
                         <title>
                           {`${cut.enzyme.name} · ${cut.overhangType} ${cut.overhangSeq || 'blunt'}\nTop ${cut.cutPositionTop + 1} · bottom ${cut.cutPositionBottom + 1}${blocked ? '\nBlocked by methylation' : ''}`}
                         </title>
@@ -925,7 +976,7 @@ export function LinearSequenceEditor({
                     {rowFeatureGaps.map((entry, index) => {
                       const x1 = GUTTER + (entry.gap.start - rowStart) * cell;
                       const x2 = GUTTER + (entry.gap.end - rowStart) * cell;
-                      const y = layout.featureTop + layout.featureHeight / 2;
+                      const y = layout.featureTop + (laneOf(entry.feature) + 0.5) * layout.featureLaneHeight;
                       const color = entry.feature.color || tokens.accent;
                       return (
                         <g key={`feature-gap-${row}-${entry.feature.id}-${index}`}>
@@ -962,8 +1013,8 @@ export function LinearSequenceEditor({
                       const x2 = GUTTER + (entry.segment.end - rowStart) * cell;
                       const width = Math.max(0.8, x2 - x1);
                       const color = entry.feature.color || tokens.accent;
-                      const y = layout.featureTop + layout.featureHeight / 2;
-                      const height = Math.min(16, layout.featureHeight);
+                      const y = layout.featureTop + (laneOf(entry.feature) + 0.5) * layout.featureLaneHeight;
+                      const height = Math.min(16, layout.featureLaneHeight - 3);
                       const showText = width > 26 && cell > 2.2;
                       const maxChars = Math.max(1, Math.floor((width - 8) / (8 * 0.58)));
                       const label =
