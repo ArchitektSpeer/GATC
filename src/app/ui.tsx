@@ -88,12 +88,15 @@ export function Dialog({
   onClose,
   title,
   children,
+  footer,
   width = 720,
 }: {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
+  /** Stays visible at the bottom while the body scrolls, so the main action is always reachable. */
+  footer?: ReactNode;
   width?: number;
 }) {
   useEffect(() => {
@@ -116,7 +119,10 @@ export function Dialog({
             <X size={16} />
           </Button>
         </div>
-        <div className="overflow-auto p-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
+        {footer && (
+          <div className="shrink-0 border-t border-[var(--border)] bg-[var(--panel)] px-4 py-2.5">{footer}</div>
+        )}
       </div>
     </div>
   );

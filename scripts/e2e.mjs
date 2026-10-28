@@ -526,6 +526,52 @@ await check('序列视图：酶名与特征名不重叠', async () => {
   return `${report.labels} labels, none overlapping`;
 });
 
+await check('虚拟电泳：Marker 条带标注不重叠', async () => {
+  await closeDialogs();
+  await view('虚拟电泳');
+  await page.waitForTimeout(1500);
+  const report = await page.evaluate(() => {
+    const boxes = [];
+    for (const t of document.querySelectorAll('svg text')) {
+      const text = (t.textContent || '').trim();
+      if (!/^\d{2,6}$/.test(text)) continue; // the ladder sizes
+      if (t.getAttribute('transform')) continue;
+      const r = t.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      boxes.push({ text, x: r.x, y: r.y, w: r.width, h: r.height });
+    }
+    const hits = [];
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i];
+        const b = boxes[j];
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y + 2 < b.y + b.h - 2 && b.y + 2 < a.y + a.h - 2) hits.push(`${a.text}/${b.text}`);
+      }
+    }
+    return { sizes: boxes.length, hits };
+  });
+  if (report.sizes < 10) throw new Error(`only ${report.sizes} ladder labels were drawn`);
+  if (report.hits.length) throw new Error(`${report.hits.length} overlapping ladder labels: ${report.hits.slice(0, 5).join(' | ')}`);
+  await shot('26-gel-ladder');
+  return `${report.sizes} ladder sizes, none overlapping`;
+});
+
+await check('对话框：主按钮在矮窗口里也够得着', async () => {
+  await closeDialogs();
+  await page.setViewportSize({ width: 1180, height: 760 });
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('组合克隆');
+  await page.getByText('组合克隆（MoClo / Golden Gate 矩阵）', { exact: true }).click();
+  const button = page.locator('.fixed.inset-0').last().getByRole('button', { name: /生成全部组合/ });
+  const box = await button.boundingBox();
+  if (!box) throw new Error('the generate button is not rendered');
+  if (box.y + box.height > 760) throw new Error(`the generate button is below the fold at ${Math.round(box.y + box.height)}`);
+  await shot('27-dialog-footer');
+  await closeDialogs();
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  return `primary action at ${Math.round(box.y + box.height)} of 760`;
+});
+
 await check('OpenCloning 策略与 pydna 脚本导出，并把策略读回来', async () => {
   await closeDialogs();
   await tab('pUC19');

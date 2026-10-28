@@ -14,6 +14,7 @@ import {
   fragmentSourceOf,
   migrationMultiplier,
   normalizeGelParams,
+  spreadLabels,
 } from './layout/gelLayout';
 
 export interface VirtualGelSimulatorProps {
@@ -72,6 +73,22 @@ export function VirtualGelSimulator({
 
   const laneWidth = GEL.width / Math.max(1, lanes.length);
   const multiplier = useMemo(() => migrationMultiplier(params), [params]);
+
+  /** Where a band sits on the gel, in the picture's own coordinates. */
+  const bandY = (migrationY: number) => GEL.y + 58 + effectiveMigrationY(migrationY, params) * (GEL.height - 76);
+  /**
+   * A ladder's sizes crowd together at both ends of the gel, so the numbers are pushed
+   * apart until none covers another; a leader is drawn wherever one had to move.
+   */
+  const ladderLabelY = useMemo(() => {
+    const map = new Map<number, number[]>();
+    lanes.forEach((lane, laneIndex) => {
+      if (!lane.isLadder) return;
+      const desired = lane.bands.map((band) => bandY(band.migrationY) + 2.8);
+      map.set(laneIndex, spreadLabels(desired, 8, GEL.y + 58, GEL.y + GEL.height - 8));
+    });
+    return map;
+  }, [lanes, params]);
 
   const update = (partial: Partial<typeof params>) => {
     onParamsChange?.(normalizeGelParams({ ...params, ...partial }));
@@ -383,19 +400,36 @@ export function VirtualGelSimulator({
                       stroke={hovered ? (activeMode === 'uv' ? '#f0fdfa' : '#0f172a') : 'none'}
                       strokeWidth={hovered ? 1 : 0}
                     />
-                    {lane.isLadder && band.sizeBp >= 100 ? (
-                      <text
-                        x={center + bandWidth / 2 + 5}
-                        y={y + 2.8}
-                        fill={activeMode === 'uv' ? '#8aa9ba' : '#64748b'}
-                        fontSize="7"
-                        fontFamily={tokens.fontMono}
-                        opacity={0.8}
-                        pointerEvents="none"
-                      >
-                        {band.sizeBp}
-                      </text>
-                    ) : null}
+                    {lane.isLadder && band.sizeBp >= 100
+                      ? (() => {
+                          const labelY = ladderLabelY.get(laneIndex)?.[bandIndex] ?? y + 2.8;
+                          const labelX = center + bandWidth / 2 + 7;
+                          const moved = Math.abs(labelY - (y + 2.8)) > 1;
+                          return (
+                            <g pointerEvents="none">
+                              {moved ? (
+                                <polyline
+                                  points={`${center + bandWidth / 2 + 1},${y} ${labelX - 2},${labelY - 2.4}`}
+                                  fill="none"
+                                  stroke={activeMode === 'uv' ? '#8aa9ba' : '#94a3b8'}
+                                  strokeWidth="0.5"
+                                  opacity={0.5}
+                                />
+                              ) : null}
+                              <text
+                                x={labelX}
+                                y={labelY}
+                                fill={activeMode === 'uv' ? '#8aa9ba' : '#64748b'}
+                                fontSize="7"
+                                fontFamily={tokens.fontMono}
+                                opacity={0.8}
+                              >
+                                {band.sizeBp}
+                              </text>
+                            </g>
+                          );
+                        })()
+                      : null}
                     <title>{`${lane.label} · ${formatBp(band.sizeBp)} bp`}</title>
                   </g>
                 );

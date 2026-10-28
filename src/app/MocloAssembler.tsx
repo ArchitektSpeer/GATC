@@ -146,7 +146,38 @@ export function MocloAssemblerDialog() {
   };
 
   return (
-    <Dialog open={open} onClose={() => setTool(null)} title="组合克隆（MoClo / Golden Gate 矩阵）" width={960}>
+    <Dialog
+      open={open}
+      onClose={() => setTool(null)}
+      title="组合克隆（MoClo / Golden Gate 矩阵）"
+      width={960}
+      footer={
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-[var(--muted)]">
+            将生成 <b className="text-[var(--text)]">{used.length >= 1 && acceptors.length ? combinationCount : 0}</b> 个组合
+          </span>
+          <label className="flex items-center gap-1">
+            上限
+            <Select aria-label="组合上限" className="w-20" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+              {[8, 24, 48, 96, 384].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <div className="flex-1" />
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={busy || !enzyme || used.length < 1 || !acceptors.length || errors.length > 0}
+            onClick={build}
+          >
+            <Sparkles size={12} /> {busy ? '装配中…' : '生成全部组合'}
+          </Button>
+        </div>
+      }
+    >
       <div className="flex flex-col gap-3 text-xs">
         <div className="flex flex-wrap items-end gap-3">
           <Field label="标准语法" hint={standard.source}>
@@ -256,30 +287,6 @@ export function MocloAssemblerDialog() {
 
         <Domestication standard={standard} />
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
-          <span className="text-[var(--muted)]">
-            将生成 <b className="text-[var(--text)]">{used.length >= 1 && acceptors.length ? combinationCount : 0}</b> 个组合
-          </span>
-          <label className="flex items-center gap-1">
-            上限
-            <Select aria-label="组合上限" className="w-20" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-              {[8, 24, 48, 96, 384].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <div className="flex-1" />
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={busy || !enzyme || used.length < 1 || !acceptors.length || errors.length > 0}
-            onClick={build}
-          >
-            <Sparkles size={12} /> {busy ? '装配中…' : '生成全部组合'}
-          </Button>
-        </div>
         {errors.length > 0 && <p className="text-red-600">有 {errors.length} 个元件的接头与所在位置不符，先修正再装配。</p>}
 
         {results && (

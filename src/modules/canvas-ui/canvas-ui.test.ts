@@ -33,6 +33,7 @@ import {
 import {
   effectiveMigrationY,
   migrationMultiplier,
+  spreadLabels,
 } from './layout/gelLayout';
 import {
   layoutHistoryTree,
@@ -444,5 +445,28 @@ describe('enzyme names above the cut track', () => {
     const multi = { ...cut('m', 'HaeIII', 10), totalCutsInPlasmid: 4 };
     const { labels } = buildCutLabelRowMap(buildCutRowMap([multi, cut('s', 'EcoRI', 30)], 60), geometry);
     expect(labels.get(0)!.map((p) => p.cut.enzyme.name)).toEqual(['EcoRI']);
+  });
+});
+
+describe('spreading crowded labels apart', () => {
+  it('keeps the order, the minimum gap and the bounds', () => {
+    // A ladder's low-molecular-weight bands pile up at the bottom of the gel.
+    const desired = [100, 102, 103, 104, 120, 121, 160];
+    const ys = spreadLabels(desired, 8, 90, 400);
+    expect(ys).toHaveLength(desired.length);
+    for (let i = 1; i < ys.length; i += 1) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(8 - 1e-9);
+    expect(ys[0]).toBeGreaterThanOrEqual(90);
+    // Nothing moves when there is already room.
+    expect(spreadLabels([10, 40, 80], 8, 0, 100)).toEqual([10, 40, 80]);
+  });
+
+  it('pulls the block back inside when it would run off the bottom', () => {
+    const ys = spreadLabels([90, 92, 94, 96, 98], 8, 0, 100);
+    expect(ys[ys.length - 1]).toBeLessThanOrEqual(100);
+    for (let i = 1; i < ys.length; i += 1) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(8 - 1e-9);
+  });
+
+  it('handles an empty list', () => {
+    expect(spreadLabels([], 8, 0, 100)).toEqual([]);
   });
 });

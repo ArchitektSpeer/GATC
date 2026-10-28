@@ -109,3 +109,26 @@ export function laneTotalMass(lane: VirtualGelLane): number {
 export function totalLaneCount(lanes: VirtualGelLane[]): number {
   return Math.max(1, lanes.length);
 }
+
+/**
+ * Pushes labels apart so none overlaps its neighbour, keeping each as close to where
+ * it belongs as the spacing allows. `desired` must already be in ascending order.
+ */
+export function spreadLabels(desired: number[], minGap: number, low: number, high: number): number[] {
+  const ys = [...desired];
+  if (!ys.length) return ys;
+  for (let index = 1; index < ys.length; index += 1) {
+    ys[index] = Math.max(ys[index], ys[index - 1] + minGap);
+  }
+  if (ys[ys.length - 1] > high) {
+    ys[ys.length - 1] = high;
+    for (let index = ys.length - 2; index >= 0; index -= 1) {
+      ys[index] = Math.min(ys[index], ys[index + 1] - minGap);
+    }
+  }
+  if (ys[0] < low) {
+    const shift = low - ys[0];
+    for (let index = 0; index < ys.length; index += 1) ys[index] += shift;
+  }
+  return ys;
+}

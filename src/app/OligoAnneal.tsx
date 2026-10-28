@@ -181,7 +181,25 @@ export function OligoAnnealDialog() {
   };
 
   return (
-    <Dialog open={open} onClose={() => setTool(null)} title="寡核苷酸退火（短片段直接连接）" width={760}>
+    <Dialog
+      open={open}
+      onClose={() => setTool(null)}
+      title="寡核苷酸退火（短片段直接连接）"
+      width={760}
+      footer={
+        <div className="flex justify-end gap-2 text-xs">
+          <Button size="sm" disabled={!ok} onClick={copyOligos}>
+            <Copy size={12} /> 复制订购单两行
+          </Button>
+          <Button size="sm" disabled={!ok} onClick={saveOligos}>
+            <Plus size={12} /> 存入引物库
+          </Button>
+          <Button size="sm" variant="primary" disabled={!ok} onClick={openFragment}>
+            <FlaskConical size={12} /> 作为双链片段打开
+          </Button>
+        </div>
+      }
+    >
       <div className="flex flex-col gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-2">
           <Tabs
@@ -300,17 +318,6 @@ export function OligoAnnealDialog() {
           </div>
         )}
 
-        <div className="flex justify-end gap-2">
-          <Button size="sm" disabled={!ok} onClick={copyOligos}>
-            <Copy size={12} /> 复制订购单两行
-          </Button>
-          <Button size="sm" disabled={!ok} onClick={saveOligos}>
-            <Plus size={12} /> 存入引物库
-          </Button>
-          <Button size="sm" variant="primary" disabled={!ok} onClick={openFragment}>
-            <FlaskConical size={12} /> 作为双链片段打开
-          </Button>
-        </div>
       </div>
     </Dialog>
   );
