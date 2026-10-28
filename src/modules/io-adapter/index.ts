@@ -4764,3 +4764,22 @@ export function exportPlasmidToSnapGeneJson(doc: PlasmidDocument): string {
 }
 
 export * from './project';
+
+export type {
+  CloningStrategy,
+  OpenCloningSequence,
+  OpenCloningSource,
+  OpenCloningPrimer,
+  StrategyExport,
+  StrategyImport,
+} from './opencloning';
+export {
+  OPENCLONING_SCHEMA_VERSION,
+  exportCloningStrategy,
+  importCloningStrategy,
+  isCloningStrategyFile,
+  overhangNumbers,
+} from './opencloning';
+
+export type { PydnaScript } from './pydna';
+export { exportPydnaScript } from './pydna';

@@ -526,6 +526,35 @@ await check('序列视图：酶名与特征名不重叠', async () => {
   return `${report.labels} labels, none overlapping`;
 });
 
+await check('OpenCloning 策略与 pydna 脚本导出，并把策略读回来', async () => {
+  await closeDialogs();
+  await tab('pUC19');
+  const strategyPath = await downloadVia('OpenCloning 克隆策略');
+  const strategy = JSON.parse(readFileSync(strategyPath, 'utf8'));
+  if (!Array.isArray(strategy.sequences) || !strategy.sequences.length) throw new Error('no sequences in the strategy');
+  if (strategy.sequences.length !== strategy.sources.length) throw new Error('sequences and sources do not pair up');
+  for (const sequence of strategy.sequences) {
+    if (!/^LOCUS/.test(sequence.file_content)) throw new Error(`sequence ${sequence.id} carries no GenBank text`);
+  }
+  if (!strategy.schema_version) throw new Error('no schema_version');
+
+  const scriptPath = await downloadVia('pydna 脚本');
+  const script = readFileSync(scriptPath, 'utf8');
+  for (const needed of ['from pydna.amplify import pcr', 'def check(', 'all steps reproduced']) {
+    if (!script.includes(needed)) throw new Error(`the script is missing ${needed}`);
+  }
+
+  // Reading the strategy back has to reopen every sequence it holds.
+  const before = await page.locator('div.cursor-pointer').count();
+  await page.locator('input[type=file]').setInputFiles(strategyPath);
+  const t = await toast();
+  if (!/已导入 OpenCloning 克隆策略/.test(t)) throw new Error(t);
+  const after = await page.locator('div.cursor-pointer').count();
+  if (after <= before) throw new Error('no documents were opened from the strategy');
+  await shot('25-opencloning');
+  return `${strategy.sequences.length} sequences round-tripped; ${script.length} chars of python`;
+});
+
 await browser.close();
 const report = { url: URL, passed: results.filter((r) => r.ok).length, total: results.length, results, consoleErrors: errors.slice(0, 30) };
 writeFileSync(`${out}/report.json`, JSON.stringify(report, null, 2));

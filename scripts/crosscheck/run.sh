@@ -77,4 +77,16 @@ echo "== 5. alignment, single-fragment cloning, mutagenesis, gel =="
 node scripts/crosscheck/gatc_misc.mjs "$W/out/misc.json" \
   "$W/refdata/gateway/pENTR1A.dna" "$W/refdata/gateway/pDEST14.dna" 2>/dev/null
 $PY scripts/crosscheck/ref_misc.py "$W/out/misc.json" | grep -vE "^  OK " || status=1
+
+echo "== 6. generated pydna script actually runs =="
+node scripts/crosscheck/gatc_pydna.mjs "$W/out/generated.py" "$W/out/generated.json" "${SGF[@]}" 2>/dev/null
+$PY "$W/out/generated.py" | tail -3 || status=1
+python3 -c "
+import json, sys
+meta = json.load(open('$W/out/generated.json'))
+print(f\"  {meta['documents']} documents, {meta['reproduced']} rebuilt by pydna, {meta['literal']} written literally\")
+for w in meta['warnings']:
+    print('  note:', w)
+sys.exit(0 if meta['reproduced'] > 0 else 1)
+" || status=1
 exit $status

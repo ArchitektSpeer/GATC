@@ -29,6 +29,10 @@ import {
   exportPlasmidToGenBank,
   exportPlasmidToSnapGene,
   exportPlasmidToSnapGeneJson,
+  exportCloningStrategy,
+  exportPydnaScript,
+  importCloningStrategy,
+  isCloningStrategyFile,
 } from '../modules/io-adapter';
 import { DNA_LADDERS, type LadderName } from '../modules/alignment-gel';
 import {
@@ -60,6 +64,7 @@ import { OligoAnnealDialog } from './OligoAnneal';
 import { MocloAssemblerDialog } from './MocloAssembler';
 import { GenomeEditingDialog } from './GenomeEditing';
 import { buildReportMarkdown, reportToHtml } from './report';
+import { APP_VERSION } from './autosave';
 import { loadSampleLibrary } from './samples';
 import { download, openProject, recordSave, saveFile, saveProject } from './files';
 import { SessionManager, requestCloseDoc } from './session';
@@ -74,7 +79,7 @@ const GEL_BOX_CM = 20;
 
 type ExportFormat =
   | 'project' | 'gbk' | 'dna' | 'fasta' | 'json' | 'svg' | 'png' | 'pdf' | 'print-map' | 'print-seq'
-  | 'report-md' | 'report-html';
+  | 'report-md' | 'report-html' | 'opencloning' | 'pydna';
 
 const NO_TRACES: SangerTraceData[] = [];
 
@@ -207,6 +212,27 @@ export default function App() {
           openProject(parseProjectFile(data), file.name);
           continue;
         }
+        if (typeof data === 'string' && isCloningStrategyFile(file.name, data)) {
+          const strategy = importCloningStrategy(data);
+          const opened: PlasmidDocument[] = [];
+          for (const entry of strategy.files) {
+            const parsed = await parseBioFile(`${entry.name}.gb`, entry.content);
+            // The lineage the strategy recorded replaces whatever the GenBank text carried.
+            for (const parsedDoc of parsed) opened.push({ ...parsedDoc, name: entry.name, history: entry.history });
+          }
+          st.openDocs(opened, true, { saved: true });
+          if (strategy.primers.length) {
+            st.setPrimerLibrary([
+              ...st.primerLibrary,
+              ...strategy.primers.map((primer) => ({ id: uid('lp'), name: primer.name, sequence: primer.sequence, note: 'OpenCloning' })),
+            ]);
+          }
+          st.notify(
+            `已导入 OpenCloning 克隆策略：${opened.length} 条序列、${strategy.primers.length} 条引物` +
+              (strategy.warnings.length ? `；${strategy.warnings[0]}` : ''),
+          );
+          continue;
+        }
         if (isProteinFile(file.name, data)) {
           const proteins = await parseProteinFile(file.name, data);
           st.openProteins(proteins);
@@ -277,6 +303,32 @@ export default function App() {
     if (fmt === 'project') void saveProject();
     if ((fmt === 'gbk' || fmt === 'fasta') && isDirty(s, doc)) s.notify(`已导出 ${fmt === 'gbk' ? 'GenBank' : 'FASTA'}；该格式不保留全部信息，「未保存」标记保留。完整保存请用 Ctrl+S`);
     if (fmt === 'print-seq') return printSequenceText(doc, { bpPerLine: 60, showFeatures: true });
+    if (fmt === 'opencloning' || fmt === 'pydna') {
+      // Both describe how the open documents were built, so both take all of them.
+      const docs = s.docs;
+      if (fmt === 'opencloning') {
+        const strategy = exportCloningStrategy(docs, {
+          toGenBank: exportPlasmidToGenBank,
+          description: `GATC ${APP_VERSION}`,
+          appVersion: APP_VERSION,
+        });
+        download(`${doc.name}-cloning-strategy.json`, strategy.json, 'application/json');
+        s.notify(
+          `已导出 OpenCloning 克隆策略：${docs.length} 条序列` +
+            (strategy.warnings.length ? `；${strategy.warnings.length} 处信息无法无损表达，见文件旁的说明` : ''),
+        );
+        if (strategy.warnings.length) console.warn('OpenCloning export notes:', strategy.warnings);
+      } else {
+        const script = exportPydnaScript(docs, { toGenBank: exportPlasmidToGenBank, title: `${doc.name} (GATC ${APP_VERSION})` });
+        download(`${doc.name}-pydna.py`, script.code, 'text/x-python');
+        s.notify(
+          `已导出 pydna 脚本：${script.reproduced} 步由 pydna 重建并自检` +
+            (script.literal ? `，${script.literal} 步无法表达、按记录的序列给出` : ''),
+        );
+        if (script.warnings.length) console.warn('pydna export notes:', script.warnings);
+      }
+      return;
+    }
     if (fmt === 'report-md' || fmt === 'report-html') {
       const markdown = buildReportMarkdown({
         doc,
@@ -466,6 +518,9 @@ export default function App() {
             { label: '图谱 SVG（出版级）', onSelect: () => exportAs('svg') },
             { label: '图谱 PNG 300 dpi', onSelect: () => exportAs('png') },
             { label: '图谱 PDF（矢量）', onSelect: () => exportAs('pdf') },
+            { divider: true },
+            { label: 'OpenCloning 克隆策略 (.json)', hint: 'LinkML 开放格式，可导回 OpenCloning', onSelect: () => exportAs('opencloning') },
+            { label: 'pydna 脚本 (.py)', hint: '可运行并自检的 Python 复现脚本', onSelect: () => exportAs('pydna') },
             { divider: true },
             { label: '实验记录 Markdown（.md）', hint: '引物、PCR 程序、酶切体系、电泳、谱系', onSelect: () => exportAs('report-md') },
             { label: '实验记录网页（.html，含图谱，可打印/存 PDF）', onSelect: () => exportAs('report-html') },
@@ -747,6 +802,8 @@ function CommandPalette({
               <Command.Item onSelect={run(() => st().setTool('oligo'))}>寡核苷酸退火（短片段直接连接）</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('moclo'))}>组合克隆（MoClo / Golden Gate 矩阵）</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('genome'))}>基因组编辑（CRISPR 打靶 / 同源重组）</Command.Item>
+              <Command.Item onSelect={run(() => onExport('opencloning'))}>导出 OpenCloning 克隆策略</Command.Item>
+              <Command.Item onSelect={run(() => onExport('pydna'))}>导出 pydna 复现脚本</Command.Item>
               <Command.Item onSelect={run(() => onExport('report-md'))}>导出实验记录 Markdown</Command.Item>
               <Command.Item onSelect={run(() => onExport('report-html'))}>导出实验记录网页（含图谱）</Command.Item>
               <Command.Item onSelect={run(() => onExport('print-map'))}>打印图谱</Command.Item>

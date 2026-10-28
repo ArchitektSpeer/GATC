@@ -66,6 +66,7 @@ Shortcuts: `Ctrl/Cmd+K` command palette, `Ctrl/Cmd+F` find, `Ctrl/Cmd+Z` undo,
 | Finding | IUPAC degenerate patterns, mismatch tolerance, both strands, matches across the origin, six-frame protein search; primer library binding-site search across all open sequences (mismatches allowed, 3′ end must match) |
 | Enzymes | 580+ commercial enzymes and a 3000+ enzyme database with isoschizomer lookup, preset and custom enzyme sets, scanning across the origin, Dam/Dcm/CpG methylation blocking, NEB buffer recommendation for double digests with star-activity warnings |
 | Vector library | 32 common vectors bundled as GenBank records and opened offline — cloning, bacterial expression, mammalian, yeast, plant and broad-host — plus the 105 SEVA standard vectors catalogued by accession and fetched on demand. Every entry names an authoritative GenBank accession |
+| Interchange | The construction history exports as an [OpenCloning](https://github.com/OpenCloning/OpenCloning_LinkML) cloning strategy (LinkML JSON, schema 0.4.8) and reads back in, and as a runnable pydna script. The script rebuilds each product from its parents and asserts it against the sequence GATC recorded, so running it is the check; a step pydna cannot express is written as the recorded sequence with a TODO rather than as code that would lie |
 | Genome engineering | CRISPR target scanning for SpCas9, SaCas9 and Cas12a with the cut position each one's own paper gives (and a flag when that position is published as a range), guide checks for GC, U6 terminators and homopolymers, off-target search across the sequences that are open — stated as such, never as a genome-wide result — and a handoff to the annealing tool. Homologous recombination at a locus: homology arms taken from the flanks, donor primers that carry them, the recombinant locus itself, and check primers outside the arms with both diagnostic PCR sizes worked out |
 | Modular cloning | The plant common syntax of Patron et al. 2015 (twelve fusion sites, read from the paper's own figure) and the Yeast Toolkit part types, with a check that a part really presents the overhangs its position calls for, a check that the chosen positions chain and close, primer design that turns any stretch of sequence into a part for a position, and combinatorial Golden Gate — one product per combination of the candidates in each position |
 | Oligo annealing | Hybridise two ordered oligos into a short duplex with defined ends, or work backwards from the insert and the ends it must present and get the two oligos to order — how sgRNA spacers, linkers, adaptors and tags are actually cloned. Takes the overhangs straight off a digested vector, and the product feeds the ligation and Golden Gate wizards |
@@ -142,6 +143,7 @@ files written by SnapGene itself:
 | 3 | Digests, PCR, restriction cloning; Gibson, Golden Gate | pydna; known answers |
 | 4 | Gateway BP/LR; Cre/lox | pydna `gateway_assembly`, `recombinase_assembly` |
 | 5 | Pairwise alignment; TA/TOPO/LIC/GC; mutagenesis; gel read-back | Biopython `PairwiseAligner`; known answers; Biopython translation and primer3 |
+| 6 | The pydna script GATC generates | pydna itself: the script is run, and every step it rebuilds is asserted against GATC's own product |
 
 Results, and the defects this found and fixed, are in [docs/CROSSCHECK.md](docs/CROSSCHECK.md).
 
@@ -215,6 +217,7 @@ npm run tauri:build
 | 查找 | IUPAC 简并模式、允许错配、双链与跨原点命中、6 框蛋白查找；引物库可在所有已打开序列中查找结合位点（允许错配，3′ 端须完全匹配） |
 | 酶 | 580+ 种市售酶、3000+ 酶数据库（含同裂酶查询），预设与自定义酶集，跨原点扫描，Dam/Dcm/CpG 甲基化阻断判定，双酶切 NEB 缓冲液推荐与星号活性提示 |
 | 载体库 | 内置 32 个常用载体的 GenBank 记录，离线即开——通用克隆、原核表达、哺乳动物、酵母、植物与广宿主——另有 105 个 SEVA 标准载体按登录号收录、按需获取。每个条目都对应一条权威 GenBank 记录 |
+| 互通 | 构建历史可导出为 [OpenCloning](https://github.com/OpenCloning/OpenCloning_LinkML) 克隆策略（LinkML JSON，schema 0.4.8）并能读回，也可导出为可运行的 pydna 脚本。脚本会从亲本重建每个产物并与 GATC 记录的序列断言比对，跑一遍就是验证；pydna 无法表达的步骤按记录的序列给出并标注 TODO，不生成"看起来能跑但结果是错的"代码 |
 | 基因组编辑 | CRISPR 靶点扫描（SpCas9、SaCas9、Cas12a，切点按各自原始文献计算，文献给范围的会标明是近似值）；间隔序列的 GC、U6 终止子、连续碱基检查；在已打开的序列中查脱靶（明确声明不是全基因组搜索）；一键把间隔序列交给退火工具。同源重组敲除/敲入：从位点两翼取同源臂、生成带臂的供体扩增引物、重组后的位点序列，以及落在同源臂之外的鉴定引物与野生型/重组型两种产物大小 |
 | 组合克隆 | 内置 Patron 2015 植物通用语法（12 个接头，直接读自论文图表）与酵母工具箱 YTK 元件类型；校验元件实际切出的接头是否与所在位置相符、所选位置能否首尾相接并环化；可把任意一段序列设计成某个位置的元件（domestication）；并支持 N×M 组合装配，每种组合生成一个产物 |
 | 寡核苷酸退火 | 两条引物退火成带末端的短双链片段；也可反过来，给定要插入的序列和需要的末端，直接算出该订哪两条引物——sgRNA 间隔序列、linker、接头、标签都这么连。末端可从已酶切的载体直接取，产物可送入酶切连接与 Golden Gate 向导 |
