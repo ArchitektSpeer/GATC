@@ -60,18 +60,20 @@ Shortcuts: `Ctrl/Cmd+K` command palette, `Ctrl/Cmd+F` find, `Ctrl/Cmd+Z` undo,
 | Area | Capabilities |
 |---|---|
 | Saving | `.gatc` project files (all documents, raw sequencing data and workspace, versioned with migrations); unsaved-change marker and close prompt; automatic local backup while there are unsaved changes (IndexedDB in the browser, app data directory on desktop, atomic writes with rotation) and recovery after a crash — see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
-| Files | Read and write SnapGene `.dna` (primers, methylation, construction history tree, multi-segment features); read GenBank, ApE, Vector NTI, Benchling, FASTA, EMBL, GFF, DNASTAR `.seq`, Serial Cloner `.xdna`, Geneious, SBOL; protein `.prot`, GenPept and protein FASTA; FASTQ reads; fetch from NCBI by accession; export GenBank (joined multi-segment features, ApE colours), FASTA and JSON; export maps as SVG, 300 dpi PNG or vector PDF, and print maps and sequences |
+| Files | Read and write SnapGene `.dna` (primers, methylation, construction history tree, multi-segment features); read GenBank, ApE, Vector NTI, Benchling, FASTA, EMBL, GFF, DNASTAR `.seq`, Serial Cloner `.xdna`, Geneious, SBOL; protein `.prot`, GenPept and protein FASTA; FASTQ reads; fetch from NCBI by accession, or by accession plus a coordinate range so a gene and its flanks come down without the whole chromosome; export GenBank (joined multi-segment features, ApE colours), FASTA and JSON; export maps as SVG, 300 dpi PNG or vector PDF, and print maps and sequences |
 | Views | Circular and linear maps (multi-track features, collision-avoiding leader lines, multi-segment features, ORFs, GC curve, display options), virtualised double-stranded sequence (staggered cut marks, primers, CDS translation), protein view (property colouring, MW and pI), enzyme list, features/primers/ORFs, virtual gel, Sanger traces with coverage, multiple alignment, replayable cloning history tree; light, dark and publication themes |
 | Editing | Base-level editing, add/edit/delete features and primers (all undoable), ORF to CDS, auto-annotation, reverse complement, set origin, circular/linear toggle |
 | Finding | IUPAC degenerate patterns, mismatch tolerance, both strands, matches across the origin, six-frame protein search; primer library binding-site search across all open sequences (mismatches allowed, 3′ end must match) |
 | Enzymes | 580+ commercial enzymes and a 3000+ enzyme database with isoschizomer lookup, preset and custom enzyme sets, scanning across the origin, Dam/Dcm/CpG methylation blocking, NEB buffer recommendation for double digests with star-activity warnings |
 | Vector library | 32 common vectors bundled as GenBank records and opened offline — cloning, bacterial expression, mammalian, yeast, plant and broad-host — plus the 105 SEVA standard vectors catalogued by accession and fetched on demand. Every entry names an authoritative GenBank accession |
+| Oligo annealing | Hybridise two ordered oligos into a short duplex with defined ends, or work backwards from the insert and the ends it must present and get the two oligos to order — how sgRNA spacers, linkers, adaptors and tags are actually cloned. Takes the overhangs straight off a digested vector, and the product feeds the ligation and Golden Gate wizards |
 | Annotation | Local auto-annotation from 300+ common parts (exact and tolerant DNA matching, CDS parts also matched by protein translation), six-frame ORFs with MW and pI |
 | Cloning | Single and double digest ligation (compatible ends, fill-in/chew-back, dephosphorylation), insert fragment, Gibson / NEBuilder HiFi / In-Fusion, Golden Gate (fidelity score, internal-site warnings), Gateway BP/LR/MultiSite LR, TA / GC / TOPO (TA, blunt, directional), LIC, Cre/lox and Flp/FRT recombination (excision, inversion, integration), PCR, fusion PCR, site-directed mutagenesis (QuikChange and Q5 back-to-back, with silent restriction-site suggestions) |
 | Primers | SantaLucia 1998 nearest-neighbour with Owczarzy 2008 Mg²⁺/dNTP salt correction (Tm within 0.01 °C of 46 reference primers), SantaLucia & Hicks 2004 dynamic-programming hairpin and dimer ΔG (mean error 0.3–0.5 kcal/mol), restriction-site and homology-arm primer design, a primer library that persists across sessions |
 | Alignment | Sanger `.ab1` (Mott trimming, heterozygous double peaks, alignment across the origin, amino-acid impact, multi-read consensus and coverage), FASTQ read alignment, multiple sequence alignment (guide tree plus progressive profile alignment, DNA and protein BLOSUM62), pairwise global/local/semi-global alignment |
 | Protein | Back-translation and codon optimisation for 8 hosts (optionally avoiding named restriction sites), CAI |
 | Gels | 36 commercial ladders, 0.5–3% agarose, voltage and run time, supercoiled/nicked/linear conformations, mass-weighted band intensity |
+| Experiment record | One click turns the open workspace into a lab record: construct, features, primers, a PCR programme per polymerase class, the digest recipe with the buffer the enzyme data recommends, gel lanes, the lineage and the sequence — as Markdown, or as a printable web page with the map embedded. Every rule of thumb says where it comes from |
 | AI | Bring your own key: OpenAI, Anthropic, DeepSeek, Gemini or any compatible endpoint; the key stays in the browser; compressed plasmid context; structured action cards you can run with one click |
 
 ### Screens
@@ -205,18 +207,20 @@ npm run tauri:build
 | 领域 | 能力 |
 |---|---|
 | 保存 | `.gatc` 项目文件（全部文档 + 原始测序数据 + 工作区，带版本号与迁移）；未保存标记与关闭提醒；有未保存修改时自动备份到本机（浏览器用 IndexedDB，桌面用应用数据目录，原子写入与轮换备份），异常退出后可恢复。见 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
-| 文件 | 读写 SnapGene `.dna`（含引物、甲基化、构建历史树、多段特征）；读取 GenBank、ApE、Vector NTI、Benchling、FASTA、EMBL、GFF、DNASTAR `.seq`、Serial Cloner `.xdna`、Geneious、SBOL；蛋白文件 `.prot`、GenPept、蛋白 FASTA；FASTQ 读长；按登录号从 NCBI 导入；导出 GenBank（join 多段特征、ApE 颜色）、FASTA、JSON；图谱导出 SVG、300 dpi PNG、矢量 PDF，图谱与序列可直接打印 |
+| 文件 | 读写 SnapGene `.dna`（含引物、甲基化、构建历史树、多段特征）；读取 GenBank、ApE、Vector NTI、Benchling、FASTA、EMBL、GFF、DNASTAR `.seq`、Serial Cloner `.xdna`、Geneious、SBOL；蛋白文件 `.prot`、GenPept、蛋白 FASTA；FASTQ 读长；按登录号从 NCBI 导入，也可只取某段坐标区间（如基因及其上下游 1 kb），不必下载整条染色体；导出 GenBank（join 多段特征、ApE 颜色）、FASTA、JSON；图谱导出 SVG、300 dpi PNG、矢量 PDF，图谱与序列可直接打印 |
 | 视图 | 环形与线性图谱（多轨道特征、防碰撞引线、多段特征、ORF、GC 曲线、可配置显示项）、虚拟滚动双链序列（酶切阶梯切口、引物、CDS 翻译）、蛋白序列视图（按理化性质着色、分子量与 pI）、酶列表、特征/引物/ORF、虚拟电泳、Sanger 峰图与覆盖度、多序列比对、可重放的克隆历史树；浅色/深色/出版白底主题 |
 | 编辑 | 碱基级编辑，特征与引物的添加、编辑、删除（均可撤销），ORF 一键转 CDS，自动注释，反向互补，重设原点，环状/线性切换 |
 | 查找 | IUPAC 简并模式、允许错配、双链与跨原点命中、6 框蛋白查找；引物库可在所有已打开序列中查找结合位点（允许错配，3′ 端须完全匹配） |
 | 酶 | 580+ 种市售酶、3000+ 酶数据库（含同裂酶查询），预设与自定义酶集，跨原点扫描，Dam/Dcm/CpG 甲基化阻断判定，双酶切 NEB 缓冲液推荐与星号活性提示 |
 | 载体库 | 内置 32 个常用载体的 GenBank 记录，离线即开——通用克隆、原核表达、哺乳动物、酵母、植物与广宿主——另有 105 个 SEVA 标准载体按登录号收录、按需获取。每个条目都对应一条权威 GenBank 记录 |
+| 寡核苷酸退火 | 两条引物退火成带末端的短双链片段；也可反过来，给定要插入的序列和需要的末端，直接算出该订哪两条引物——sgRNA 间隔序列、linker、接头、标签都这么连。末端可从已酶切的载体直接取，产物可送入酶切连接与 Golden Gate 向导 |
 | 注释 | 300+ 常用元件的本地自动注释（DNA 精确与容错匹配，CDS 元件可按蛋白翻译匹配），6 框 ORF 与分子量/等电点 |
 | 克隆 | 单双酶切连接（同尾酶、补平/削平、去磷酸化）、插入片段、Gibson / NEBuilder HiFi / In-Fusion、Golden Gate（保真度评分、内部位点预警）、Gateway BP/LR/MultiSite LR、TA / GC / TOPO（TA、平端、定向）、LIC、Cre/lox 与 Flp/FRT 重组（切除、倒位、整合）、PCR、融合 PCR、定点突变（QuikChange 与 Q5 背靠背，附静默酶切位点推荐） |
 | 引物 | SantaLucia 1998 最邻近 + Owczarzy 2008 Mg²⁺/dNTP 盐校正（46 条参考引物 Tm 误差 < 0.01 °C），SantaLucia & Hicks 2004 动态规划发夹与二聚体 ΔG（平均误差 0.3–0.5 kcal/mol），酶切位点加保护碱基、同源臂引物设计，跨会话保存的引物库 |
 | 比对 | Sanger `.ab1`（Mott 修剪、杂合双峰、跨原点比对、氨基酸影响、多读长一致性与覆盖度）、FASTQ 读长比对、多序列比对（引导树 + 渐进式 profile 比对，DNA 与蛋白 BLOSUM62）、双序列全局/局部/半全局比对 |
 | 蛋白 | 反向翻译与 8 种宿主密码子优化（可避开指定酶切位点）、CAI 计算 |
 | 电泳 | 36 种商业 Ladder、0.5–3% 胶浓度、电压与时间、超螺旋/开环/线性构象、按质量计算亮度 |
+| 实验记录 | 一键把当前工作区导出成实验记录：构建体、特征、引物、按聚合酶分列的 PCR 程序、按酶活性数据推荐缓冲液的酶切体系、电泳泳道、构建谱系与序列——可导出 Markdown，或导出含图谱、可直接打印/存 PDF 的网页。每个经验公式都注明出处 |
 | AI | 自带密钥：OpenAI、Anthropic、DeepSeek、Gemini 或任意兼容端点；密钥仅存于本地浏览器；质粒上下文压缩；可一键执行的结构化动作卡片 |
 
 ### 界面
@@ -328,6 +332,24 @@ mapping taken from [OpenCloning](https://github.com/OpenCloning/OpenCloning_back
 `packages/opencloning/src/opencloning/catalogs/seva.tsv`, read 2026-10-27); only the 105 entries
 that name a GenBank accession are used. The sequences themselves are not redistributed — GATC
 fetches them from NCBI, as OpenCloning does.
+
+**Deliberately not implemented: Addgene and iGEM one-click import.** Both were on the roadmap and
+both were checked, in October 2026, before being dropped. Addgene's sequence files now sit behind a
+login, and its data API requires an account, so a browser-only application cannot fetch them for
+you; `media.addgene.org` does send `Access-Control-Allow-Origin: *`, so a sequence file you have
+already downloaded opens normally. The iGEM Registry has a clean JSON API
+(`api.registry.igem.org/v1/parts?name=BBa_…`, parts carry an SPDX licence, usually CC-BY-4.0) but
+it allows cross-origin requests only from `*.igem.org`, so it too is unreachable without a proxy —
+and running one would break the no-server promise. Both would work the moment either service opens
+up, or behind a proxy the user runs themselves. NCBI, by contrast, allows cross-origin requests,
+which is why fetching by accession and by coordinate range is built in.
+
+**刻意没做：Addgene 与 iGEM 一键导入。** 这两项原在路线图上，2026 年 10 月逐一核实后放弃。Addgene
+的序列文件现在需要登录，其数据 API 也要账号，纯前端应用无法代用户取；但 `media.addgene.org`
+带 `Access-Control-Allow-Origin: *`，已经下载到本地的序列文件可以正常打开。iGEM Registry 有干净的
+JSON 接口，零件自带 SPDX 许可证（多为 CC-BY-4.0），但只允许 `*.igem.org` 跨域，同样要架代理才能用，
+而架代理就违背了「不需要服务器」这一条。两者只要哪天放开，或用户自己架了代理，随时可以接上。
+NCBI 允许跨域，所以按登录号、按坐标区间取序列是内置的。
 
 **Used only as an independent reference.** None of this enters a GATC build; `npm run crosscheck`
 checks GATC's output against it, and the results are in [docs/CROSSCHECK.md](docs/CROSSCHECK.md):

@@ -13,6 +13,7 @@ import {
   exportProteinToFasta,
   exportProteinToGenPept,
   fetchFromNCBI,
+  parseAccessionQuery,
   isProteinFile,
   normalizeAccession,
   parseBioFile,
@@ -636,6 +637,83 @@ describe('NCBI import', () => {
     expect(protein.features[0].end).toBe(5);
     expect(requested).toContain('db=protein');
     expect(requested).toContain('rettype=gp');
+  });
+
+  it('reads a region off an accession, a URL and a descending range', () => {
+    expect(parseAccessionQuery('U00096.3:1000-1300')).toEqual({
+      accession: 'U00096.3',
+      db: 'nuccore',
+      region: { start: 1000, end: 1300, strand: 1 },
+    });
+    expect(parseAccessionQuery('U00096.3 1,000..1,300')?.region).toEqual({
+      start: 1000,
+      end: 1300,
+      strand: 1,
+    });
+    // GenBank writes a complement region as a descending range; so does this.
+    expect(parseAccessionQuery('U00096.3:1300-1000')?.region).toEqual({
+      start: 1000,
+      end: 1300,
+      strand: -1,
+    });
+    // An explicit sign wins over the direction the numbers imply.
+    expect(parseAccessionQuery('U00096.3:1300-1000(+)')?.region?.strand).toBe(1);
+    expect(
+      parseAccessionQuery('https://www.ncbi.nlm.nih.gov/nuccore/U00096.3?from=1000&to=1300&strand=true')
+        ?.region,
+    ).toEqual({ start: 1000, end: 1300, strand: -1 });
+    // A plain accession still parses, and carries no region.
+    expect(parseAccessionQuery('L09137.2')).toEqual({ accession: 'L09137.2', db: 'nuccore' });
+    expect(parseAccessionQuery('NP_000546.6')).toEqual({ accession: 'NP_000546.6', db: 'protein' });
+    expect(parseAccessionQuery('not an accession')).toBeNull();
+    expect(() => parseAccessionQuery('U00096.3:0-100')).toThrow(/positions start at 1/i);
+    expect(() => parseAccessionQuery('U00096.3:1-6000000')).toThrow(/5 Mb limit/i);
+  });
+
+  it('asks EFetch for a slice and marks the result as a fragment', async () => {
+    const sliced = [
+      'LOCUS       U00096                   301 bp    DNA     linear   BCT 14-FEB-2025',
+      'DEFINITION  Escherichia coli str. K-12 substr. MG1655, complete genome.',
+      'ACCESSION   U00096 REGION: 1000..1300',
+      'VERSION     U00096.3',
+      'FEATURES             Location/Qualifiers',
+      '     gene            1..50',
+      '                     /gene="thrA"',
+      'ORIGIN',
+      `        1 ${'acgt'.repeat(15)}`,
+      '//',
+      '',
+    ].join('\n');
+    let requested = '';
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      requested = String(url);
+      return new Response(sliced, { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const document = (await fetchFromNCBI('U00096.3:1300-1000', { fetchImpl })) as PlasmidDocument;
+    expect(requested).toContain('seq_start=1000');
+    expect(requested).toContain('seq_stop=1300');
+    expect(requested).toContain('strand=2');
+    expect(document.name).toBe('U00096.3_1000-1300_rc');
+    expect(document.topology).toBe('linear');
+    expect(document.description).toContain('REGION complement(1000..1300)');
+    expect(document.features).toHaveLength(1);
+
+    // An explicit region option overrides anything in the string.
+    await fetchFromNCBI('U00096.3', { fetchImpl, region: { start: 5, end: 9 } });
+    expect(requested).toContain('seq_start=5');
+    expect(requested).toContain('seq_stop=9');
+    expect(requested).not.toContain('strand=2');
+  });
+
+  it('refuses to slice a protein record', async () => {
+    await expect(
+      fetchFromNCBI('NP_000546.6', {
+        db: 'protein',
+        region: { start: 1, end: 10 },
+        fetchImpl: (async () => new Response('', { status: 200 })) as typeof fetch,
+      }),
+    ).rejects.toThrow(/nucleotide record/i);
   });
 
   it('reports missing accessions, network failures and oversized records', async () => {

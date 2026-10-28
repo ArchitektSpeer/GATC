@@ -207,6 +207,7 @@ export const OPERATION_LABEL: Record<string, string> = {
   soe_pcr: 'SOE-PCR',
   site_directed_mutagenesis: 'Site-directed Mutagenesis',
   blunting: 'Blunting',
+  oligo_annealing: 'Oligo Annealing',
   manual_edit: 'Manual Edit',
 };
 
@@ -221,6 +222,7 @@ export const OPERATION_TINT: Record<string, string> = {
   soe_pcr: '#a21caf',
   site_directed_mutagenesis: '#b45309',
   blunting: '#475569',
+  oligo_annealing: '#0d9488',
   manual_edit: '#15803d',
 };
 

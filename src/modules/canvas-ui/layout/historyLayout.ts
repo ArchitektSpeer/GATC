@@ -229,6 +229,8 @@ export function operationTitle(operation: string): string {
       return 'SOE-PCR';
     case 'site_directed_mutagenesis':
       return 'Site-directed mutagenesis';
+    case 'oligo_annealing':
+      return 'Oligo annealing';
     case 'blunting':
       return 'End blunting';
     case 'manual_edit':

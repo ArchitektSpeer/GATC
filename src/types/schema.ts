@@ -102,6 +102,7 @@ export type CloningOperationType =
   | 'soe_pcr'
   | 'site_directed_mutagenesis'
   | 'blunting'
+  | 'oligo_annealing'
   | 'manual_edit';
 
 export interface CloningHistoryNode {

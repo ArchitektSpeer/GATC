@@ -331,6 +331,59 @@ await check('反向翻译 / 密码子优化', async () => {
   return info.trim();
 });
 
+await check('NCBI 导入：区间解析（不联网）', async () => {
+  await closeDialogs();
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('NCBI');
+  await page.getByText('从 NCBI 导入（登录号）').click();
+  const box = page.getByPlaceholder(/L09137\.2 或/);
+  await box.fill('U00096.3:1300-1000');
+  await page.getByText(/区间 complement\(1000\.\.1300\)/).waitFor({ timeout: 5000 });
+  const hint = (await page.getByText(/区间 complement/).textContent()) ?? '';
+  // An out-of-range region has to say why, not fail silently at fetch time.
+  await box.fill('U00096.3:0-100');
+  await page.getByText(/区间起点从 1 开始|positions start at 1/).waitFor({ timeout: 5000 });
+  await shot('18-ncbi-region');
+  await closeDialogs();
+  return hint.trim();
+});
+
+await check('寡核苷酸退火：设计并生成双链片段', async () => {
+  await closeDialogs();
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('退火');
+  await page.getByText('寡核苷酸退火（短片段直接连接）').click();
+  await page.getByPlaceholder('GTCAGGGTTCTGGATATCTG').fill('GGTCAGGGTTCTGGATATCTG');
+  const ends = page.locator('.fixed.inset-0 input.mono');
+  await ends.nth(0).fill('CACC');
+  await ends.nth(1).fill('AAAC');
+  await page.getByText(/21 bp 配对/).waitFor({ timeout: 5000 });
+  const badges = (await page.locator('.fixed.inset-0').innerText()).match(/21 bp 配对[\s\S]{0,80}/)?.[0] ?? '';
+  await shot('19-oligo-anneal');
+  await page.getByRole('button', { name: /作为双链片段打开/ }).click();
+  const t = await toast();
+  if (!/已生成双链片段/.test(t)) throw new Error(t);
+  return `${badges.replace(/\s+/g, ' ')} | ${t}`;
+});
+
+await check('导出实验记录（Markdown + 网页）', async () => {
+  await closeDialogs();
+  await tab('pUC19');
+  const md = await downloadVia('实验记录 Markdown');
+  const text = readFileSync(md, 'utf8');
+  for (const needed of ['# 实验记录：pUC19', '## 1. 构建体', '2,686 bp', '依据与声明']) {
+    if (!text.includes(needed)) throw new Error(`report is missing ${needed}`);
+  }
+  await view('环形图谱');
+  await page.locator('svg').first().waitFor();
+  const html = await downloadVia('实验记录网页');
+  const page2 = readFileSync(html, 'utf8');
+  if (!page2.startsWith('<!doctype html>')) throw new Error('not an HTML document');
+  if (!/<figure><svg/.test(page2)) throw new Error('the map was not embedded');
+  await shot('20-report');
+  return `${text.length} chars markdown, ${page2.length} chars html`;
+});
+
 await browser.close();
 const report = { url: URL, passed: results.filter((r) => r.ok).length, total: results.length, results, consoleErrors: errors.slice(0, 30) };
 writeFileSync(`${out}/report.json`, JSON.stringify(report, null, 2));

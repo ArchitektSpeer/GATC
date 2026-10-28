@@ -22,6 +22,7 @@ const OPERATION_LABEL: Record<CloningHistoryNode['operation'], string> = {
   soe_pcr: '融合 PCR',
   site_directed_mutagenesis: '定点突变',
   blunting: '末端补平/削平',
+  oligo_annealing: '寡核苷酸退火',
   manual_edit: '编辑',
 };
 

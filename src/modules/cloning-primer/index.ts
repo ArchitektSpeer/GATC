@@ -82,6 +82,14 @@ export {
   simulateTOPOCloning,
 } from './assembly';
 
+export type {
+  DuplexEnd,
+  OligoAnnealingOptions,
+  OligoAnnealingResult,
+  AnnealedOligoDesign,
+} from './oligo';
+export { annealOligos, designAnnealedOligos, describeEnd } from './oligo';
+
 export type { HomologyAssemblyKit } from './fragment-assembly';
 export {
   designHomologyAssemblyPrimers,

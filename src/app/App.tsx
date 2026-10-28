@@ -56,6 +56,8 @@ import { HistoryView } from './history';
 import { DemoPlayer, startDemo } from './demo';
 import { NcbiDialog, PrimerLibraryDialog } from './library';
 import { VectorLibraryDialog } from './VectorLibrary';
+import { OligoAnnealDialog } from './OligoAnneal';
+import { buildReportMarkdown, reportToHtml } from './report';
 import { loadSampleLibrary } from './samples';
 import { download, openProject, recordSave, saveFile, saveProject } from './files';
 import { SessionManager, requestCloseDoc } from './session';
@@ -68,7 +70,9 @@ import type { SequenceEdit } from '../modules/seq-engine';
 const GEL_BOX_CM = 20;
 
 
-type ExportFormat = 'project' | 'gbk' | 'dna' | 'fasta' | 'json' | 'svg' | 'png' | 'pdf' | 'print-map' | 'print-seq';
+type ExportFormat =
+  | 'project' | 'gbk' | 'dna' | 'fasta' | 'json' | 'svg' | 'png' | 'pdf' | 'print-map' | 'print-seq'
+  | 'report-md' | 'report-html';
 
 const NO_TRACES: SangerTraceData[] = [];
 
@@ -271,6 +275,28 @@ export default function App() {
     if (fmt === 'project') void saveProject();
     if ((fmt === 'gbk' || fmt === 'fasta') && isDirty(s, doc)) s.notify(`已导出 ${fmt === 'gbk' ? 'GenBank' : 'FASTA'}；该格式不保留全部信息，「未保存」标记保留。完整保存请用 Ctrl+S`);
     if (fmt === 'print-seq') return printSequenceText(doc, { bpPerLine: 60, showFeatures: true });
+    if (fmt === 'report-md' || fmt === 'report-html') {
+      const markdown = buildReportMarkdown({
+        doc,
+        cutSites,
+        traces: s.traces[doc.id] ?? [],
+        gelSamples: s.gelSamples,
+        gelParams: s.gelParams,
+      });
+      if (fmt === 'report-md') {
+        download(`${doc.name}-实验记录.md`, markdown, 'text/markdown;charset=utf-8');
+      } else {
+        // The map only exists once it has been drawn; without it the record is still complete.
+        const svg = mapRef.current?.outerHTML;
+        if (!svg) s.notify('实验记录已导出，但当前视图没有图谱；切到环形图谱再导出可一并收录');
+        download(
+          `${doc.name}-实验记录.html`,
+          reportToHtml(markdown, { title: `${doc.name} 实验记录`, mapSvg: svg }),
+          'text/html;charset=utf-8',
+        );
+      }
+      return;
+    }
     const figure = fmt === 'svg' || fmt === 'png' || fmt === 'pdf' || fmt === 'print-map';
     if (figure && mapRef.current) {
       if (fmt === 'svg') exportSvgToPublicationFile(mapRef.current, `${doc.name}.svg`);
@@ -439,6 +465,9 @@ export default function App() {
             { label: '图谱 PNG 300 dpi', onSelect: () => exportAs('png') },
             { label: '图谱 PDF（矢量）', onSelect: () => exportAs('pdf') },
             { divider: true },
+            { label: '实验记录 Markdown（.md）', hint: '引物、PCR 程序、酶切体系、电泳、谱系', onSelect: () => exportAs('report-md') },
+            { label: '实验记录网页（.html，含图谱，可打印/存 PDF）', onSelect: () => exportAs('report-html') },
+            { divider: true },
             { label: '打印图谱…', onSelect: () => exportAs('print-map') },
             { label: '打印序列…', onSelect: () => exportAs('print-seq') },
           ]}
@@ -461,6 +490,7 @@ export default function App() {
             { label: '查找序列 / 蛋白模式', hint: 'Ctrl+F', disabled: !doc, onSelect: () => s.setTool('find') },
             { label: '载体库', hint: '32 个内置载体', onSelect: () => s.setTool('vectors') },
             { label: '引物库', onSelect: () => s.setTool('primerlib') },
+            { label: '寡核苷酸退火', hint: '两条引物退火成短双链片段', onSelect: () => s.setTool('oligo') },
             { label: '从 NCBI 导入（登录号）', onSelect: () => s.setTool('ncbi') },
             { label: '反向翻译 / 密码子优化', onSelect: () => s.setTool('backtranslate') },
             { divider: true },
@@ -614,6 +644,7 @@ export default function App() {
       <NcbiDialog />
       <PrimerLibraryDialog />
       <VectorLibraryDialog />
+      <OligoAnnealDialog />
       <BackTranslateDialog />
       <CommandPalette
         doc={doc}
@@ -707,6 +738,9 @@ function CommandPalette({
               <Command.Item onSelect={run(() => st().setTool('ncbi'))}>从 NCBI 导入（登录号）</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('vectors'))}>载体库（内置质粒）</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('primerlib'))}>引物库</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('oligo'))}>寡核苷酸退火（短片段直接连接）</Command.Item>
+              <Command.Item onSelect={run(() => onExport('report-md'))}>导出实验记录 Markdown</Command.Item>
+              <Command.Item onSelect={run(() => onExport('report-html'))}>导出实验记录网页（含图谱）</Command.Item>
               <Command.Item onSelect={run(() => onExport('print-map'))}>打印图谱</Command.Item>
               <Command.Item onSelect={run(() => onExport('print-seq'))}>打印序列</Command.Item>
               <Command.Item onSelect={run(() => onExport('dna'))}>导出 SnapGene .dna</Command.Item>

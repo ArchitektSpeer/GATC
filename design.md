@@ -65,8 +65,10 @@
 | 限制性酶 | 酶集、位点搜索、按切点数与缓冲液过滤、甲基化阻断判定、自定义酶集 | `src/modules/seq-engine/`、`src/app/panels.tsx` |
 | 克隆与引物 | 引物设计、PCR/融合 PCR、酶切连接、Gibson、Golden Gate、定点突变、Gateway、TA/TOPO、LIC、Cre/Flp | `src/modules/cloning-primer/`、`src/app/CloningWizard.tsx` |
 | 测序与比对 | AB1 峰图读取、质量处理、环状参考比对、突变影响注释、多序列比对 | `src/modules/alignment-gel/` |
-| 输出 | `.dna`、GenBank、FASTA、JSON；图谱 SVG、PNG、PDF | `src/app/App.tsx` |
+| 输出 | `.dna`、GenBank、FASTA、JSON；图谱 SVG、PNG、PDF；实验记录 Markdown / 网页 | `src/app/App.tsx`、`src/app/report.ts` |
 | 载体库 | 32 个内置载体（GenBank 记录随应用分发，离线可开）+ 105 个 SEVA 标准载体（按登录号从 NCBI 获取）；按分类、名称、登录号、抗性标记检索 | `src/app/vectors/`、`src/app/VectorLibrary.tsx` |
+| 寡核苷酸退火 | 两条引物退火成带末端的短双链片段；或给定插入序列与所需末端反推该订的两条引物；末端可取自已酶切片段 | `src/modules/cloning-primer/oligo.ts`、`src/app/OligoAnneal.tsx` |
+| 实验记录 | 一键导出构建体、特征、引物、PCR 程序、酶切体系、电泳泳道、谱系与序列，输出 Markdown 或可打印网页（含图谱） | `src/app/report.ts` |
 | AI | 用户自带 API 配置、上下文摘要、流式回答、可点击动作卡片 | `src/modules/ai-copilot/` |
 | 运行形态 | Vite Web、PWA 配置、Tauri 桌面壳、Worker 计算接口 | `vite.config.ts`、`src-tauri/`、`src/app/bio-*` |
 
@@ -98,6 +100,10 @@
 - 记录每个依赖的版本、来源和实际使用范围。依赖清单以 `package.json` 与锁文件为准。
 - 逐项核实许可证与 GPL-3.0-or-later 的兼容性。`aioli` 本身的许可证不代表它加载的各个 WASM 工具的许可证，需要分别确认。
 - 内置数据（酶库、特征库、Ladder 条带、连接保真度数据等）同样记录来源、版本与许可。
+- 外部数据源只接入允许跨域的服务。NCBI E-utilities 允许跨域，因此按登录号与按坐标区间取序列
+  （`seq_start` / `seq_stop` / `strand`）内置；Addgene 的序列已需登录、API 需账号，iGEM Registry
+  的 API 只对 `*.igem.org` 放开跨域，两者都要自建代理才能用，与「不需要服务器」相悖，因此不做，
+  README 致谢中说明了核实过程与时间。
 - 载体库只收录有权威 GenBank 登录号的载体：NCBI 记录可自由再分发，而 pET-28a、pcDNA3.1、pQE 等
   仅有厂商发布的序列，没有这样的记录，因此不内置，由用户用「从 NCBI 导入」或直接打开厂商文件。
   新增条目由 `node scripts/fetch-vector-library.mjs` 抓取，测试校验目录声明的长度与记录一致。

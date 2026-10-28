@@ -5,7 +5,8 @@
 import { useMemo, useState } from 'react';
 import { Download, Plus, Search, Trash2 } from 'lucide-react';
 import type { PlasmidDocument, Primer } from '../types/schema';
-import { fetchFromNCBI, normalizeAccession } from '../modules/io-adapter';
+import { fetchFromNCBI, formatRegion, parseAccessionQuery } from '../modules/io-adapter';
+import type { NcbiRegion } from '../modules/io-adapter';
 import type { PrimerBindingHit } from '../modules/cloning-primer';
 import { evaluateOligoThermodynamics } from '../modules/cloning-primer';
 import { callBio } from './bio-client';
@@ -13,28 +14,76 @@ import { addPrimersToDoc, replaceIfCurrent, uid } from './actions';
 import { selectActiveDoc, useWorkbench, type LibraryPrimer } from './store';
 import { Badge, Button, Dialog, Field, Input } from './ui';
 
-const EXAMPLES = ['L09137', 'U55762', 'NM_000546', 'NP_000537'];
+const EXAMPLES = ['L09137', 'U55762', 'NM_000546', 'NP_000537', 'U00096.3:1000-2000'];
+
+/** What the dialog will ask NCBI for, or why it cannot ask yet. */
+type Resolved =
+  | { ok: true; accession: string; db: 'nuccore' | 'protein'; region?: NcbiRegion }
+  | { ok: false; reason: string | null };
+
+function resolve(input: string, start: string, end: string, minus: boolean): Resolved {
+  const text = input.trim();
+  if (!text) return { ok: false, reason: null };
+  let parsed;
+  try {
+    parsed = parseAccessionQuery(text);
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+  if (!parsed) return { ok: false, reason: '无法识别的登录号或 NCBI 链接' };
+  // The explicit range fields win over a range written into the accession.
+  if (start.trim() || end.trim()) {
+    const from = Number(start);
+    const to = Number(end);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || !start.trim() || !end.trim()) {
+      return { ok: false, reason: '区间需要同时填写起点和终点' };
+    }
+    if (parsed.db === 'protein') return { ok: false, reason: 'NCBI 只能按区间截取核酸记录' };
+    if (from < 1 || to < from) return { ok: false, reason: '区间起点从 1 开始，且终点不能小于起点' };
+    if (to - from + 1 > 5_000_000) return { ok: false, reason: '区间超过 5 Mb 上限' };
+    return { ok: true, ...parsed, region: { start: from, end: to, strand: minus ? -1 : 1 } };
+  }
+  return { ok: true, ...parsed };
+}
 
 export function NcbiDialog() {
   const open = useWorkbench((s) => s.tool === 'ncbi');
   const setTool = useWorkbench((s) => s.setTool);
   const [input, setInput] = useState('');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [minus, setMinus] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const parsed = input.trim() ? normalizeAccession(input.trim()) : null;
+  const resolved = resolve(input, start, end, minus);
+
+  const hint = !resolved.ok
+    ? (resolved.reason ?? '核酸（nuccore）或蛋白（protein）均可；核酸还可只取一段区间')
+    : resolved.region
+      ? `核酸库：${resolved.accession}，区间 ${formatRegion(resolved.region)}（${(
+          resolved.region.end -
+          resolved.region.start +
+          1
+        ).toLocaleString()} bp）`
+      : `${resolved.db === 'protein' ? '蛋白' : '核酸'}库：${resolved.accession}（整条记录）`;
 
   const fetchIt = async () => {
-    if (!parsed) return setError('无法识别的登录号或 NCBI 链接');
+    if (!resolved.ok) return setError(resolved.reason ?? '请输入登录号');
     setBusy(true);
     setError(null);
     try {
-      const result = await fetchFromNCBI(parsed.accession, { db: parsed.db });
+      const result = await fetchFromNCBI(resolved.accession, {
+        db: resolved.db,
+        region: resolved.region,
+      });
       const st = useWorkbench.getState();
       if ('topology' in result) st.openDocs([result]);
       else st.openProteins([result]);
       st.notify(`已从 NCBI 导入 ${result.name}（${result.sequence.length.toLocaleString()} ${'topology' in result ? 'bp' : 'aa'}）`);
       setTool(null);
       setInput('');
+      setStart('');
+      setEnd('');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -45,8 +94,22 @@ export function NcbiDialog() {
   return (
     <Dialog open={open} onClose={() => setTool(null)} title="从 NCBI 导入" width={560}>
       <div className="flex flex-col gap-3">
-        <Field label="登录号或 NCBI 链接" hint={parsed ? `${parsed.db === 'protein' ? '蛋白' : '核酸'}库：${parsed.accession}` : '核酸（nuccore）或蛋白（protein）均可'}>
-          <Input autoFocus value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchIt()} placeholder="L09137.2" />
+        <Field label="登录号、NCBI 链接或区间" hint={hint}>
+          <Input autoFocus value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchIt()} placeholder="L09137.2 或 U00096.3:1000-2000" />
+        </Field>
+        <Field
+          label="只取一段（可留空）"
+          hint="染色体记录动辄数 Mb，按区间截取就只下载目标片段；特征坐标由 NCBI 重新编号，结果按线性片段打开"
+        >
+          <div className="flex items-center gap-2">
+            <Input className="w-28" inputMode="numeric" placeholder="起点" value={start} onChange={(e) => setStart(e.target.value.replace(/[^\d]/g, ''))} />
+            <span className="text-[var(--muted)]">..</span>
+            <Input className="w-28" inputMode="numeric" placeholder="终点" value={end} onChange={(e) => setEnd(e.target.value.replace(/[^\d]/g, ''))} />
+            <label className="flex items-center gap-1 text-xs">
+              <input type="checkbox" checked={minus} onChange={(e) => setMinus(e.target.checked)} />
+              反向链
+            </label>
+          </div>
         </Field>
         <div className="flex flex-wrap gap-1 text-xs">
           示例：
@@ -58,7 +121,7 @@ export function NcbiDialog() {
         </div>
         {error && <div className="text-xs text-red-600">{error}</div>}
         <div className="flex justify-end">
-          <Button variant="primary" disabled={busy || !parsed} onClick={fetchIt}>
+          <Button variant="primary" disabled={busy || !resolved.ok} onClick={fetchIt}>
             <Download size={14} /> {busy ? '下载中…' : '导入'}
           </Button>
         </div>

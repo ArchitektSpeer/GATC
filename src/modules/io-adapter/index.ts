@@ -2337,6 +2337,7 @@ const SNAP_GENE_OPERATIONS: Record<CloningOperationType, string> = {
   soe_pcr: 'amplifyFragment',
   site_directed_mutagenesis: 'primerDirectedMutagenesis',
   blunting: 'replace',
+  oligo_annealing: 'replace',
   manual_edit: 'replace',
 };
 
@@ -3995,6 +3996,97 @@ function accessionFromInput(input: string): { accession: string; hint?: 'nuccore
 }
 
 /**
+ * A 1-based, both-ends-inclusive slice of a record, in the same coordinates
+ * EFetch's `seq_start`/`seq_stop` use and the same ones the interface shows.
+ */
+export interface NcbiRegion {
+  start: number;
+  end: number;
+  /** -1 asks EFetch for the minus strand, which it returns already reverse-complemented. */
+  strand?: 1 | -1;
+}
+
+/**
+ * Pull a region off the end of an accession query. Accepts `U00096.3:1000-1300`,
+ * `U00096.3:1000..1300`, `U00096.3 1000..1300` and, as GenBank itself writes a
+ * complement region, a descending range such as `U00096.3:1300-1000`. An explicit
+ * `(+)`/`(-)` suffix wins over the direction implied by the numbers.
+ */
+function regionFromInput(input: string): { rest: string; region?: NcbiRegion } {
+  const trimmed = input.trim();
+  const match = /^(.*?)[\s:]+c?(\d[\d,]*)\s*(?:-|\.\.|\.\.\.)\s*(\d[\d,]*)\s*(?:\(([+-])\))?$/.exec(
+    trimmed,
+  );
+  if (!match) return { rest: trimmed };
+  const first = Number(match[2].replace(/,/g, ''));
+  const second = Number(match[3].replace(/,/g, ''));
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return { rest: trimmed };
+  const sign = match[4];
+  const descending = first > second;
+  const start = descending ? second : first;
+  const end = descending ? first : second;
+  const strand: 1 | -1 = sign ? (sign === '-' ? -1 : 1) : descending ? -1 : 1;
+  return { rest: match[1].trim(), region: { start, end, strand } };
+}
+
+/** Reads `from`/`to`/`strand` off an NCBI sequence-viewer URL. */
+function regionFromUrl(input: string): NcbiRegion | undefined {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    return undefined;
+  }
+  const from = Number(url.searchParams.get('from') ?? url.searchParams.get('seq_start') ?? '');
+  const to = Number(url.searchParams.get('to') ?? url.searchParams.get('seq_stop') ?? '');
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from < 1 || to < 1) return undefined;
+  const strandParameter = (url.searchParams.get('strand') ?? '').toLowerCase();
+  const minus = strandParameter === 'true' || strandParameter === '2' || strandParameter === '-1';
+  return { start: Math.min(from, to), end: Math.max(from, to), strand: minus ? -1 : 1 };
+}
+
+function validateRegion(region: NcbiRegion): NcbiRegion {
+  const start = Math.trunc(region.start);
+  const end = Math.trunc(region.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 1 || end < 1) {
+    throw new Error(`Invalid NCBI region: ${region.start}..${region.end} (positions start at 1)`);
+  }
+  if (end < start) {
+    throw new Error(`Invalid NCBI region: ${start}..${end} ends before it starts`);
+  }
+  const span = end - start + 1;
+  if (span > NCBI_MAX_SEQUENCE_LENGTH) {
+    throw new Error(`NCBI region ${start}..${end} exceeds the 5 Mb limit (${span} bp)`);
+  }
+  return { start, end, strand: region.strand === -1 ? -1 : 1 };
+}
+
+/** Formats a region the way GenBank's own REGION line does. */
+export function formatRegion(region: NcbiRegion): string {
+  const span = `${region.start}..${region.end}`;
+  return region.strand === -1 ? `complement(${span})` : span;
+}
+
+/**
+ * Normalise an accession, an NCBI web URL or an accession with a region suffix
+ * into the accession, the database to query and the region to slice out.
+ * Returns null when nothing accession-shaped is there, and throws when a region
+ * is present but unusable, so the caller can show the reason.
+ */
+export function parseAccessionQuery(
+  input: string,
+): { accession: string; db: 'nuccore' | 'protein'; region?: NcbiRegion } | null {
+  if (typeof input !== 'string') return null;
+  const fromUrl = regionFromUrl(input);
+  const { rest, region } = fromUrl ? { rest: input, region: fromUrl } : regionFromInput(input);
+  const base = normalizeAccession(rest);
+  if (!base) return null;
+  if (!region) return base;
+  if (base.db === 'protein') return base; // EFetch slices nucleotides only.
+  return { ...base, region: validateRegion(region) };
+}
+
+/**
  * Normalise an accession or an NCBI web URL into a bare accession and the
  * database that should be queried.
  */
@@ -4030,14 +4122,25 @@ export async function fetchFromNCBI(
     db?: 'nuccore' | 'protein';
     fetchImpl?: typeof fetch;
     apiKey?: string;
+    /** 1-based, inclusive slice. EFetch returns only this stretch, with the features rebased onto it. */
+    region?: NcbiRegion;
   } = {},
 ): Promise<PlasmidDocument | ProteinDocument> {
-  const normalized = normalizeAccession(accession);
+  const parsed = parseAccessionQuery(accession);
+  const normalized = parsed ?? normalizeAccession(accession);
   if (!normalized) {
     throw new Error(`Invalid NCBI accession: ${accession}`);
   }
   const db = opts.db ?? normalized.db;
   const id = normalized.accession;
+  const region = opts.region
+    ? validateRegion(opts.region)
+    : parsed && 'region' in parsed
+      ? parsed.region
+      : undefined;
+  if (region && db === 'protein') {
+    throw new Error('NCBI can only slice a region out of a nucleotide record');
+  }
   const fetchImpl =
     opts.fetchImpl ??
     (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : undefined);
@@ -4051,6 +4154,12 @@ export async function fetchFromNCBI(
     rettype: db === 'protein' ? 'gp' : 'gbwithparts',
     retmode: 'text',
   });
+  if (region) {
+    // EFetch counts from 1 and includes both ends, so the region passes straight through.
+    parameters.set('seq_start', String(region.start));
+    parameters.set('seq_stop', String(region.end));
+    if (region.strand === -1) parameters.set('strand', '2');
+  }
   if (opts.apiKey) parameters.set('api_key', opts.apiKey);
   const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?${parameters.toString()}`;
 
@@ -4119,7 +4228,18 @@ export async function fetchFromNCBI(
       `NCBI sequence ${id} exceeds the 5 Mb limit (${document.sequence.length} bp)`,
     );
   }
-  return document;
+  if (!region) return document;
+  // A slice out of a chromosome is a fragment, never a plasmid: say so in the name and
+  // keep it linear so cloning tools do not treat the cut ends as joined.
+  const label = formatRegion(region);
+  return {
+    ...document,
+    name: `${id}_${region.start}-${region.end}${region.strand === -1 ? '_rc' : ''}`,
+    topology: 'linear',
+    description: document.description
+      ? `${document.description} [REGION ${label}]`
+      : `${id} REGION ${label}`,
+  };
 }
 
 
