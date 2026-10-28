@@ -601,6 +601,43 @@ await check('OpenCloning 策略与 pydna 脚本导出，并把策略读回来', 
   return `${strategy.sequences.length} sequences round-tripped; ${script.length} chars of python`;
 });
 
+await check('窄窗口：图谱自适应，控件够大', async () => {
+  await closeDialogs();
+  await page.setViewportSize({ width: 820, height: 760 });
+  await view('环形图谱');
+  await page.waitForTimeout(2000);
+  const report = await page.evaluate(() => {
+    const svg = [...document.querySelectorAll('svg')].find((s) => Number(s.getAttribute('width')) > 300);
+    let pane = svg?.parentElement ?? null;
+    while (pane && getComputedStyle(pane).overflow === 'visible') pane = pane.parentElement;
+    const s = svg?.getBoundingClientRect();
+    const p = pane?.getBoundingClientRect();
+    // Anything a person clicks has to be big enough to hit.
+    const tiny = [];
+    for (const el of document.querySelectorAll('button, input, select')) {
+      if (el.className && String(el.className).includes('sr-only')) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if (r.width < 16 || r.height < 16) tiny.push(`${el.getAttribute('aria-label') || el.tagName}:${Math.round(r.width)}x${Math.round(r.height)}`);
+    }
+    return {
+      map: s && p ? { w: Math.round(s.width), h: Math.round(s.height), paneW: Math.round(p.width), paneH: Math.round(p.height) } : null,
+      tiny: [...new Set(tiny)],
+      hScroll: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    };
+  });
+  if (!report.map) throw new Error('the map was not found');
+  if (report.map.w > report.map.paneW + 2 || report.map.h > report.map.paneH + 2) {
+    throw new Error(`the map does not fit its pane: ${report.map.w}x${report.map.h} in ${report.map.paneW}x${report.map.paneH}`);
+  }
+  if (report.hScroll) throw new Error('the page scrolls sideways at 820 px');
+  if (report.tiny.length) throw new Error(`controls too small to hit: ${report.tiny.join(', ')}`);
+  await shot('28-narrow-map');
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.waitForTimeout(600);
+  return `map ${report.map.w}x${report.map.h} fits ${report.map.paneW}x${report.map.paneH}`;
+});
+
 await browser.close();
 const report = { url: URL, passed: results.filter((r) => r.ok).length, total: results.length, results, consoleErrors: errors.slice(0, 30) };
 writeFileSync(`${out}/report.json`, JSON.stringify(report, null, 2));

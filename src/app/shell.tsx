@@ -166,7 +166,7 @@ export function DocTabs({ onOpen, onClose }: { onOpen: () => void; onClose: (id:
             </span>
           )}
           <span className="shrink-0 text-[var(--muted)]">{d.length} bp</span>
-          <button className="shrink-0 rounded opacity-40 hover:bg-slate-200 hover:opacity-100 dark:hover:bg-slate-700" onClick={(e) => (e.stopPropagation(), onClose(d.id))} aria-label="关闭">
+          <button className="-m-1 shrink-0 rounded p-1 opacity-40 hover:bg-slate-200 hover:opacity-100 dark:hover:bg-slate-700" onClick={(e) => (e.stopPropagation(), onClose(d.id))} aria-label="关闭">
             <X size={12} />
           </button>
         </div>
@@ -175,7 +175,7 @@ export function DocTabs({ onOpen, onClose }: { onOpen: () => void; onClose: (id:
         <div key={p.id} className={tab(p.id === activeProteinId, 'green')} onClick={() => s.setActiveProtein(p.id)} title={`${p.name} · ${p.sequence.length} aa`}>
           <span className="truncate">{p.name}</span>
           <span className="shrink-0 text-[var(--muted)]">{p.sequence.length} aa</span>
-          <button className="shrink-0 rounded opacity-40 hover:bg-slate-200 hover:opacity-100 dark:hover:bg-slate-700" onClick={(e) => (e.stopPropagation(), s.closeProtein(p.id))} aria-label="关闭">
+          <button className="-m-1 shrink-0 rounded p-1 opacity-40 hover:bg-slate-200 hover:opacity-100 dark:hover:bg-slate-700" onClick={(e) => (e.stopPropagation(), s.closeProtein(p.id))} aria-label="关闭">
             <X size={12} />
           </button>
         </div>

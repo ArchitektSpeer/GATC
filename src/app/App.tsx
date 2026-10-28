@@ -106,6 +106,20 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const [mainHeight, setMainHeight] = useState(640);
+  // The circular map is drawn at a fixed size, so on a small window it would need
+  // scrolling in both directions; it is sized to whatever pane it lands in instead.
+  const [mapPane, setMapPane] = useState({ width: 1000, height: 760 });
+  const mapObserver = useRef<ResizeObserver | null>(null);
+  const mapPaneRef = useCallback((el: HTMLDivElement | null) => {
+    mapObserver.current?.disconnect();
+    mapObserver.current = null;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setMapPane({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    mapObserver.current = ro;
+  }, []);
   useEffect(() => {
     const el = mainRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -447,9 +461,18 @@ export default function App() {
         )}
       </div>
       {/* m-auto centres the map while keeping all of it reachable by scrolling when it is larger than the pane. */}
-      <div className="flex min-h-0 flex-1 overflow-auto">
+      <div ref={mapPaneRef} className="flex min-h-0 flex-1 overflow-auto">
         <div className="m-auto">
-          {linearMap ? <LinearPlasmidMap {...mapProps} width={Math.max(640, mainHeight * 1.4)} /> : <CircularPlasmidMap {...mapProps} showPrimers={s.mapOptions.showPrimers !== false} />}
+          {linearMap ? (
+            <LinearPlasmidMap {...mapProps} width={Math.max(640, mainHeight * 1.4)} />
+          ) : (
+            // The canvas is 1.3x as wide as it is tall, to leave room for the name columns.
+            <CircularPlasmidMap
+              {...mapProps}
+              size={Math.round(Math.min(760, Math.max(360, Math.min(mapPane.height - 8, (mapPane.width - 8) / 1.3))))}
+              showPrimers={s.mapOptions.showPrimers !== false}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -616,7 +639,11 @@ export default function App() {
                     {s.gelSamples.map((g, i) => (
                       <span key={g.id ?? i} className="inline-flex items-center gap-1 rounded bg-[var(--bg)] px-1.5 py-0.5">
                         {g.label}
-                        <button onClick={() => s.setGelSamples(s.gelSamples.filter((_, j) => j !== i))} aria-label="移除泳道">
+                        <button
+                          className="-m-1 rounded p-1 text-[var(--muted)] hover:bg-[var(--panel)] hover:text-red-600"
+                          onClick={() => s.setGelSamples(s.gelSamples.filter((_, j) => j !== i))}
+                          aria-label="移除泳道"
+                        >
                           <X size={11} />
                         </button>
                       </span>

@@ -121,8 +121,11 @@ export function VirtualGelSimulator({
     : null;
 
   const css = `
-    .osg-gel-range { -webkit-appearance: none; appearance: none; width: 100%; height: 5px; border-radius: 999px; outline: none; cursor: pointer; }
-    .osg-gel-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: ${tokens.panel}; border: 2px solid ${tokens.accent}; box-shadow: 0 1px 3px ${tokens.shadow}; cursor: pointer; }
+    /* The track stays 5 px, but the control itself is tall enough to grab. */
+    .osg-gel-range { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; outline: none; cursor: pointer; }
+    .osg-gel-range::-webkit-slider-runnable-track { height: 5px; border-radius: 999px; background: var(--osg-track); }
+    .osg-gel-range::-moz-range-track { height: 5px; border-radius: 999px; background: var(--osg-track); }
+    .osg-gel-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; margin-top: -4.5px; width: 14px; height: 14px; border-radius: 50%; background: ${tokens.panel}; border: 2px solid ${tokens.accent}; box-shadow: 0 1px 3px ${tokens.shadow}; cursor: pointer; }
     .osg-gel-range::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: ${tokens.panel}; border: 2px solid ${tokens.accent}; box-shadow: 0 1px 3px ${tokens.shadow}; cursor: pointer; }
     .osg-gel-mode { transition: background 160ms ease, color 160ms ease, border-color 160ms ease; }
   `;
@@ -573,9 +576,11 @@ function Slider({
         step={step}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        style={{
-          background: `linear-gradient(90deg, ${tokens.accent} 0%, ${tokens.accent} ${percent}%, ${tokens.faint} ${percent}%, ${tokens.faint} 100%)`,
-        }}
+        style={
+          {
+            '--osg-track': `linear-gradient(90deg, ${tokens.accent} 0%, ${tokens.accent} ${percent}%, ${tokens.faint} ${percent}%, ${tokens.faint} 100%)`,
+          } as React.CSSProperties
+        }
       />
     </label>
   );
