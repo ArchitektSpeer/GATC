@@ -420,6 +420,73 @@ await check('MoClo 矩阵：语法表与元件设计', async () => {
   return `12 plant sites + 8 YTK sites shown; ${t}`;
 });
 
+await check('CRISPR 打靶：靶点扫描与脱靶检查', async () => {
+  await closeDialogs();
+  await tab('pEGFP-N1');
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('基因组编辑');
+  await page.getByText('基因组编辑（CRISPR 打靶 / 同源重组）').click();
+  const dialog = page.locator('.fixed.inset-0').last();
+  await dialog.getByRole('button', { name: /扫描整条序列/ }).click();
+  const found = await toast();
+  if (!/找到 \d+ 个 SpCas9 靶点/.test(found)) throw new Error(found);
+  const rows = await dialog.locator('tbody tr').count();
+  if (!rows) throw new Error('no target rows');
+
+  // Every listed spacer must be 20 nt and sit next to an NGG PAM.
+  const first = await dialog.locator('tbody tr').first().innerText();
+  const spacer = first.match(/\b[ACGT]{20}\b/)?.[0];
+  const pam = first.match(/\b[ACGT]{3}\b/g)?.find((x) => /GG$/.test(x));
+  if (!spacer || !pam) throw new Error(`row does not show a spacer and an NGG PAM: ${first.replace(/\n/g, ' ')}`);
+
+  await dialog.getByRole('button', { name: /查脱靶/ }).click();
+  await dialog.getByText(/已打开的序列中无其他匹配|错配位点/).first().waitFor({ timeout: 30000 });
+  await shot('22-crispr');
+
+  // Cas12a has its PAM on the other side and a staggered cut, which the UI must say.
+  await dialog.getByLabel('核酸酶').selectOption('Cas12a');
+  await dialog.getByText('切点为近似值').waitFor({ timeout: 5000 });
+  if (!/PAM TTTV/.test(await dialog.innerText())) throw new Error('Cas12a PAM not shown');
+
+  // Handing a spacer to the annealing tool has to arrive there.
+  await dialog.getByLabel('核酸酶').selectOption('SpCas9');
+  await dialog.getByRole('button', { name: /扫描整条序列/ }).click();
+  await dialog.locator('tbody tr').first().waitFor({ timeout: 10000 });
+  await dialog.locator('tbody tr').first().getByRole('button', { name: /做成退火 Oligo/ }).click();
+  const oligo = page.locator('.fixed.inset-0').last();
+  await oligo.getByText('寡核苷酸退火', { exact: false }).first().waitFor({ timeout: 5000 });
+  const handed = await oligo.locator('textarea').first().inputValue();
+  if (handed.length !== 20) throw new Error(`spacer did not arrive in the oligo tool: "${handed}"`);
+  await closeDialogs();
+  return `${rows} 个靶点，spacer ${spacer} PAM ${pam}`;
+});
+
+await check('同源重组：敲除设计与鉴定引物', async () => {
+  await closeDialogs();
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('基因组编辑');
+  await page.getByText('基因组编辑（CRISPR 打靶 / 同源重组）').click();
+  const dialog = page.locator('.fixed.inset-0').last();
+  await dialog.getByRole('button', { name: '同源重组敲除 / 敲入' }).click();
+  await dialog.getByLabel('基因组位点').selectOption({ label: 'pEGFP-N1' });
+  await dialog.getByLabel('供体片段').selectOption({ label: 'pUC19' });
+  await dialog.getByPlaceholder('起点').fill('1000');
+  await dialog.getByPlaceholder('终点').fill('1600');
+  await dialog.getByText(/替换 601 bp/).waitFor({ timeout: 10000 });
+  const text = await dialog.innerText();
+  const sizes = text.match(/野生型 (\d+) bp \/ 重组型 (\d+) bp/);
+  if (!sizes) throw new Error('diagnostic PCR sizes are missing');
+  // The diagnostic product grows by the whole donor minus the 601 bp it replaces.
+  if (Number(sizes[2]) - Number(sizes[1]) !== 2686 - 601) {
+    throw new Error(`size difference is wrong: ${sizes[0]}`);
+  }
+  await shot('23-homologous-recombination');
+  await dialog.getByRole('button', { name: /打开重组后的位点/ }).click();
+  const t = await toast();
+  if (!/已生成 pEGFP-N1_HR_pUC19/.test(t)) throw new Error(t);
+  return `${sizes[0]}；${t}`;
+});
+
 await browser.close();
 const report = { url: URL, passed: results.filter((r) => r.ok).length, total: results.length, results, consoleErrors: errors.slice(0, 30) };
 writeFileSync(`${out}/report.json`, JSON.stringify(report, null, 2));

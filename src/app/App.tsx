@@ -58,6 +58,7 @@ import { NcbiDialog, PrimerLibraryDialog } from './library';
 import { VectorLibraryDialog } from './VectorLibrary';
 import { OligoAnnealDialog } from './OligoAnneal';
 import { MocloAssemblerDialog } from './MocloAssembler';
+import { GenomeEditingDialog } from './GenomeEditing';
 import { buildReportMarkdown, reportToHtml } from './report';
 import { loadSampleLibrary } from './samples';
 import { download, openProject, recordSave, saveFile, saveProject } from './files';
@@ -493,6 +494,7 @@ export default function App() {
             { label: '引物库', onSelect: () => s.setTool('primerlib') },
             { label: '寡核苷酸退火', hint: '两条引物退火成短双链片段', onSelect: () => s.setTool('oligo') },
             { label: '组合克隆（MoClo 矩阵）', hint: '标准语法校验 + N×M 组合装配', onSelect: () => s.setTool('moclo') },
+            { label: '基因组编辑（CRISPR / 同源重组）', hint: '靶点扫描、脱靶检查、敲除敲入与鉴定引物', onSelect: () => s.setTool('genome') },
             { label: '从 NCBI 导入（登录号）', onSelect: () => s.setTool('ncbi') },
             { label: '反向翻译 / 密码子优化', onSelect: () => s.setTool('backtranslate') },
             { divider: true },
@@ -648,6 +650,7 @@ export default function App() {
       <VectorLibraryDialog />
       <OligoAnnealDialog />
       <MocloAssemblerDialog />
+      <GenomeEditingDialog />
       <BackTranslateDialog />
       <CommandPalette
         doc={doc}
@@ -743,6 +746,7 @@ function CommandPalette({
               <Command.Item onSelect={run(() => st().setTool('primerlib'))}>引物库</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('oligo'))}>寡核苷酸退火（短片段直接连接）</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('moclo'))}>组合克隆（MoClo / Golden Gate 矩阵）</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('genome'))}>基因组编辑（CRISPR 打靶 / 同源重组）</Command.Item>
               <Command.Item onSelect={run(() => onExport('report-md'))}>导出实验记录 Markdown</Command.Item>
               <Command.Item onSelect={run(() => onExport('report-html'))}>导出实验记录网页（含图谱）</Command.Item>
               <Command.Item onSelect={run(() => onExport('print-map'))}>打印图谱</Command.Item>

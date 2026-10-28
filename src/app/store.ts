@@ -20,7 +20,7 @@ export type Theme = 'light' | 'dark' | 'publication';
 export type WizardKind = 'pcr' | 'restriction' | 'gibson' | 'golden_gate' | 'mutagenesis' | 'primers' | 'gateway' | 'ta_topo' | 'lic' | 'recombinase' | 'insert';
 export type NebBuffer = 'r1.1' | 'r2.1' | 'r3.1' | 'rCutSmart';
 export type ToolDialog =
-  | 'find' | 'backtranslate' | 'ncbi' | 'primerlib' | 'vectors' | 'oligo' | 'moclo'
+  | 'find' | 'backtranslate' | 'ncbi' | 'primerlib' | 'vectors' | 'oligo' | 'moclo' | 'genome'
   | null;
 export type MapShape = 'auto' | 'circular' | 'linear';
 
@@ -161,6 +161,8 @@ export interface WorkbenchState {
   mapOptions: MapDisplayOptions;
   mapShape: MapShape;
   wizardPreset: WizardPreset | null;
+  /** Hands a sequence to the oligo-annealing dialog when it is opened from elsewhere. */
+  oligoInsert: string | null;
   primerLibrary: LibraryPrimer[];
   /** Demo mode: current step index and whether it auto-advances. */
   demo: { step: number; playing: boolean } | null;
@@ -210,6 +212,7 @@ export interface WorkbenchState {
   setMapShape: (shape: MapShape) => void;
   openWizard: (w: WizardKind, preset?: WizardPreset) => void;
   setPrimerLibrary: (primers: LibraryPrimer[]) => void;
+  setOligoInsert: (sequence: string | null) => void;
   setDemo: (demo: { step: number; playing: boolean } | null) => void;
   requestAlign: (ids: string[]) => void;
 }
@@ -246,6 +249,7 @@ export const useWorkbench = create<WorkbenchState>()(
       mapOptions: { ...DEFAULT_MAP_OPTIONS, ...loadJson<MapDisplayOptions>(MAP_OPTIONS_KEY, {}) },
       mapShape: 'auto',
       wizardPreset: null,
+      oligoInsert: null,
       primerLibrary: loadJson<LibraryPrimer[]>(PRIMER_LIBRARY_KEY, []),
       demo: null,
       alignRequest: null,
@@ -351,6 +355,7 @@ export const useWorkbench = create<WorkbenchState>()(
       setDemo: (demo) => set({ demo }),
       requestAlign: (ids) => set((s) => ({ alignRequest: { ids, nonce: (s.alignRequest?.nonce ?? 0) + 1 } })),
       openWizard: (wizard, preset) => set({ wizard, wizardPreset: preset ?? null }),
+      setOligoInsert: (oligoInsert) => set({ oligoInsert }),
       setPrimerLibrary: (primerLibrary) => {
         storeJson(PRIMER_LIBRARY_KEY, primerLibrary);
         set({ primerLibrary });

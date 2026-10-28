@@ -4,7 +4,7 @@
 // Annealed oligo duplexes: design the pair to order for a short insert, or paste a pair
 // you already have and see the duplex it gives. The product is an ordinary linear
 // fragment, so the ligation and Golden Gate wizards take it like any digested insert.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Copy, FlaskConical, Plus } from 'lucide-react';
 import type { OverhangEnd } from '../types/schema';
 import {
@@ -89,6 +89,15 @@ export function OligoAnnealDialog() {
   const [topOligo, setTopOligo] = useState('');
   const [bottomOligo, setBottomOligo] = useState('');
   const [mismatchBudget, setMismatchBudget] = useState(0);
+
+  // Another tool can hand a sequence over; the CRISPR panel sends a spacer this way.
+  const handedOver = useWorkbench((s) => s.oligoInsert);
+  useEffect(() => {
+    if (!open || !handedOver) return;
+    setMode('design');
+    setInsert(handedOver);
+    useWorkbench.getState().setOligoInsert(null);
+  }, [open, handedOver]);
 
   // Fragments that already carry ends: a digested vector can hand over its overhangs.
   const cutFragments = useMemo(

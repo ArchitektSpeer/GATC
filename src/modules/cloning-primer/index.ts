@@ -84,6 +84,22 @@ export {
 } from './assembly';
 
 export type {
+  Nuclease,
+  CrisprSite,
+  OffTargetHit,
+  OffTargetScan,
+  GenomicReplacement,
+} from './genome';
+export {
+  NUCLEASES,
+  nucleaseById,
+  findCrisprSites,
+  spacerWarnings,
+  scanOffTargets,
+  designGenomicReplacement,
+} from './genome';
+
+export type {
   MocloSlot,
   MocloStandard,
   SlotMatch,
