@@ -16,6 +16,12 @@ them is mocked up. Figures that quote cross-check numbers take them from
 [CROSSCHECK.md](../CROSSCHECK.md) and say what is not covered, because a claim is only worth
 as much as its stated scope.
 
+Where a caption says what the project is built on, it has to separate the two things that
+are easy to blur: the libraries it genuinely depends on (Teselagen's parsers, seqviz, and the
+REBASE-derived enzyme data) and the references its own code is checked against (Biopython,
+primer3, pydna). The cloning, thermodynamics and alignment code here is this project's own —
+saying it comes from established packages would be an easier claim to make and a false one.
+
 The longer caption quotes what a commercial alternative charges per seat. Whatever such a
 figure says, it has to be the published one, carry the date it was read, and sit next to the
 project's own licence rather than a conclusion drawn for the reader; re-read the vendor's
