@@ -28,6 +28,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: ['src/test-setup.ts'],
     testTimeout: 30000,
     // Several suites assert wall-clock budgets (e.g. 100 kb annotation < 30 ms); running files
     // one at a time keeps those measurements free of CPU contention. The full run takes ~15 s.
