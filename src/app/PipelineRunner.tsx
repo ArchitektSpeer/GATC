@@ -78,6 +78,7 @@ export function PipelineRunnerDialog() {
   const open = useWorkbench((s) => s.tool === 'pipeline');
   const setTool = useWorkbench((s) => s.setTool);
   const docs = useWorkbench((s) => s.docs);
+  const agarosePercent = useWorkbench((s) => s.gelParams.agarosePercent);
   const handedOver = useWorkbench((s) => s.pipelineDraft);
   const locale = useLocale();
   const [text, setText] = useState('');
@@ -126,8 +127,9 @@ export function PipelineRunnerDialog() {
       return;
     }
     setError(null);
-    setRun(dryRunPipeline(checked.plan, docs));
-  }, [text, docs, t]);
+    // The same gel the gel view is set to, so the bands line up with it.
+    setRun(dryRunPipeline(checked.plan, docs, { agarosePercent }));
+  }, [text, docs, agarosePercent, t]);
 
   // A plan that arrived from the copilot is run straight away.
   useEffect(() => {
