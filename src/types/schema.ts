@@ -230,12 +230,45 @@ export interface AIConfig {
   temperature?: number;
 }
 
+/** One operation in a multi-step plan. See app/pipeline.ts for what each takes. */
+export type PipelineOp =
+  | 'pcr'
+  | 'digest'
+  | 'blunt'
+  | 'ligate'
+  | 'gibson'
+  | 'golden_gate'
+  | 'anneal_oligos'
+  | 'mutate'
+  | 'gateway_bp'
+  | 'gateway_lr'
+  | 'recombinase'
+  | 'check_digest';
+
+export interface PipelineStep {
+  /** Unique within the plan; downstream steps name it in `inputs`. */
+  id: string;
+  op: PipelineOp;
+  /** Step ids, document ids or document names, in the order the operation expects. */
+  inputs?: string[];
+  label?: string;
+  params?: Record<string, unknown>;
+}
+
+/** A cloning plan as a directed acyclic graph, run before anything is committed. */
+export interface PipelinePlan {
+  name: string;
+  goal?: string;
+  steps: PipelineStep[];
+}
+
 export type AIToolAction =
   | { type: 'DESIGN_PRIMERS'; payload: { targetStart: number; targetEnd: number; cloningMethod: 'gibson' | 'restriction' | 'mutagenesis'; forwardTail?: string; reverseTail?: string; mutationSeq?: string } }
   | { type: 'ADD_FEATURES'; payload: { features: Omit<SequenceFeature, 'id'>[] } }
   | { type: 'RUN_DIGESTION'; payload: { enzymeNames: string[] } }
   | { type: 'HIGHLIGHT_RANGE'; payload: { start: number; end: number; reason: string } }
-  | { type: 'SIMULATE_CLONING'; payload: { method: CloningOperationType; fragmentIds: string[]; enzymes?: string[] } };
+  | { type: 'SIMULATE_CLONING'; payload: { method: CloningOperationType; fragmentIds: string[]; enzymes?: string[] } }
+  | { type: 'PLAN_PIPELINE'; payload: PipelinePlan };
 
 export interface AIChatMessage {
   id: string;

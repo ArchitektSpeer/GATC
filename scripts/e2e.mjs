@@ -487,6 +487,58 @@ await check('同源重组：敲除设计与鉴定引物', async () => {
   return `${sizes[0]}；${t}`;
 });
 
+await check('多步方案沙盒推演：跑完一张 DAG 并写入产物', async () => {
+  await closeDialogs();
+  // The religated plasmid, because by now two open tabs are both named pUC19 and
+  // a plan that named one of them would rightly be refused as ambiguous.
+  await tab('pUC19_religated');
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('沙盒');
+  await page.getByText('多步克隆方案沙盒推演').click();
+  const dialog = page.locator('.fixed.inset-0');
+  const plan = {
+    name: 'EcoRI/HindIII 回连',
+    goal: '切下片段再连回去，用 EcoRI 单切确认。',
+    steps: [
+      { id: 'backbone', op: 'digest', inputs: ['pUC19_religated'], label: '骨架', params: { enzymes: ['EcoRI', 'HindIII'], select: 'largest' } },
+      { id: 'insert', op: 'digest', inputs: ['pUC19_religated'], label: '插入片段', params: { enzymes: ['EcoRI', 'HindIII'], select: 'smallest' } },
+      { id: 'ligation', op: 'ligate', inputs: ['backbone', 'insert'], label: '回连产物', params: { circularize: true } },
+      { id: 'check', op: 'check_digest', inputs: ['ligation'], label: '鉴定酶切', params: { enzymes: ['EcoRI'] } },
+    ],
+  };
+  await dialog.locator('textarea').fill(JSON.stringify(plan, null, 2));
+  await dialog.getByRole('button', { name: /^推演$/ }).click();
+  await page.waitForTimeout(1500);
+  const body = await dialog.innerText();
+  if (!/4 步全部通过/.test(body)) throw new Error(body.replace(/\s+/g, ' ').slice(0, 400));
+  if (!/回连产物/.test(body) || !/2,?686 bp|2686 bp/.test(body)) throw new Error(body.slice(0, 300));
+  await shot('24-pipeline-dry-run');
+  await dialog.getByRole('button', { name: /写入工作区/ }).click();
+  const t = await toast();
+  if (!/已写入 1 个产物/.test(t)) throw new Error(t);
+  return `${(body.match(/4 步全部通过[^\n]*/) ?? [''])[0]} | ${t}`;
+});
+
+await check('测序异常归因：引物区 / 连接边界 / 质量', async () => {
+  await closeDialogs();
+  await tab('pEGFP-N1');
+  await page.keyboard.press('Control+k');
+  await page.getByPlaceholder(/输入命令/).fill('归因');
+  await page.getByText(/测序异常归因/).click();
+  const dialog = page.locator('.fixed.inset-0');
+  await dialog.getByText(/比对到/).first().waitFor({ timeout: 10000 });
+  const body = await dialog.innerText();
+  // Every finding has to name a cause and what to do about it.
+  if (!/测序质量|引物结合区|引物 5′ 尾|连接边界|未能归因|没有发现差异/.test(body)) {
+    throw new Error(body.slice(0, 300));
+  }
+  if (!/没有证据支持的改动一律标为/.test(body)) throw new Error('the honesty note is missing');
+  await shot('25-sanger-triage');
+  const summary = (body.match(/[^\n]*比对到[^\n]*/) ?? [''])[0];
+  await closeDialogs();
+  return summary;
+});
+
 await check('序列视图：酶名与特征名不重叠', async () => {
   await closeDialogs();
   await tab('pUC19');
@@ -659,6 +711,8 @@ await check('切换到英文后界面不残留中文', async () => {
           const value = node.getAttribute?.(attribute);
           if (value && cjk.test(value)) hits.push(`[${attribute}] ${value.slice(0, 60)}`);
         }
+        // What someone typed into a field is their data, not the interface.
+        if (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') return;
         for (const child of node.childNodes) walk(child);
       };
       walk(document.body);
@@ -686,6 +740,20 @@ await check('切换到英文后界面不残留中文', async () => {
     leftovers = leftovers.concat((await sweep()).hits);
   }
   await closeDialogs();
+
+  // The two phase-three dialogs, including the example plan the runner fills in.
+  for (const [query, item] of [
+    ['Dry-run', /Dry-run a multi-step cloning plan/],
+    ['attribution', /Sequencing failure attribution/],
+  ]) {
+    await page.keyboard.press('Control+k');
+    await page.getByPlaceholder(/Type a command|输入命令/).fill(query);
+    await page.getByText(item).first().click({ timeout: 10000 });
+    await page.waitForTimeout(900);
+    leftovers = leftovers.concat((await sweep()).hits);
+    await closeDialogs();
+  }
+
   leftovers = [...new Set(leftovers)];
   if (leftovers.length) throw new Error(`${leftovers.length} Chinese strings left in English: ${leftovers.slice(0, 4).join(' | ')}`);
   await shot('29-english');
@@ -694,7 +762,7 @@ await check('切换到英文后界面不残留中文', async () => {
   await page.waitForTimeout(700);
   const back = await page.evaluate(() => document.documentElement.lang);
   if (back !== 'zh-CN') throw new Error(`switching back gave lang=${back}`);
-  return 'no Chinese left across 7 views and 6 wizard tabs';
+  return 'no Chinese left across 7 views, 6 wizard tabs and 2 dialogs';
 });
 
 await browser.close();

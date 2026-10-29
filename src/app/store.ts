@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type {
   CutSite,
+  PipelinePlan,
   PlasmidDocument,
   SangerTraceData,
   SelectionRange,
@@ -21,6 +22,7 @@ export type WizardKind = 'pcr' | 'restriction' | 'gibson' | 'golden_gate' | 'mut
 export type NebBuffer = 'r1.1' | 'r2.1' | 'r3.1' | 'rCutSmart';
 export type ToolDialog =
   | 'find' | 'backtranslate' | 'ncbi' | 'primerlib' | 'vectors' | 'oligo' | 'moclo' | 'genome'
+  | 'pipeline' | 'sanger-triage'
   | null;
 export type MapShape = 'auto' | 'circular' | 'linear';
 
@@ -163,6 +165,8 @@ export interface WorkbenchState {
   wizardPreset: WizardPreset | null;
   /** Hands a sequence to the oligo-annealing dialog when it is opened from elsewhere. */
   oligoInsert: string | null;
+  /** Hands a multi-step plan to the pipeline dialog when the AI proposes one. */
+  pipelineDraft: PipelinePlan | null;
   primerLibrary: LibraryPrimer[];
   /** Demo mode: current step index and whether it auto-advances. */
   demo: { step: number; playing: boolean } | null;
@@ -213,6 +217,7 @@ export interface WorkbenchState {
   openWizard: (w: WizardKind, preset?: WizardPreset) => void;
   setPrimerLibrary: (primers: LibraryPrimer[]) => void;
   setOligoInsert: (sequence: string | null) => void;
+  setPipelineDraft: (plan: PipelinePlan | null) => void;
   setDemo: (demo: { step: number; playing: boolean } | null) => void;
   requestAlign: (ids: string[]) => void;
 }
@@ -250,6 +255,7 @@ export const useWorkbench = create<WorkbenchState>()(
       mapShape: 'auto',
       wizardPreset: null,
       oligoInsert: null,
+      pipelineDraft: null,
       primerLibrary: loadJson<LibraryPrimer[]>(PRIMER_LIBRARY_KEY, []),
       demo: null,
       alignRequest: null,
@@ -356,6 +362,7 @@ export const useWorkbench = create<WorkbenchState>()(
       requestAlign: (ids) => set((s) => ({ alignRequest: { ids, nonce: (s.alignRequest?.nonce ?? 0) + 1 } })),
       openWizard: (wizard, preset) => set({ wizard, wizardPreset: preset ?? null }),
       setOligoInsert: (oligoInsert) => set({ oligoInsert }),
+      setPipelineDraft: (pipelineDraft) => set({ pipelineDraft }),
       setPrimerLibrary: (primerLibrary) => {
         storeJson(PRIMER_LIBRARY_KEY, primerLibrary);
         set({ primerLibrary });

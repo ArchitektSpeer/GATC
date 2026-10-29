@@ -10,6 +10,9 @@ import type {
   CloningOperationType,
   CutSite,
   FeatureType,
+  PipelineOp,
+  PipelinePlan,
+  PipelineStep,
   PlasmidDocument,
   SangerTraceData,
   SelectionRange,
@@ -116,7 +119,26 @@ const ACTION_TYPES: Array<AIToolAction['type']> = [
   'RUN_DIGESTION',
   'HIGHLIGHT_RANGE',
   'SIMULATE_CLONING',
+  'PLAN_PIPELINE',
 ];
+
+const PIPELINE_OPS: PipelineOp[] = [
+  'pcr',
+  'digest',
+  'blunt',
+  'ligate',
+  'gibson',
+  'golden_gate',
+  'anneal_oligos',
+  'mutate',
+  'gateway_bp',
+  'gateway_lr',
+  'recombinase',
+  'check_digest',
+];
+
+const PIPELINE_STEP_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
+const MAX_PIPELINE_STEPS = 30;
 
 const DNA_ALPHABET = /^[ACGTRYSWKMBDHVN]+$/;
 const COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -455,6 +477,11 @@ export function buildPlasmidContextPrompt(
   cutSites: CutSite[],
   selection: SelectionRange | null,
   sangerTraces: SangerTraceData[],
+  /**
+   * Analysis the glue layer has already done and the module cannot do itself
+   * (it may not import other modules), appended verbatim as its own section.
+   */
+  extraContext?: string,
 ): string {
   const sequence = doc.sequence ?? '';
   const plasmidLength = effectiveLength(doc);
@@ -606,6 +633,11 @@ export function buildPlasmidContextPrompt(
     });
   }
 
+  if (extraContext && extraContext.trim()) {
+    lines.push('');
+    lines.push(extraContext.trim());
+  }
+
   lines.push('');
   lines.push(formatSelectionBlock(doc, selection));
 
@@ -643,6 +675,26 @@ export function buildSystemPrompt(): string {
     translate('- RUN_DIGESTION: enzymeNames 为 1-8 个上下文中真实出现的酶名，用于菌落 PCR 筛选或质粒鉴定；优先选择能产生区分度高的 2-4 条条带的组合。'),
     translate('- HIGHLIGHT_RANGE: start/end 为问题区间，reason 用一句话说明为何高亮（例如疑似移码、甲基化阻断、重复序列）。'),
     translate('- SIMULATE_CLONING: method 为 CloningOperationType；fragmentIds 为参与组装的片段/文档 ID；enzymes 为可选酶名数组。'),
+    translate('- PLAN_PIPELINE: 多步克隆方案，payload 为 {name, goal?, steps[]}。每个 step 为 {id, op, inputs?, label?, params?}，GATC 会按有向无环图在前端沙盒里逐步推演，算出每一步的真实产物和最终鉴定胶图后再交给用户确认。'),
+    '',
+    translate('PLAN_PIPELINE 的 op 与 params：'),
+    translate('- pcr: 1 个输入（模板）；params {forward, reverse} 为完整引物序列（含 5\' 尾）。'),
+    translate('- digest: 1 个输入；params {enzymes: [酶名], select?: "largest"|"smallest"|片段序号}，默认取最大片段。'),
+    translate('- blunt: 1 个线性输入；params {method: "klenow_fill_in"|"t4_exonuclease"}。'),
+    translate('- ligate: 1–12 个输入；params {circularize?: true}。'),
+    translate('- gibson: 2–8 个输入；params {circular?: true, minOverlap?, maxOverlap?}。'),
+    translate('- golden_gate: 1–12 个输入；params {enzyme: "BsaI", circular?: true}。'),
+    translate('- anneal_oligos: 无输入；params {top, bottom, phosphorylated?}，用于 sgRNA spacer 或短 Linker。'),
+    translate('- mutate: 1 个输入；params {start, end, bases}，区间为 0-based 左闭右开，bases 留空表示删除。'),
+    translate('- gateway_bp / gateway_lr: 2 个输入，顺序为 (attB 插入片段, 供体) / (入门克隆, 目的载体)。'),
+    translate('- recombinase: 1–4 个输入；params {recombinase: "Cre"|"Flp"}。'),
+    translate('- check_digest: 1 个输入的鉴定步骤；params {enzymes: [酶名], ladder?}；它只出胶图不产生新分子，用来做诊断性酶切验证。'),
+    '',
+    translate('PLAN_PIPELINE 的规则：'),
+    translate('- inputs 里写上游 step 的 id，或上下文中已打开文档的名称/ID；引用的 step 必须排在前面。'),
+    translate('- 酶名必须是真实存在的商业酶名；坐标必须落在对应分子长度内。'),
+    translate('- 方案最后尽量加一个 check_digest 步骤，给出可在胶上区分的鉴定酶切组合。'),
+    translate('- 不要在 PLAN_PIPELINE 之外重复输出同样的单步 action。'),
     '',
     translate('动作使用规则：'),
     translate('- 多个动作请输出多个块；不要把解释文字放进 JSON。'),
@@ -1081,9 +1133,87 @@ export function validateAction(
       };
     }
 
+    case 'PLAN_PIPELINE':
+      return validatePipelinePayload(payload);
+
     default:
       return failValidation('Unsupported action type.');
   }
+}
+
+/**
+ * The shape of a multi-step plan: ids, known operations, no cycles. Whether the
+ * inputs name documents that are actually on the bench, and whether the enzymes
+ * exist, is checked by the glue layer against the real workspace before the plan
+ * is run; this only keeps a malformed reply from reaching it.
+ */
+function validatePipelinePayload(
+  payload: Record<string, unknown>,
+): { ok: true; action: AIToolAction } | { ok: false; error: string } {
+  if (typeof payload.name !== 'string' || !payload.name.trim()) {
+    return failValidation('PLAN_PIPELINE payload.name must be a non-empty string.');
+  }
+  if (!Array.isArray(payload.steps) || payload.steps.length === 0) {
+    return failValidation('PLAN_PIPELINE payload.steps must be a non-empty array.');
+  }
+  if (payload.steps.length > MAX_PIPELINE_STEPS) {
+    return failValidation(`PLAN_PIPELINE supports at most ${MAX_PIPELINE_STEPS} steps.`);
+  }
+
+  const steps: PipelineStep[] = [];
+  const ids = new Set<string>();
+  for (const raw of payload.steps) {
+    if (!isRecord(raw)) return failValidation('PLAN_PIPELINE step must be an object.');
+    if (typeof raw.id !== 'string' || !PIPELINE_STEP_ID.test(raw.id)) {
+      return failValidation('PLAN_PIPELINE step.id must match [A-Za-z0-9_.:-]{1,64}.');
+    }
+    if (ids.has(raw.id)) return failValidation(`PLAN_PIPELINE has a duplicate step id: ${truncateText(raw.id, 80)}`);
+    ids.add(raw.id);
+    if (typeof raw.op !== 'string' || !(PIPELINE_OPS as string[]).includes(raw.op)) {
+      return failValidation(`PLAN_PIPELINE step.op is not a known operation: ${truncateText(String(raw.op), 80)}`);
+    }
+    const inputs: string[] = [];
+    if (raw.inputs !== undefined) {
+      if (!Array.isArray(raw.inputs) || raw.inputs.length > 12) {
+        return failValidation('PLAN_PIPELINE step.inputs must be an array of at most 12 names.');
+      }
+      for (const input of raw.inputs) {
+        if (typeof input !== 'string' || !input.trim() || input.trim().length > 200) {
+          return failValidation('PLAN_PIPELINE step.inputs must contain non-empty names.');
+        }
+        inputs.push(input.trim());
+      }
+    }
+    if (raw.params !== undefined && !isRecord(raw.params)) {
+      return failValidation('PLAN_PIPELINE step.params must be an object.');
+    }
+    steps.push({
+      id: raw.id,
+      op: raw.op as PipelineOp,
+      inputs,
+      ...(typeof raw.label === 'string' && raw.label.trim() ? { label: truncateText(raw.label.trim(), 120) } : {}),
+      ...(isRecord(raw.params) ? { params: raw.params } : {}),
+    });
+  }
+
+  // A step may only read what an earlier step or the workspace already holds.
+  for (let index = 0; index < steps.length; index += 1) {
+    const earlier = new Set(steps.slice(0, index).map((step) => step.id));
+    for (const input of steps[index].inputs ?? []) {
+      if (ids.has(input) && !earlier.has(input)) {
+        return failValidation(`PLAN_PIPELINE step ${steps[index].id} reads a later step: ${truncateText(input, 80)}`);
+      }
+    }
+  }
+
+  const plan: PipelinePlan = {
+    name: truncateText(payload.name.trim(), 120),
+    ...(typeof payload.goal === 'string' && payload.goal.trim()
+      ? { goal: truncateText(payload.goal.trim(), 2000) }
+      : {}),
+    steps,
+  };
+  return { ok: true, action: { type: 'PLAN_PIPELINE', payload: plan } };
 }
 
 function providerDefaults(provider: AIProviderType): { baseUrl: string; model: string } {

@@ -38,6 +38,16 @@ export type {
 export { createSyntheticTrace } from './synthetic';
 export type { SyntheticTraceOptions } from './synthetic';
 
+export { attributeSangerFailures, groupTraceMismatches, CAUSE_LABELS } from './attribution';
+export type {
+  SangerAttributionOptions,
+  SangerCause,
+  SangerDiagnosis,
+  SangerEvent,
+  SangerFinding,
+  TraceJunction,
+} from './attribution';
+
 export { summarizeTraceCoverage } from './coverage';
 export type {
   CoverageCall,

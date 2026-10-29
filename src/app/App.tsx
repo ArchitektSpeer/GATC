@@ -64,6 +64,8 @@ import { VectorLibraryDialog } from './VectorLibrary';
 import { OligoAnnealDialog } from './OligoAnneal';
 import { MocloAssemblerDialog } from './MocloAssembler';
 import { GenomeEditingDialog } from './GenomeEditing';
+import { PipelineRunnerDialog } from './PipelineRunner';
+import { SangerTriageDialog, sangerContextForAI } from './SangerTriage';
 import { buildReportMarkdown, reportToHtml } from './report';
 import { LOCALES, getLocale, setLocale, useT, useLocale } from '../lib/i18n';
 import { APP_VERSION } from './autosave';
@@ -103,6 +105,12 @@ export default function App() {
   const traces = useMemo(
     () => (tracesCurrent ? rawTraces : rawTraces.map(({ alignment: _stale, ...t }) => t)),
     [rawTraces, tracesCurrent],
+  );
+  // The copilot module cannot reach the alignment module, so the Sanger
+  // attribution is computed here and handed to it as context.
+  const sangerContext = useMemo(
+    () => (doc && s.copilotOpen ? sangerContextForAI(doc, traces) : ''),
+    [doc, traces, s.copilotOpen],
   );
   const mapRef = useRef<SVGSVGElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -580,6 +588,8 @@ export default function App() {
             { label: '寡核苷酸退火', hint: '两条引物退火成短双链片段', onSelect: () => s.setTool('oligo') },
             { label: '组合克隆（MoClo 矩阵）', hint: '标准语法校验 + N×M 组合装配', onSelect: () => s.setTool('moclo') },
             { label: '基因组编辑（CRISPR / 同源重组）', hint: '靶点扫描、脱靶检查、敲除敲入与鉴定引物', onSelect: () => s.setTool('genome') },
+            { label: '多步方案沙盒推演', hint: '一张有向无环图跑完全流程，确认后才写入', onSelect: () => s.setTool('pipeline') },
+            { label: '测序异常归因', hint: '把突变、移码、双峰对上引物足迹与连接边界', disabled: !doc, onSelect: () => s.setTool('sanger-triage') },
             { label: '从 NCBI 导入（登录号）', onSelect: () => s.setTool('ncbi') },
             { label: '反向翻译 / 密码子优化', onSelect: () => s.setTool('backtranslate') },
             { divider: true },
@@ -715,6 +725,7 @@ export default function App() {
             cutSites={cutSites}
             selection={s.selection}
             traces={traces}
+            extraContext={sangerContext}
             onApplyAction={(action) => applyAIAction(action, doc.id)}
             open={s.copilotOpen}
             onClose={() => s.setCopilotOpen(false)}
@@ -749,6 +760,8 @@ export default function App() {
       <OligoAnnealDialog />
       <MocloAssemblerDialog />
       <GenomeEditingDialog />
+      <PipelineRunnerDialog />
+      <SangerTriageDialog />
       <BackTranslateDialog />
       <CommandPalette
         doc={doc}
@@ -846,6 +859,8 @@ function CommandPalette({
               <Command.Item onSelect={run(() => st().setTool('oligo'))}>{t('寡核苷酸退火（短片段直接连接）')}</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('moclo'))}>{t('组合克隆（MoClo / Golden Gate 矩阵）')}</Command.Item>
               <Command.Item onSelect={run(() => st().setTool('genome'))}>{t('基因组编辑（CRISPR 打靶 / 同源重组）')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('pipeline'))}>{t('多步克隆方案沙盒推演')}</Command.Item>
+              <Command.Item onSelect={run(() => st().setTool('sanger-triage'))}>{t('测序异常归因（引物区 / 连接边界 / 质量）')}</Command.Item>
               <Command.Item onSelect={run(() => onExport('opencloning'))}>{t('导出 OpenCloning 克隆策略')}</Command.Item>
               <Command.Item onSelect={run(() => onExport('pydna'))}>{t('导出 pydna 复现脚本')}</Command.Item>
               <Command.Item onSelect={run(() => onExport('report-md'))}>{t('导出实验记录 Markdown')}</Command.Item>

@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   FlaskConical,
+  GitBranch,
   KeyRound,
   Loader2,
   Microscope,
@@ -53,6 +54,8 @@ export interface CopilotSidebarProps {
   selection: SelectionRange | null;
   traces: SangerTraceData[];
   onApplyAction: (action: AIToolAction) => void;
+  /** Analysis done outside this module (e.g. Sanger attribution), handed to the model as context. */
+  extraContext?: string;
   open: boolean;
   onClose: () => void;
 }
@@ -73,13 +76,14 @@ const CLONING_METHOD_LABELS: Record<'gibson' | 'restriction' | 'mutagenesis', st
 
 const ACTION_META: Record<
   AIToolAction['type'],
-  { label: string; button: string; icon: 'primer' | 'feature' | 'digest' | 'highlight' | 'simulate' }
+  { label: string; button: string; icon: 'primer' | 'feature' | 'digest' | 'highlight' | 'simulate' | 'pipeline' }
 > = {
   DESIGN_PRIMERS: { label: '引物设计', button: '一键应用引物设计', icon: 'primer' },
   ADD_FEATURES: { label: '特征注释', button: '应用特征注释', icon: 'feature' },
   RUN_DIGESTION: { label: '酶切鉴定', button: '在虚拟电泳中预览', icon: 'digest' },
   HIGHLIGHT_RANGE: { label: '区间高亮', button: '高亮问题区间', icon: 'highlight' },
   SIMULATE_CLONING: { label: '克隆模拟', button: '模拟克隆方案', icon: 'simulate' },
+  PLAN_PIPELINE: { label: '多步方案', button: '沙盒推演这套方案', icon: 'pipeline' },
 };
 
 interface ConfigFormState {
@@ -131,6 +135,13 @@ function describeAction(action: AIToolAction): string {
       return translate('推荐酶组合：{v0}', { v0: action.payload.enzymeNames.join(' + ') });
     case 'HIGHLIGHT_RANGE':
       return translate('区间 [{v0}, {v1}) · {v2}', { v0: action.payload.start, v1: action.payload.end, v2: action.payload.reason });
+    case 'PLAN_PIPELINE':
+      return [
+        translate('{v0} 步', { v0: action.payload.steps.length }),
+        action.payload.steps.map((step) => step.op).join(' → '),
+      ]
+        .filter(Boolean)
+        .join(' · ');
     case 'SIMULATE_CLONING':
       return [
         action.payload.method,
@@ -146,11 +157,12 @@ function describeAction(action: AIToolAction): string {
   }
 }
 
-function ActionIcon({ kind }: { kind: 'primer' | 'feature' | 'digest' | 'highlight' | 'simulate' }) {
+function ActionIcon({ kind }: { kind: 'primer' | 'feature' | 'digest' | 'highlight' | 'simulate' | 'pipeline' }) {
   if (kind === 'primer') return <Wand2 className="h-4 w-4" aria-hidden="true" />;
   if (kind === 'feature') return <Dna className="h-4 w-4" aria-hidden="true" />;
   if (kind === 'digest') return <Scissors className="h-4 w-4" aria-hidden="true" />;
   if (kind === 'highlight') return <Sparkles className="h-4 w-4" aria-hidden="true" />;
+  if (kind === 'pipeline') return <GitBranch className="h-4 w-4" aria-hidden="true" />;
   return <FlaskConical className="h-4 w-4" aria-hidden="true" />;
 }
 
@@ -164,7 +176,7 @@ function QuickIcon({ id }: { id: string }) {
 
 export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
   const t = useT();
-  const { doc, cutSites, selection, traces, onApplyAction, open, onClose } = props;
+  const { doc, cutSites, selection, traces, extraContext, onApplyAction, open, onClose } = props;
   const [config, setConfig] = useState<AIConfig | null>(() => loadAIConfig());
   const [configOpen, setConfigOpen] = useState(false);
   const [form, setForm] = useState<ConfigFormState>(() => formFromConfig(loadAIConfig()));
@@ -290,6 +302,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
           cutSites,
           selection,
           traces,
+          extraContext,
         )}`,
         timestamp: nowIso(),
       };
@@ -383,7 +396,7 @@ export function CopilotSidebar(props: CopilotSidebarProps): JSX.Element {
         setBusy(false);
       }
     },
-    [config, draft, doc, cutSites, selection, traces],
+    [config, draft, doc, cutSites, selection, traces, extraContext],
   );
 
   const handleStop = () => {

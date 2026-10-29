@@ -8,6 +8,7 @@ import { COMMERCIAL_ENZYMES, ENZYME_SETS, getEnzymeByName } from '../modules/seq
 import type { GelSampleInput } from '../modules/alignment-gel';
 import { callBio, callBioForDoc } from './bio-client';
 import { docRevision } from './revision';
+import { validatePipelinePlan } from './pipeline';
 import { rangeError } from '../lib/ranges';
 import { ALL_COMMERCIAL_SET, enzymeSetKey, isDocCurrent, selectActiveDoc, useWorkbench, type WizardKind } from './store';
 import { t as translate } from '../lib/i18n';
@@ -285,6 +286,15 @@ export async function applyAIAction(action: AIToolAction, docId: string): Promis
     }
     case 'SIMULATE_CLONING': {
       st.setWizard(methodToWizard[action.payload.method] ?? 'restriction');
+      return;
+    }
+    case 'PLAN_PIPELINE': {
+      // Only the shape was checked when the reply was parsed; the names and
+      // enzymes are checked here, against the documents actually on the bench.
+      const checked = validatePipelinePlan(action.payload, st.docs);
+      if (!checked.ok) return st.notify(translate('AI 的多步方案与当前工作区不符，未执行：{v0}', { v0: checked.error }));
+      st.setPipelineDraft(checked.plan);
+      st.setTool('pipeline');
       return;
     }
   }
