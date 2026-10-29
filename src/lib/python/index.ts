@@ -21,6 +21,9 @@ export interface RestrictionHit {
   cutTop: number;
   /** 0-based cut on the bottom strand. */
   cutBottom: number;
+  /** The same two cuts before being wrapped into the sequence, for comparing them. */
+  rawTop: number;
+  rawBottom: number;
   overhang: string;
 }
 
@@ -48,17 +51,33 @@ interface Runtime {
 
 let runtime: Promise<Runtime> | null = null;
 
-/** Where the app serves Pyodide from, honouring a non-root base path. */
+let configuredURL: string | null = null;
+
+/**
+ * Where the app serves Pyodide from. A worker's own location is the bundled script,
+ * not the page, so a relative base would resolve against the wrong directory; the
+ * thread that creates the worker resolves it and passes it in.
+ */
+export function setPythonIndexURL(url: string): void {
+  configuredURL = url;
+}
+
 function indexURL(): string {
+  if (configuredURL) return configuredURL;
   const base = import.meta.env?.BASE_URL ?? '/';
-  return new URL(`${base.replace(/\/$/, '')}/pyodide/`, globalThis.location?.href ?? 'http://localhost/').href;
+  return new URL(`${base}pyodide/`, globalThis.location?.href ?? 'http://localhost/').href;
 }
 
 async function start(): Promise<Runtime> {
   let loadPyodide: (options?: Record<string, unknown>) => Promise<Runtime>;
   if (typeof globalThis.location === 'undefined') {
-    // Node, where the tests run: the npm package finds its own files.
-    ({ loadPyodide } = (await import('pyodide')) as unknown as { loadPyodide: typeof loadPyodide });
+    // Node, where the tests run: the npm package finds its own files. The name is
+    // held in a variable so the bundler cannot follow it into the browser build,
+    // where that copy of Pyodide reaches for node:fs.
+    const nodePackage = 'pyodide';
+    ({ loadPyodide } = (await import(/* @vite-ignore */ nodePackage)) as unknown as {
+      loadPyodide: typeof loadPyodide;
+    });
   } else {
     const url = `${indexURL()}pyodide.mjs`;
     ({ loadPyodide } = (await import(/* @vite-ignore */ url)) as { loadPyodide: typeof loadPyodide });

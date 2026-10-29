@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clipboard, CircleSlash, FlaskConical, Play, XCircle } from 'lucide-react';
 import type { PipelinePlan } from '../types/schema';
-import { dryRunPipeline, pipelineToMarkdown, validatePipelinePlan, PIPELINE_OP_LABELS, type PipelineRun } from './pipeline';
+import { callBio } from './bio-client';
+import { pipelineToMarkdown, validatePipelinePlan, PIPELINE_OP_LABELS, type PipelineRun } from './pipeline';
 import { useWorkbench } from './store';
 import { Badge, Button, Dialog } from './ui';
 import { useLocale, useT } from '../lib/i18n';
@@ -111,7 +112,7 @@ export function PipelineRunnerDialog() {
     setError(null);
   }, [locale]);
 
-  const execute = useCallback(() => {
+  const execute = useCallback(async () => {
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
@@ -127,15 +128,16 @@ export function PipelineRunnerDialog() {
       return;
     }
     setError(null);
-    // The same gel the gel view is set to, so the bands line up with it.
-    setRun(dryRunPipeline(checked.plan, docs, { agarosePercent }));
+    // The restriction engine runs in the worker, so the plan is run there too; the
+    // gel is predicted at the agarose the gel view is set to.
+    setRun(await callBio('dryRunPipeline', checked.plan, docs, { agarosePercent }));
   }, [text, docs, agarosePercent, t]);
 
   // A plan that arrived from the copilot is run straight away.
   useEffect(() => {
     if (!open || !autoRun.current || !text) return;
     autoRun.current = false;
-    execute();
+    void execute();
   }, [open, text, execute]);
 
   const commit = () => {
@@ -193,7 +195,7 @@ export function PipelineRunnerDialog() {
               : t('推演只在内存中进行，确认前不会改动任何文档')}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={execute}>
+            <Button onClick={() => void execute()}>
               <Play size={14} /> {t('推演')}
             </Button>
             <Button disabled={!run} onClick={copyReport}>

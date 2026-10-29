@@ -23,6 +23,7 @@ _COMPLEMENT = str.maketrans("ACGTRYSWKMBDHVN", "TGCAYRSWMKVHDBN")
 # has no consistent method resolution.
 _TAIL = ("AbstractCut", "RestrictionType")
 _built = {}
+_batches = {}
 
 
 def _revcomp(text):
@@ -114,25 +115,36 @@ def _define(name, site, cut_top, cut_bottom, second):
 
 
 def _enzyme(definition):
-    """Biopython's own enzyme where it has one, otherwise one built from REBASE."""
+    """Biopython's own enzyme where it has one, otherwise one built from REBASE.
+
+    Resolving a name means asking Biopython to build a batch around it, which is
+    far too slow to repeat for every enzyme on every redraw, so the answer is
+    kept.
+    """
     name = definition["name"]
+    cached = _built.get(name)
+    if cached is not None:
+        return cached
     for candidate in (name, re.sub(r"\W", "_", name)):
         try:
-            return RestrictionBatch([candidate]).get(candidate), False
+            found = (RestrictionBatch([candidate]).get(candidate), False)
         except ValueError:
             continue
-    cached = _built.get(name)
-    if cached is None:
-        second = definition.get("second")
-        cached = _define(
+        _built[name] = found
+        return found
+    second = definition.get("second")
+    found = (
+        _define(
             name,
             definition["site"].upper(),
             definition["cutTop"],
             definition["cutBottom"],
             (second["top"], second["bottom"]) if second else None,
-        )
-        _built[name] = cached
-    return cached, True
+        ),
+        True,
+    )
+    _built[name] = found
+    return found
 
 
 def restriction_sites(sequence, circular, definitions):
@@ -159,9 +171,17 @@ def restriction_sites(sequence, circular, definitions):
         if was_built:
             built.append(definition["name"])
 
+    # The same set of enzymes is asked for over and over as the view is redrawn;
+    # building the batch again each time costs more than the search.
+    key = tuple(str(e) for e in enzymes)
+    batch = _batches.get(key)
+    if batch is None:
+        batch = RestrictionBatch(enzymes)
+        _batches[key] = batch
+
     out = []
     seq = Seq(sequence)
-    for enzyme, positions in RestrictionBatch(enzymes).search(seq, linear=not circular).items():
+    for enzyme, positions in batch.search(seq, linear=not circular).items():
         site = enzyme.site
         name = by_enzyme.get(str(enzyme), str(enzyme))
         # A palindromic site reads the same on either strand, so it has no
@@ -197,6 +217,10 @@ def restriction_sites(sequence, circular, definitions):
                     "strand": strand,
                     "cutTop": (top % length) if circular else top,
                     "cutBottom": (bottom % length) if circular else bottom,
+                    # Unwrapped, for a caller that has to compare the two strands or
+                    # look at the bases around a cut that crosses the origin.
+                    "rawTop": top,
+                    "rawBottom": bottom,
                     "overhang": "".join(_at(sequence, i) for i in range(low, high)),
                 }
             )

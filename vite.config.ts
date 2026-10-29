@@ -44,6 +44,13 @@ export default defineConfig({
   worker: { format: 'es' },
   test: {
     environment: 'node',
+    // One Python interpreter per worker rather than per file. Starting Bio.Restriction
+    // costs about three and a half seconds, which across thirty-odd files was most of
+    // the run; sharing the workers brings the suite in at a third of what it took
+    // before the interpreter existed at all. The cost is that module state is no
+    // longer thrown away between files, so a test that leaves something behind can
+    // now be seen by the next one.
+    isolate: false,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     setupFiles: ['src/test-setup.ts'],
     testTimeout: 30000,
