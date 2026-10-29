@@ -132,8 +132,15 @@ describe('commercial restriction enzyme library', () => {
     const buffers = ['r1.1', 'r2.1', 'r3.1', 'rCutSmart'] as const;
     for (const enzyme of COMMERCIAL_ENZYMES) {
       expect(enzyme.recognitionSeq).toMatch(/^[ACGTURYSWKMBDHVN]+$/);
-      expect(enzyme.cutIndexTop).toBeGreaterThanOrEqual(0);
-      expect(enzyme.cutIndexBottom).toBeGreaterThanOrEqual(0);
+      // Cut indices are offsets from the start of the site and may be negative:
+      // an enzyme that cuts on both sides (BaeI, BcgI, BsaXI, ...) cuts upstream of
+      // its site, and one that leaves a long 3' overhang (TspRI) can have its
+      // bottom-strand cut before the site begins. What has to hold is that they are
+      // whole numbers and that the two strands are cut within an overhang of each
+      // other; the values themselves are checked against REBASE elsewhere.
+      expect(Number.isInteger(enzyme.cutIndexTop), enzyme.name).toBe(true);
+      expect(Number.isInteger(enzyme.cutIndexBottom), enzyme.name).toBe(true);
+      expect(Math.abs(enzyme.cutIndexTop - enzyme.cutIndexBottom), enzyme.name).toBeLessThanOrEqual(20);
       expect(enzyme.methylationSensitivity).toBeDefined();
       expect(enzyme.nebBuffers).toBeDefined();
       for (const buffer of buffers) {

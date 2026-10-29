@@ -211,16 +211,7 @@ function buildDatabase(): RestrictionEnzyme[] {
     if (byName.has(key) || REBASE_UNKNOWN_CUT.has(name)) continue;
     const enzyme = buildDatabaseEnzyme(definition, name);
     if (!enzyme) continue;
-    const override = REBASE_OVERRIDES[name];
-    if (override) {
-      const { recognitionSeq, cutIndexTop, cutIndexBottom, secondCut } = override;
-      const outside =
-        secondCut !== undefined ||
-        Math.min(cutIndexTop, cutIndexBottom) < 0 ||
-        Math.max(cutIndexTop, cutIndexBottom) > recognitionSeq.length;
-      Object.assign(enzyme, { recognitionSeq, cutIndexTop, cutIndexBottom, isTypeIIS: outside || enzyme.isTypeIIS });
-      if (secondCut) enzyme.secondCut = { ...secondCut };
-    }
+    applyRebaseOverride(enzyme);
     byName.set(key, enzyme);
   }
   for (const enzyme of HOMING_ENZYMES) {
@@ -454,6 +445,29 @@ const OMITTED_FROM_COMMERCIAL_PRESET = new Set([
   'Zsp2I',
 ]);
 
+/**
+ * Correct an enzyme in place from REBASE. Both catalogues go through this: the
+ * commercial list used to keep the upstream definition, so a corrected site or
+ * cut position reached the database but never the sites the interface shows.
+ */
+function applyRebaseOverride(enzyme: RestrictionEnzyme): void {
+  const override = REBASE_OVERRIDES[enzyme.name];
+  if (!override) return;
+  const { recognitionSeq, cutIndexTop, cutIndexBottom, secondCut } = override;
+  const outside =
+    secondCut !== undefined ||
+    Math.min(cutIndexTop, cutIndexBottom) < 0 ||
+    Math.max(cutIndexTop, cutIndexBottom) > recognitionSeq.length;
+  Object.assign(enzyme, {
+    recognitionSeq,
+    cutIndexTop,
+    cutIndexBottom,
+    isTypeIIS: outside || enzyme.isTypeIIS,
+  });
+  if (secondCut) enzyme.secondCut = { ...secondCut };
+  else delete enzyme.secondCut;
+}
+
 function buildCommercialEnzymes(): RestrictionEnzyme[] {
   const byName = new Map<string, RestrictionEnzyme>();
   for (const name of ENZYME_NAMES) {
@@ -480,9 +494,11 @@ function buildCommercialEnzymes(): RestrictionEnzyme[] {
     const enzyme = buildCommercialDatabaseEntry(definition, name, suppliers);
     if (enzyme) byName.set(key, enzyme);
   }
-  return [...byName.values()].filter(
+  const commercial = [...byName.values()].filter(
     (enzyme) => !OMITTED_FROM_COMMERCIAL_PRESET.has(enzyme.name),
   );
+  for (const enzyme of commercial) applyRebaseOverride(enzyme);
+  return commercial;
 }
 
 export const COMMERCIAL_ENZYMES: RestrictionEnzyme[] = buildCommercialEnzymes();
