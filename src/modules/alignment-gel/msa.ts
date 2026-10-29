@@ -11,6 +11,7 @@ import {
   PROTEIN_ALPHABET,
   type SequenceType
 } from './scoring';
+import { profileFill } from '../../lib/wasm/align';
 
 export interface MsaInput {
   id: string;
@@ -543,42 +544,69 @@ function profileMovesFull(
   return moves;
 }
 
-function profileMovesBanded(
-  first: Profile,
-  second: Profile,
-  parameters: MsaParameters,
-  margin: number
-): { moves: number[]; touchesEdge: boolean } | null {
-  const firstColumns = first.columns.length;
-  const secondColumns = second.columns.length;
-  const delta = secondColumns - firstColumns;
-  const lowerOffset = Math.min(0, delta) - margin;
-  const upperOffset = Math.max(0, delta) + margin;
-  const width = upperOffset - lowerOffset + 1;
-  const cells = (firstColumns + 1) * width;
-  const pointers = new Uint8Array(cells);
-  const { size, table, gapOpen, gapExtend } = parameters;
-  const firstSize = first.size;
-  const secondSize = second.size;
+export interface ProfileRowInput {
+  firstColumns: number;
+  secondColumns: number;
+  size: number;
+  width: number;
+  lowerOffset: number;
+  upperOffset: number;
+  gapOpen: number;
+  gapExtend: number;
+  firstSize: number;
+  secondSize: number;
+  firstResidues: Int32Array;
+  secondResidues: Int32Array;
+  secondCounts: Int32Array;
+  firstVectors: Float64Array;
+  secondOpen: Float64Array;
+  secondExtend: Float64Array;
+}
 
-  const firstResidues = new Int32Array(firstColumns);
-  for (let index = 0; index < firstColumns; index += 1) {
-    firstResidues[index] = firstSize - first.columns[index].gaps;
-  }
-  const secondResidues = new Int32Array(secondColumns);
-  const secondCounts = new Int32Array(secondColumns * size);
-  for (let index = 0; index < secondColumns; index += 1) {
-    secondResidues[index] = secondSize - second.columns[index].gaps;
-    secondCounts.set(second.columns[index].counts, index * size);
-  }
-  const secondOpen = new Float64Array(secondColumns);
-  const secondExtend = new Float64Array(secondColumns);
-  for (let index = 0; index < secondColumns; index += 1) {
-    secondOpen[index] = gapOpen * secondResidues[index] * firstSize;
-    secondExtend[index] = gapExtend * secondResidues[index] * firstSize;
-  }
-  const firstVectors = scoreVectors(first.columns, size, table);
+interface ProfileRowState {
+  previousM: Float64Array;
+  previousX: Float64Array;
+  previousY: Float64Array;
+}
 
+/** The last row the compiled kernel left behind, read out of its memory. */
+function readProfileRows(
+  filled: { previousTriple: number; rows: Float64Array },
+  width: number
+): ProfileRowState {
+  const base = filled.previousTriple * 3 * width;
+  return {
+    previousM: filled.rows.subarray(base, base + width),
+    previousX: filled.rows.subarray(base + width, base + 2 * width),
+    previousY: filled.rows.subarray(base + 2 * width, base + 3 * width)
+  };
+}
+
+/**
+ * The same row loop as the `profile` kernel in src/lib/wasm/align.c, in
+ * JavaScript, for when the compiled kernel cannot run. Change one and change
+ * the other: a test aligns the same profiles both ways and requires identical
+ * rows and pointers.
+ */
+export function profileRows(input: ProfileRowInput, pointers: Uint8Array): ProfileRowState {
+  const {
+    firstColumns,
+    secondColumns,
+    size,
+    width,
+    lowerOffset,
+    upperOffset,
+    gapOpen,
+    gapExtend,
+    firstSize,
+    secondSize,
+    firstResidues,
+    secondResidues,
+    secondCounts,
+    firstVectors,
+    secondOpen,
+    secondExtend
+  } = input;
   let previousM = new Float64Array(width).fill(NEGATIVE_INFINITY);
   let previousX = new Float64Array(width).fill(NEGATIVE_INFINITY);
   let previousY = new Float64Array(width).fill(NEGATIVE_INFINITY);
@@ -700,6 +728,70 @@ function profileMovesBanded(
     previousY = currentY;
     currentY = swap;
   }
+
+  return { previousM, previousX, previousY };
+}
+
+function profileMovesBanded(
+  first: Profile,
+  second: Profile,
+  parameters: MsaParameters,
+  margin: number
+): { moves: number[]; touchesEdge: boolean } | null {
+  const firstColumns = first.columns.length;
+  const secondColumns = second.columns.length;
+  const delta = secondColumns - firstColumns;
+  const lowerOffset = Math.min(0, delta) - margin;
+  const upperOffset = Math.max(0, delta) + margin;
+  const width = upperOffset - lowerOffset + 1;
+  const cells = (firstColumns + 1) * width;
+  let pointers: Uint8Array<ArrayBufferLike> = new Uint8Array(cells);
+  const { size, table, gapOpen, gapExtend } = parameters;
+  const firstSize = first.size;
+  const secondSize = second.size;
+
+  const firstResidues = new Int32Array(firstColumns);
+  for (let index = 0; index < firstColumns; index += 1) {
+    firstResidues[index] = firstSize - first.columns[index].gaps;
+  }
+  const secondResidues = new Int32Array(secondColumns);
+  const secondCounts = new Int32Array(secondColumns * size);
+  for (let index = 0; index < secondColumns; index += 1) {
+    secondResidues[index] = secondSize - second.columns[index].gaps;
+    secondCounts.set(second.columns[index].counts, index * size);
+  }
+  const secondOpen = new Float64Array(secondColumns);
+  const secondExtend = new Float64Array(secondColumns);
+  for (let index = 0; index < secondColumns; index += 1) {
+    secondOpen[index] = gapOpen * secondResidues[index] * firstSize;
+    secondExtend[index] = gapExtend * secondResidues[index] * firstSize;
+  }
+  const firstVectors = scoreVectors(first.columns, size, table);
+
+  const shared = {
+    firstColumns,
+    secondColumns,
+    size,
+    width,
+    lowerOffset,
+    upperOffset,
+    gapOpen,
+    gapExtend,
+    firstSize,
+    secondSize,
+    firstResidues,
+    secondResidues,
+    secondCounts,
+    firstVectors,
+    secondOpen,
+    secondExtend
+  };
+  // The compiled kernel fills these rows exactly as profileRows does; it is only
+  // faster. Where it cannot run, the JavaScript loop takes over.
+  const filled = profileFill(shared);
+  const rows = filled ? readProfileRows(filled, width) : profileRows(shared, pointers);
+  if (filled) pointers = filled.pointers;
+  const { previousM, previousX, previousY } = rows;
 
   const endpointOffset = delta - lowerOffset;
   if (endpointOffset < 0 || endpointOffset >= width) return null;

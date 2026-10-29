@@ -12,6 +12,7 @@
     "test": "vitest run",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "build:wasm": "node scripts/build-wasm.mjs",
     "crosscheck": "bash scripts/crosscheck/run.sh",
     "check:session": "node scripts/session-check.mjs",
     "mcp:build": "vite build -c vite.mcp.config.ts",

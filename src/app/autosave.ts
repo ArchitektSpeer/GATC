@@ -9,6 +9,7 @@ import type { PlasmidDocument, SangerTraceData } from '../types/schema';
 import { parseProjectFile, serializeProject } from '../modules/io-adapter';
 import { version as APP_VERSION } from '../../package.json';
 import { remapDocIds } from './doc-ids';
+import { chunkDelta, chunkText, joinChunks } from '../lib/chunkedText';
 import { t as translate } from '../lib/i18n';
 
 export { APP_VERSION };
@@ -39,7 +40,25 @@ function isRecord(value: unknown): value is SnapshotRecord {
 
 const DB_NAME = 'gatc-autosave';
 const STORE = 'snapshots';
+const CHUNKS = 'chunks';
+const DB_VERSION = 2;
 const LOCK_PREFIX = 'gatc-session-';
+
+/**
+ * What is actually stored: the record with its project text replaced by the
+ * hashes of the chunks that hold it. Rewriting a snapshot then only writes the
+ * chunks that changed, which for a megabase workspace is one or two of them.
+ */
+interface StoredSnapshot extends Omit<SnapshotRecord, 'project'> {
+  project: string;
+  chunks?: string[];
+  projectBytes?: number;
+}
+
+interface StoredChunk {
+  key: string;
+  bytes: Uint8Array;
+}
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -61,8 +80,12 @@ export class IndexedDbSnapshotStore implements SnapshotStore {
   private open(): Promise<IDBDatabase> {
     if (!this.factory) return Promise.reject(new Error(translate('此浏览器不支持 IndexedDB，无法自动保存')));
     this.db ??= new Promise((resolve, reject) => {
-      const req = this.factory.open(DB_NAME, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'sessionId' });
+      const req = this.factory.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'sessionId' });
+        if (!db.objectStoreNames.contains(CHUNKS)) db.createObjectStore(CHUNKS, { keyPath: 'key' });
+      };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error ?? new Error(translate('无法打开自动保存数据库')));
       req.onblocked = () => reject(new Error(translate('自动保存数据库被其他标签页占用')));
@@ -75,26 +98,99 @@ export class IndexedDbSnapshotStore implements SnapshotStore {
     const db = await this.open();
     const tx = db.transaction(STORE, mode);
     const result = request(fn(tx.objectStore(STORE)));
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onabort = tx.onerror = () => reject(tx.error ?? new Error(translate('自动保存事务失败')));
-    });
+    await settled(tx);
+    return result;
+  }
+
+  /**
+   * Every request a transaction makes is issued before anything is awaited: an
+   * IndexedDB transaction commits as soon as it goes idle, so a read awaited in
+   * the middle of one can leave the rest of the work without a transaction.
+   */
+  private async stores<T>(
+    mode: IDBTransactionMode,
+    fn: (snapshots: IDBObjectStore, chunks: IDBObjectStore) => T,
+  ): Promise<T> {
+    const db = await this.open();
+    const tx = db.transaction([STORE, CHUNKS], mode);
+    const result = fn(tx.objectStore(STORE), tx.objectStore(CHUNKS));
+    await settled(tx);
     return result;
   }
 
   async orphans(sessionId: string): Promise<SnapshotRecord[]> {
-    const all = (await this.tx('readonly', (s) => s.getAll())).filter(isRecoverable);
     const live = await liveSessions();
-    return all.filter((r) => r.sessionId !== sessionId && !live.has(r.sessionId));
+    const all = ((await this.tx('readonly', (s) => s.getAll())) as StoredSnapshot[]).filter(
+      (record) => record?.sessionId !== sessionId && !live.has(record?.sessionId),
+    );
+    const wanted = new Set<string>();
+    for (const record of all) {
+      for (const hash of record.chunks ?? []) wanted.add(chunkKey(record.sessionId, hash));
+    }
+    const found = new Map<string, Uint8Array>();
+    if (wanted.size) {
+      const pending = await this.stores('readonly', (_snapshots, chunks) =>
+        [...wanted].map((key) => request(chunks.get(key)) as Promise<StoredChunk | undefined>),
+      );
+      for (const stored of await Promise.all(pending)) {
+        if (stored?.bytes) found.set(stored.key, new Uint8Array(stored.bytes));
+      }
+    }
+    const assembled = all.map((record) => {
+      const { chunks: hashes, projectBytes, ...rest } = record;
+      if (!hashes?.length) return { ...rest, project: record.project };
+      const project =
+        joinChunks(hashes, (hash) => found.get(chunkKey(record.sessionId, hash)), projectBytes) ?? '';
+      return { ...rest, project };
+    });
+    return assembled.filter(isRecoverable);
   }
 
   async write(record: SnapshotRecord): Promise<void> {
-    await this.tx('readwrite', (s) => s.put(record));
+    const chunked = await chunkText(record.project);
+    if (!chunked) {
+      // No SubtleCrypto here; store the text as it is rather than not at all.
+      await this.tx('readwrite', (s) => s.put({ ...record, chunks: [], projectBytes: 0 }));
+      return;
+    }
+    const previous = (await this.tx('readonly', (s) => s.get(record.sessionId))) as
+      | StoredSnapshot
+      | undefined;
+    const { added, removed } = chunkDelta(previous?.chunks ?? [], chunked.hashes);
+    await this.stores('readwrite', (snapshots, chunks) => {
+      for (const hash of added) {
+        const bytes = chunked.chunks.get(hash);
+        if (bytes) chunks.put({ key: chunkKey(record.sessionId, hash), bytes });
+      }
+      snapshots.put({
+        ...record,
+        project: '',
+        chunks: chunked.hashes,
+        projectBytes: chunked.byteLength,
+      } satisfies StoredSnapshot);
+      for (const hash of removed) chunks.delete(chunkKey(record.sessionId, hash));
+    });
   }
 
   async remove(sessionId: string): Promise<void> {
-    await this.tx('readwrite', (s) => s.delete(sessionId));
+    const previous = (await this.tx('readonly', (s) => s.get(sessionId))) as StoredSnapshot | undefined;
+    await this.stores('readwrite', (snapshots, chunks) => {
+      snapshots.delete(sessionId);
+      for (const hash of new Set(previous?.chunks ?? [])) chunks.delete(chunkKey(sessionId, hash));
+    });
   }
+}
+
+/** Chunks are owned by the session that wrote them, so clearing one is simple. */
+function chunkKey(sessionId: string, hash: string): string {
+  return `${sessionId}:${hash}`;
+}
+
+function settled(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onabort = tx.onerror = () => reject(tx.error ?? new Error(translate('自动保存事务失败')));
+  });
 }
 
 async function liveSessions(): Promise<Set<string>> {

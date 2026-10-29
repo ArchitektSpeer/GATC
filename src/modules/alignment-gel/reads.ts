@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import type { PlasmidDocument, SangerTraceData } from '../../types/schema';
 import { reverseComplement } from './genetics';
+import { bandedFill } from '../../lib/wasm/align';
 
 export interface SequencingRead {
   id: string;
@@ -176,20 +177,46 @@ function collectSeedCandidates(
  * end-to-end while the reference window may lose arbitrary prefixes and
  * suffixes. `guide` is the expected j - i diagonal of the read start.
  */
-function bandedSemiglobal(
+export interface BandedRowState {
+  previousM: Float64Array;
+  previousX: Float64Array;
+  previousY: Float64Array;
+  pointers: Uint8Array;
+}
+
+/** The same rows the compiled kernel produces, read out of its memory. */
+function bandedRowsWasm(
   target: string,
   query: string,
-  guide: number,
-  band: number,
-  windowStart: number
-): BandedAlignment | null {
-  const targetLength = target.length;
-  const queryLength = query.length;
-  if (targetLength === 0 || queryLength === 0) return null;
+  lowerOffset: number,
+  upperOffset: number,
+  width: number
+): BandedRowState | null {
+  const filled = bandedFill(target, query, lowerOffset, upperOffset);
+  if (!filled) return null;
+  const base = filled.previousTriple * 3 * width;
+  return {
+    previousM: filled.rows.subarray(base, base + width),
+    previousX: filled.rows.subarray(base + width, base + 2 * width),
+    previousY: filled.rows.subarray(base + 2 * width, base + 3 * width),
+    pointers: filled.pointers
+  };
+}
 
-  const lowerOffset = guide - band;
-  const upperOffset = guide + band;
-  const width = upperOffset - lowerOffset + 1;
+/**
+ * The same row loop as the `banded` kernel in src/lib/wasm/align.c, in
+ * JavaScript, for when the compiled kernel cannot run. Change one and change
+ * the other: a test aligns random reads both ways and requires identical rows.
+ */
+export function bandedRows(
+  target: string,
+  query: string,
+  targetLength: number,
+  queryLength: number,
+  lowerOffset: number,
+  upperOffset: number,
+  width: number
+): BandedRowState {
   const cells = (queryLength + 1) * width;
   const pointers = new Uint8Array(cells);
 
@@ -288,6 +315,30 @@ function bandedSemiglobal(
     previousY = currentY;
     currentY = swapY;
   }
+
+  return { previousM, previousX, previousY, pointers };
+}
+
+function bandedSemiglobal(
+  target: string,
+  query: string,
+  guide: number,
+  band: number,
+  windowStart: number
+): BandedAlignment | null {
+  const targetLength = target.length;
+  const queryLength = query.length;
+  if (targetLength === 0 || queryLength === 0) return null;
+
+  const lowerOffset = guide - band;
+  const upperOffset = guide + band;
+  const width = upperOffset - lowerOffset + 1;
+  // The compiled kernel fills these rows exactly as bandedRows does; it is only
+  // faster. Where it cannot run, the JavaScript loop takes over.
+  const rows =
+    bandedRowsWasm(target, query, lowerOffset, upperOffset, width) ??
+    bandedRows(target, query, targetLength, queryLength, lowerOffset, upperOffset, width);
+  const { previousM, previousX, previousY, pointers } = rows;
 
   const lowestEnd = Math.max(lowerOffset, -queryLength);
   const highestEnd = Math.min(upperOffset, targetLength - queryLength);

@@ -4,6 +4,7 @@
 import type { PlasmidDocument, SangerTraceData, SequenceFeature } from '../../types/schema';
 import { detectSecondaryPeaks } from './abif';
 import { complementBase, translateCodon } from './genetics';
+import { gotohFill, type GotohMatrices } from '../../lib/wasm/align';
 
 export interface GotohScoring {
   match?: number;
@@ -20,40 +21,22 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-export function gotohLocalAlign(
-  ref: string,
-  query: string,
-  scoring: GotohScoring = {}
-): {
-  score: number;
-  refStart: number;
-  refEnd: number;
-  queryStart: number;
-  queryEnd: number;
-  alignedRef: string;
-  alignedQuery: string;
-} {
-  const reference = ref.toUpperCase();
-  const read = query.toUpperCase();
+export interface GotohScores {
+  matchScore: number;
+  mismatchScore: number;
+  gapOpen: number;
+  gapExtend: number;
+}
+
+/**
+ * The same fill as src/lib/wasm/gotoh.c, in JavaScript, for when the compiled
+ * kernel cannot run. Change one and change the other: a test aligns random
+ * sequences both ways and requires identical matrices.
+ */
+export function fillGotohMatrices(reference: string, read: string, scores: GotohScores): GotohMatrices {
+  const { matchScore, mismatchScore, gapOpen, gapExtend } = scores;
   const n = reference.length;
   const m = read.length;
-  if (n === 0 || m === 0) {
-    return {
-      score: 0,
-      refStart: 0,
-      refEnd: 0,
-      queryStart: 0,
-      queryEnd: 0,
-      alignedRef: '',
-      alignedQuery: ''
-    };
-  }
-
-  const matchScore = scoring.match ?? 2;
-  const mismatchScore = scoring.mismatch ?? -1;
-  const gapOpen = scoring.gapOpen === undefined ? -3 : -Math.abs(scoring.gapOpen);
-  const gapExtend = scoring.gapExtend === undefined ? -1 : -Math.abs(scoring.gapExtend);
-
   const columns = m + 1;
   const cells = (n + 1) * columns;
   const matrix = new Int32Array(cells);
@@ -143,6 +126,62 @@ export function gotohLocalAlign(
       }
     }
   }
+
+  return {
+    columns,
+    bestScore,
+    bestI,
+    bestJ,
+    bestMatrix,
+    matrix,
+    gapInQuery,
+    gapInRef,
+    pointerM,
+    pointerX,
+    pointerY
+  };
+}
+
+export function gotohLocalAlign(
+  ref: string,
+  query: string,
+  scoring: GotohScoring = {}
+): {
+  score: number;
+  refStart: number;
+  refEnd: number;
+  queryStart: number;
+  queryEnd: number;
+  alignedRef: string;
+  alignedQuery: string;
+} {
+  const reference = ref.toUpperCase();
+  const read = query.toUpperCase();
+  const n = reference.length;
+  const m = read.length;
+  if (n === 0 || m === 0) {
+    return {
+      score: 0,
+      refStart: 0,
+      refEnd: 0,
+      queryStart: 0,
+      queryEnd: 0,
+      alignedRef: '',
+      alignedQuery: ''
+    };
+  }
+
+  const matchScore = scoring.match ?? 2;
+  const mismatchScore = scoring.mismatch ?? -1;
+  const gapOpen = scoring.gapOpen === undefined ? -3 : -Math.abs(scoring.gapOpen);
+  const gapExtend = scoring.gapExtend === undefined ? -1 : -Math.abs(scoring.gapExtend);
+
+  const scores = { matchScore, mismatchScore, gapOpen, gapExtend };
+  // The compiled kernel fills the matrices exactly as fillGotohMatrices does;
+  // it is only faster. Where it cannot run, the JavaScript fill takes over.
+  const filled = gotohFill(reference, read, scores) ?? fillGotohMatrices(reference, read, scores);
+  const { columns, matrix, gapInQuery, gapInRef, pointerM, pointerX, pointerY } = filled;
+  const { bestScore, bestI, bestJ, bestMatrix } = filled;
 
   if (bestScore <= 0) {
     return {

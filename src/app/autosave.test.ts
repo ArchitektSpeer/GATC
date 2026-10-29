@@ -176,6 +176,23 @@ describe('crash recovery', () => {
   });
 });
 
+/** How many chunk records the autosave database holds. */
+async function countChunks(factory: IDBFactory): Promise<number> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const req = factory.open('gatc-autosave');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  if (!db.objectStoreNames.contains('chunks')) return 0;
+  const count = await new Promise<number>((resolve, reject) => {
+    const req = db.transaction('chunks', 'readonly').objectStore('chunks').count();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
+  return count;
+}
+
 describe('IndexedDbSnapshotStore', () => {
   it('stores one snapshot per session and lists only other sessions', async () => {
     const store = new IndexedDbSnapshotStore(new IDBFactory());
@@ -185,6 +202,28 @@ describe('IndexedDbSnapshotStore', () => {
     expect((await store.orphans('tab-1')).map((r) => r.sessionId)).toEqual(['tab-2']);
     await store.remove('tab-2');
     expect(await store.orphans('tab-1')).toEqual([]);
+  });
+
+  it('rewrites only the chunks that changed, and recovers the whole project', async () => {
+    const factory = new IDBFactory();
+    const store = new IndexedDbSnapshotStore(factory);
+    // Big enough to span several 64 kB chunks.
+    const long = 'ACGT'.repeat(60_000);
+    st().replaceDoc({ ...fileDoc, name: 'big', sequence: long, length: long.length });
+    await store.write(buildSnapshot('tab-1', capture()));
+    const first = await countChunks(factory);
+    expect(first).toBeGreaterThan(2);
+
+    // One base changed at the very end: only the last chunk's contents differ.
+    const edited = `${long.slice(0, -1)}C`;
+    st().replaceDoc({ ...fileDoc, name: 'big', sequence: edited, length: edited.length });
+    await store.write(buildSnapshot('tab-1', capture()));
+    expect(await countChunks(factory)).toBe(first);
+
+    const [recovered] = await store.orphans('other-tab');
+    expect(recovered.project).toContain(edited.slice(-80));
+    await store.remove('tab-1');
+    expect(await countChunks(factory)).toBe(0);
   });
 
   it('skips sessions whose tab still holds its lock', async () => {

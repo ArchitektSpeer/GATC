@@ -81,6 +81,7 @@ Shortcuts: `Ctrl/Cmd+K` command palette, `Ctrl/Cmd+F` find, `Ctrl/Cmd+Z` undo,
 | AI | Bring your own key: OpenAI, Anthropic, DeepSeek, Gemini or any compatible endpoint; the key stays in the browser; compressed plasmid context; structured action cards you can run with one click. It can also propose a whole route as a graph, which GATC runs step by step in the sandbox before anything is written |
 | Multi-step plans | A cloning route written as a directed acyclic graph - PCR, digest, blunting, ligation, Gibson, Golden Gate, oligo annealing, mutagenesis, Gateway, recombinase, and a diagnostic digest with its gel. Every step calls the same engine its wizard calls, a failed step stops only what depends on it, and nothing reaches the workspace until you say so. Written by hand in the dialog or proposed by the copilot |
 | Sequencing attribution | Why a read disagrees with the plasmid, from evidence that can be checked: the Phred score and the high-quality window, the footprint a primer has on the molecule, and the position of a cloning junction - so a change in a primer tail is reported as an oligo to re-order, a deletion at a junction as ends chewed back too far, and several double peaks as a mixed template. A change with none of that behind it is reported as unexplained rather than given a cause that merely sounds plausible |
+| Speed | The alignment inner loops - Sanger, FASTQ reads and the multiple-alignment profile pass - are compiled to WebAssembly (3.6 kB, built from `src/lib/wasm/align.c`, bundled so it works offline) and run about 3.5x faster than the JavaScript they replace. Each kernel has a JavaScript twin that takes over wherever it cannot run, and a test requires the two to agree in every cell. The crash-recovery snapshot is stored as 64 kB chunks addressed by content, so saving a megabase workspace again writes the chunks that changed rather than the whole thing |
 
 ### Screens
 
@@ -235,6 +236,7 @@ npm run tauri:build
 | AI | 自带密钥：OpenAI、Anthropic、DeepSeek、Gemini 或任意兼容端点；密钥仅存于本地浏览器；质粒上下文压缩；可一键执行的结构化动作卡片；也能直接给出一整条路线的有向无环图，由 GATC 在沙盒里逐步跑完再决定是否写入 |
 | 多步方案 | 把一条克隆路线写成有向无环图：PCR、酶切、末端处理、连接、Gibson、Golden Gate、引物退火、定点突变、Gateway、重组酶，以及带胶图的诊断性酶切。每一步都调用对应向导的同一套引擎，某步失败只拦住依赖它的分支，确认之前不写入工作区。可以在对话框里手写，也可以由 AI 导师给出 |
 | 测序归因 | 读长与质粒不符的原因，只从三类能核对的证据来：该位点的 Phred 与高质量区、引物在分子上的足迹、连接边界的位置。于是引物尾里的改动会被判成“该重新合成引物”，连接边界的缺失会被判成“末端被过度消化”，多处双峰会被判成“模板不纯”。三类证据都不支持的改动一律标为“未能归因”，不编一个听起来合理的原因 |
+| 性能 | 比对的内层循环（Sanger、FASTQ 读长、多序列比对的 profile 一遍）编译成 WebAssembly（3.6 kB，源文件 `src/lib/wasm/align.c`，随应用打包，离线可用），比它替换掉的 JavaScript 快约 3.5 倍；每个内核都保留一份 JavaScript 孪生实现，跑不起来时接手，并有测试要求两者逐格一致。崩溃恢复快照按内容寻址切成 64 kB 块，百万碱基级工作区再存一次只写改动的那几块 |
 
 ### 界面
 
