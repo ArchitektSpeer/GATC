@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#070c17; --ink:#f1f5f9; --dim:#94a3b8; --faint:#64748b;
+    --g:#e2e8f0; --a:#34d399; --t:#f87171; --c:#60a5fa;
+    --line:rgba(148,163,184,.18);
+  }
+  html,body{background:var(--bg);font-family:'Noto Sans SC','Noto Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;color:var(--ink)}
+  .sheet{position:relative;overflow:hidden;background:var(--bg)}
+  .sheet::before{content:'';position:absolute;inset:0;
+    background:
+      radial-gradient(900px 560px at 78% 42%, rgba(59,130,246,.22), transparent 62%),
+      radial-gradient(620px 440px at 12% 88%, rgba(16,185,129,.13), transparent 65%),
+      radial-gradient(500px 340px at 4% 6%, rgba(239,68,68,.07), transparent 70%);}
+  .sheet::after{content:'';position:absolute;inset:0;opacity:.5;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:56px 56px;
+    -webkit-mask-image:radial-gradient(1200px 700px at 50% 40%,#000,transparent 78%);}
+  .inner{position:relative;z-index:2;height:100%;display:flex;align-items:center}
+
+  .logo{font-family:'DejaVu Sans Mono',monospace;font-weight:700;letter-spacing:.16em;line-height:1}
+  .logo .G{color:var(--g)} .logo .A{color:var(--a)} .logo .T{color:var(--t)} .logo .C{color:var(--c)}
+  .wordmark{display:flex;align-items:baseline;gap:14px}
+  .wordmark .full{color:var(--faint);letter-spacing:.02em;font-weight:500}
+
+  h1{font-weight:800;letter-spacing:-.01em;line-height:1.16}
+  h1 .hi{background:linear-gradient(95deg,#7dd3fc,#60a5fa 45%,#34d399);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:#cbd5e1;line-height:1.6}
+  .sub b{color:#fff;font-weight:600}
+
+  ul{list-style:none;display:grid;gap:12px}
+  li{display:flex;gap:11px;align-items:flex-start;color:#dbe3ec;line-height:1.45}
+  li .tick{flex:none;color:var(--a);font-weight:800}
+  li .n{color:#fff;font-weight:700;font-family:'DejaVu Sans Mono',monospace}
+  li .q{color:var(--faint)}
+
+  .stamp{display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(52,211,153,.4);
+    background:rgba(16,185,129,.1);border-radius:999px;color:#6ee7b7;font-weight:600}
+  .foot{display:flex;align-items:center;gap:13px;color:var(--faint);white-space:nowrap}
+  .foot2{color:#4a5a70;white-space:nowrap;margin-top:9px}
+  .foot .url{color:#cbd5e1;font-family:'DejaVu Sans Mono',monospace}
+  .dot{width:4px;height:4px;border-radius:50%;background:#475569;flex:none}
+  .tm{color:#44546a;line-height:1.4}
+
+  .shotwrap{position:relative;flex:none}
+  .shot{border-radius:14px;border:1px solid rgba(148,163,184,.26);display:block;
+    box-shadow:0 50px 90px -24px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.04) inset;
+    background:#fff}
+
+  /* ---------- 1280x640 social card ---------- */
+  .social{width:1280px;height:640px}
+  .social .inner{padding:0 0 0 68px;gap:36px}
+  .social .left{width:640px;flex:none}
+  .social .logo{font-size:32px}
+  .social .wordmark .full{font-size:13.5px}
+  .social .kicker{color:#6ee7b7;font-size:14px;font-weight:600;letter-spacing:.08em;margin-top:22px}
+  .social h1{font-size:38px;margin:10px 0 14px}
+  .social .sub{font-size:16.5px;margin-bottom:22px}
+  .social ul{margin-bottom:22px;gap:10px}
+  .social li{font-size:15px}
+  .social .foot{font-size:14px}
+  .social .foot2{font-size:13px}
+  .social .tm{font-size:12px;margin-top:12px}
+  .social .foot2.next{color:#6ee7b7;opacity:.72;margin-top:5px}
+  .social .shotwrap{width:620px;margin-right:-96px}
+  .social .shot{width:620px}
+
+  /* ---------- 1600x900 two-panel figure ---------- */
+  .figure{width:1600px;height:980px}
+  .figure .inner{flex-direction:column;align-items:stretch;padding:40px 48px 36px}
+  .figure .head{display:flex;align-items:baseline;gap:18px;margin-bottom:6px}
+  .figure .head .logo{font-size:24px}
+  .figure .head .title{font-size:21px;font-weight:700;color:#e2e8f0}
+  .figure .head .full{color:var(--faint);font-size:13px}
+  .figure .panels{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;margin-top:18px}
+  .figure .panel{display:flex;flex-direction:column}
+  .figure .panel .cap{font-size:17px;font-weight:700;color:#e2e8f0;margin-bottom:5px}
+  .figure .panel .cap span{color:var(--faint);font-weight:500;font-size:14px;margin-left:8px}
+  .figure .panel .note{font-size:13.5px;color:#94a3b8;line-height:1.5;margin-bottom:12px}
+  .figure .frame{border-radius:12px;overflow:hidden;background:#fff;
+    border:1px solid rgba(148,163,184,.26);
+    box-shadow:0 40px 70px -24px rgba(0,0,0,.8)}
+  .figure .frame img{width:100%;display:block}
+  .figure .foot{margin-top:auto;padding-top:24px;font-size:14px}
+</style></head>
+<body>
+
+<div class="sheet social" id="social-phase3"><div class="inner">
+  <div class="left">
+    <div class="wordmark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span>
+      <span class="full">Gene Assembly &amp; Toolkit for Cloning</span></div>
+    <div class="kicker">2026-10-29 · 第三阶段</div>
+    <h1>多步克隆方案的<span class="hi">沙盒推演</span>与<br>测序异常<span class="hi">归因</span></h1>
+    <p class="sub">把一条克隆路线写成有向无环图，<b>在浏览器内逐步算完再决定是否写入</b>；
+      读长与质粒不符时，只按可核对的证据归因。</p>
+    <ul>
+      <li><span class="tick">✓</span><span><span class="n">12</span> 种操作组成的方案图，每步调用对应向导的同一套引擎 <span class="q">— 确认前不写入工作区</span></span></li>
+      <li><span class="tick">✓</span><span>归因只用三类证据：Phred 与高质量区、引物足迹、连接边界 <span class="q">— 其余标为「未能归因」</span></span></li>
+      <li><span class="tick">✓</span><span><span class="n">3.6 kB</span> WebAssembly 比对内核，较原 JavaScript 实现快约 <span class="n">3.5×</span></span></li>
+      <li><span class="tick">✓</span><span>崩溃恢复快照按内容寻址分块，重复保存只写改动的 <span class="n">64 kB</span> 块</span></li>
+    </ul>
+    <div class="foot"><span class="url">architektspeer.github.io/GATC</span><span class="dot"></span><span>GPL-3.0 · 源码开放</span></div>
+    <div class="foot2">浏览器直接打开 · 数据留在本机 · 现有 MCP 服务器提供 15 个工具</div>
+    <div class="foot2 next">下一步：整合更多生物信息学开源工具，统一经 MCP 对外暴露供 Agent 调用</div>
+    <p class="tm">SnapGene 是 Dotmatics 的商标；GATC 为独立项目，与其无关联。</p>
+  </div>
+  <div class="shotwrap"><img class="shot" src="../shots/v-app.png"></div>
+</div></div>
+
+<div class="sheet figure" id="figure-phase3"><div class="inner">
+  <div class="head">
+    <span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span>
+    <span class="title">第三阶段：方案推演与测序归因</span>
+    <span class="full">截图为真实运行结果，数据为内置的 pUC19 与 pEGFP-N1</span>
+  </div>
+  <div class="panels">
+    <div class="panel">
+      <div class="cap">A<span>多步克隆方案的沙盒推演</span></div>
+      <div class="note">EcoRI + HindIII 双切 pUC19，取 51 bp 的多克隆位点片段与 2,635 bp 骨架回连成环，
+        再以 EcoRI 单切验证。四步全部通过，连接处的疤痕序列逐一列出。</div>
+      <div class="frame"><img src="../shots/v-pipeline-dialog.png"></div>
+    </div>
+    <div class="panel">
+      <div class="cap">B<span>测序异常归因</span></div>
+      <div class="note">pEGFP-N1 的 Sanger 读长比对一致度 99.9%，两处差异分别判为「未能归因」与「单处双峰」，
+        并给出所依据的 Phred 值与引物足迹判断，以及下一步该做什么。</div>
+      <div class="frame"><img src="../shots/v-sanger-triage.png"></div>
+    </div>
+  </div>
+  <div class="foot"><span class="url">architektspeer.github.io/GATC</span><span class="dot"></span><span>GPL-3.0</span><span class="dot"></span><span>498 项单元测试 · 浏览器走查 40/40</span></div>
+</div></div>
+
+</body></html>

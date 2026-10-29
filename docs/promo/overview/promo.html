@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#070c17; --ink:#f1f5f9; --dim:#94a3b8; --faint:#64748b;
+    --g:#e2e8f0; --a:#34d399; --t:#f87171; --c:#60a5fa;
+    --line:rgba(148,163,184,.18);
+  }
+  html,body{background:var(--bg);font-family:'Noto Sans SC','Noto Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;color:var(--ink)}
+  .sheet{position:relative;overflow:hidden;background:var(--bg)}
+  .sheet::before{content:'';position:absolute;inset:0;
+    background:
+      radial-gradient(900px 560px at 78% 42%, rgba(59,130,246,.22), transparent 62%),
+      radial-gradient(620px 440px at 12% 88%, rgba(16,185,129,.13), transparent 65%),
+      radial-gradient(500px 340px at 4% 6%, rgba(239,68,68,.07), transparent 70%);}
+  .sheet::after{content:'';position:absolute;inset:0;opacity:.5;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:56px 56px;
+    -webkit-mask-image:radial-gradient(1200px 700px at 50% 40%,#000,transparent 78%);}
+  .inner{position:relative;z-index:2;height:100%;display:flex;align-items:center}
+
+  .logo{font-family:'DejaVu Sans Mono',monospace;font-weight:700;letter-spacing:.16em;line-height:1}
+  .logo .G{color:var(--g)} .logo .A{color:var(--a)} .logo .T{color:var(--t)} .logo .C{color:var(--c)}
+  .wordmark{display:flex;align-items:baseline;gap:14px}
+  .wordmark .full{color:var(--faint);letter-spacing:.02em;font-weight:500}
+
+  h1{font-weight:800;letter-spacing:-.01em;line-height:1.14}
+  h1 .hi{background:linear-gradient(95deg,#7dd3fc,#60a5fa 45%,#34d399);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:#cbd5e1;line-height:1.6}
+  .sub b{color:#fff;font-weight:600}
+
+  ul{list-style:none;display:grid;gap:11px}
+  li{display:flex;gap:11px;align-items:flex-start;color:#dbe3ec;line-height:1.45}
+  li .tick{flex:none;color:var(--a);font-weight:800}
+  li .n{color:#fff;font-weight:700;font-family:'DejaVu Sans Mono',monospace}
+  li .q{color:var(--faint)}
+
+  .stamp{display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(52,211,153,.4);
+    background:rgba(16,185,129,.1);border-radius:999px;color:#6ee7b7;font-weight:600}
+  .foot{display:flex;align-items:center;gap:13px;color:var(--faint);white-space:nowrap}
+  .foot2{color:#4a5a70;white-space:nowrap;margin-top:9px}
+  .foot .url{color:#cbd5e1;font-family:'DejaVu Sans Mono',monospace}
+  .dot{width:4px;height:4px;border-radius:50%;background:#475569;flex:none}
+  .tm{color:#44546a;line-height:1.4}
+
+  .shotwrap{position:relative;flex:none}
+  .shot{border-radius:14px;border:1px solid rgba(148,163,184,.26);display:block;
+    box-shadow:0 50px 90px -24px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.04) inset;
+    background:#fff}
+
+  /* ---------- 1600x900 hero ---------- */
+  .hero{width:1600px;height:900px}
+  .hero .inner{padding:0 0 0 84px;gap:48px}
+  .hero .left{width:780px;flex:none}
+  .hero .logo{font-size:40px}
+  .hero .wordmark .full{font-size:16px}
+  .hero h1{font-size:50px;margin:26px 0 18px;white-space:nowrap}
+  .hero .sub{font-size:20px;margin-bottom:30px}
+  .hero ul{margin-bottom:30px}
+  .hero li{font-size:17px}
+  .hero .stamp{font-size:16px;padding:9px 18px;margin-bottom:24px}
+  .hero .foot{font-size:16px}
+  .hero .foot2{font-size:15px}
+  .hero .foot2.next{color:#6ee7b7;opacity:.75;margin-top:6px}
+  .hero .tm{font-size:13.5px;margin-top:18px}
+  .hero .shotwrap{width:820px;margin-right:-130px}
+  .hero .shot{width:820px}
+
+  /* ---------- montage ---------- */
+  .grid{width:1600px;height:860px}
+  .grid .inner{flex-direction:column;align-items:stretch;padding:38px 46px 32px}
+  .head{display:flex;align-items:baseline;gap:18px}
+  .head .logo{font-size:24px}
+  .head .title{font-size:21px;font-weight:700;color:#e2e8f0}
+  .head .full{color:var(--faint);font-size:13.5px}
+  .cells{display:grid;grid-template-columns:repeat(3,1fr);gap:22px 22px;margin-top:22px}
+  .cell .cap{font-size:15.5px;font-weight:700;color:#e2e8f0;margin-bottom:3px}
+  .cell .note{font-size:12.5px;color:#8fa0b4;line-height:1.5;margin-bottom:9px;min-height:38px}
+  .cell .frame{border-radius:10px;overflow:hidden;background:#fff;
+    border:1px solid rgba(148,163,184,.26);box-shadow:0 26px 50px -22px rgba(0,0,0,.8);
+    aspect-ratio:1.62}
+  .cell .frame.tall{aspect-ratio:2.05}
+  .cell .frame img{width:100%;display:block}
+  .grid .foot{margin-top:auto;padding-top:22px;font-size:14px}
+
+  /* ---------- verification card ---------- */
+  .verify{width:1280px;height:800px}
+  .verify .inner{flex-direction:column;align-items:stretch;padding:40px 54px 34px}
+  .verify h2{font-size:27px;font-weight:800;margin:14px 0 4px}
+  .verify .lead{color:#9fb0c4;font-size:14.5px;line-height:1.6;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th{text-align:left;color:var(--faint);font-weight:600;font-size:12.5px;letter-spacing:.06em;
+    padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,.22)}
+  td{padding:7.5px 0;border-bottom:1px solid rgba(148,163,184,.1);color:#dbe3ec;vertical-align:top}
+  td.ref{color:#8fa0b4;font-size:13.5px}
+  td.res{color:#6ee7b7;font-family:'DejaVu Sans Mono',monospace;font-size:13.5px;white-space:nowrap;text-align:right}
+  .notcovered{margin-top:18px;border:1px solid rgba(148,163,184,.2);border-radius:10px;
+    padding:13px 16px;background:rgba(148,163,184,.05)}
+  .notcovered .t{color:#fca5a5;font-weight:700;font-size:13.5px;margin-bottom:5px}
+  .notcovered .b{color:#94a3b8;font-size:13px;line-height:1.6}
+  .verify .foot{margin-top:auto;padding-top:18px;font-size:13.5px}
+</style></head>
+<body>
+
+<!-- ================= 1. hero ================= -->
+<div class="sheet hero" id="hero"><div class="inner">
+  <div class="left">
+    <div class="wordmark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span>
+      <span class="full">Gene Assembly &amp; Toolkit for Cloning</span></div>
+    <h1>开源的分子克隆<span class="hi">工作台</span></h1>
+    <p class="sub">质粒图谱 · 酶切分析 · 克隆模拟 · 引物设计 · Sanger 比对 · 虚拟电泳。<br>
+      <b>直接读写 SnapGene 的 .dna 文件</b>；计算在浏览器内完成，序列不离开本机。</p>
+    <ul>
+      <li><span class="tick">✓</span><span>与 Biopython、REBASE、primer3、pydna 逐项交叉验证 <span class="q">— 结果与未覆盖范围均已列明</span></span></li>
+      <li><span class="tick">✓</span><span><span class="n">580+</span> 种市售酶、<span class="n">3000+</span> 酶数据库，双酶切缓冲液与甲基化阻断判定</span></li>
+      <li><span class="tick">✓</span><span>酶切连接 / Gibson / Golden Gate / Gateway / TA·TOPO / LIC / 重组酶 / 定点突变</span></li>
+      <li><span class="tick">✓</span><span>构建历史可导出 OpenCloning LinkML 策略与可运行的 <span class="n">pydna</span> 脚本</span></li>
+    </ul>
+    <div class="stamp">GPL-3.0 · 无账号 · 无服务器 · 可离线</div>
+    <div class="foot"><span class="url">architektspeer.github.io/GATC</span><span class="dot"></span><span>浏览器直接打开</span><span class="dot"></span><span>Linux AppImage / deb / rpm</span></div>
+    <div class="foot2">另提供 MCP 服务器（15 个工具，stdio 本地进程），供 Agent 与其他工具链调用</div>
+    <div class="foot2 next">下一步：整合更多生物信息学开源工具，统一经 MCP 对外暴露</div>
+    <p class="tm">SnapGene 是 Dotmatics 的商标；GATC 为独立实现，与其无关联。</p>
+  </div>
+  <div class="shotwrap"><img class="shot" src="../shots/v-dual.png"></div>
+</div></div>
+
+<!-- ================= 2. montage ================= -->
+<div class="sheet grid" id="views"><div class="inner">
+  <div class="head">
+    <span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span>
+    <span class="title">界面一览</span>
+    <span class="full">全部为真实运行截图，数据为内置的 pUC19 (L09137) 与 pEGFP-N1 (U55762)</span>
+  </div>
+  <div class="cells">
+    <div class="cell">
+      <div class="cap">双视图</div>
+      <div class="note">环形图谱与双链序列并排联动，切点、特征、引物与翻译同屏。</div>
+      <div class="frame"><img src="../shots/v-dual.png"></div>
+    </div>
+    <div class="cell">
+      <div class="cap">酶切分析</div>
+      <div class="note">580+ 市售酶与 3000+ 酶库，跨原点扫描、甲基化阻断、双酶切缓冲液推荐。</div>
+      <div class="frame"><img src="../shots/v-enzymes.png"></div>
+    </div>
+    <div class="cell">
+      <div class="cap">虚拟电泳</div>
+      <div class="note">36 种商业 Ladder，胶浓度／电压／时间可调，区分超螺旋、开环与线性。</div>
+      <div class="frame"><img src="../shots/v-gel.png"></div>
+    </div>
+    <div class="cell">
+      <div class="cap">Sanger 比对</div>
+      <div class="note">Mott 修剪、杂合双峰、跨原点比对，并给出氨基酸层面的影响。</div>
+      <div class="frame tall"><img src="../shots/v-sanger.png"></div>
+    </div>
+    <div class="cell">
+      <div class="cap">多序列比对</div>
+      <div class="note">引导树 + 渐进式 profile 比对，DNA 与蛋白（BLOSUM62）；内层循环为 WebAssembly。</div>
+      <div class="frame tall"><img src="../shots/v-msa.png"></div>
+    </div>
+    <div class="cell">
+      <div class="cap">多步方案沙盒推演</div>
+      <div class="note">把克隆路线写成有向无环图，12 种操作逐步算完，确认后才写入工作区。</div>
+      <div class="frame tall"><img src="../shots/v-pipeline-dialog.png"></div>
+    </div>
+  </div>
+  <div class="foot"><span class="url">architektspeer.github.io/GATC</span><span class="dot"></span><span>GPL-3.0</span><span class="dot"></span><span>简体中文 / English</span></div>
+</div></div>
+
+<!-- ================= 3. verification ================= -->
+<div class="sheet verify" id="verify"><div class="inner">
+  <div class="head">
+    <span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span>
+    <span class="full">npm run crosscheck</span>
+  </div>
+  <h2>与独立实现的交叉验证</h2>
+  <p class="lead">对照对象为 SnapGene 自己写出的真实文件：SnapGene 质粒库中的 7 个质粒、Biopython 附带的 8 个
+    SnapGene 测试文件，以及 12 个 Gateway 载体。下表取自 docs/CROSSCHECK.md（2026-10-27）。</p>
+  <table>
+    <tr><th>检查项</th><th>参照实现</th><th style="text-align:right">结果</th></tr>
+    <tr><td>.dna 导入：序列、拓扑、特征、引物</td><td class="ref">Biopython SeqIO + 原始 Features XML</td><td class="res">15 / 15 一致</td></tr>
+    <tr><td>.dna 导出：写出后再读回</td><td class="ref">Biopython SeqIO</td><td class="res">15 / 15 一致</td></tr>
+    <tr><td>酶定义</td><td class="ref">REBASE（经 Bio.Restriction）</td><td class="res">699 / 699 一致</td></tr>
+    <tr><td>切点位置（7 质粒 + 40 kb 随机序列）</td><td class="ref">REBASE（经 Bio.Restriction）</td><td class="res">5592 / 5592 一致</td></tr>
+    <tr><td>引物 Tm（304 条寡核苷酸）</td><td class="ref">primer3（SantaLucia 1998 + Owczarzy 2008）</td><td class="res">最大偏差 0.00 °C</td></tr>
+    <tr><td>酶切片段（1–3 种酶）</td><td class="ref">pydna</td><td class="res">164 / 164 一致</td></tr>
+    <tr><td>PCR 产物（含 5′ 尾、跨原点）</td><td class="ref">pydna</td><td class="res">105 / 105 一致</td></tr>
+    <tr><td>Gateway BP / LR（真实 pDONR、pDEST）</td><td class="ref">pydna gateway_assembly</td><td class="res">12 / 12、14 / 14</td></tr>
+    <tr><td>Cre/lox 切除、倒位、整合</td><td class="ref">pydna recombinase_assembly</td><td class="res">8 / 8 一致</td></tr>
+    <tr><td>双序列比对（全局与局部）</td><td class="ref">Biopython PairwiseAligner</td><td class="res">10 / 10 分值一致</td></tr>
+  </table>
+  <div class="notcovered">
+    <div class="t">未覆盖（文档中同样列明）</div>
+    <div class="b">在 SnapGene 本体中打开 GATC 写出的文件；酶库中 3011 个不在 Biopython REBASE 子集内的酶；
+      电泳迁移模型仅做自洽性与单调性检验，未与实测胶比对；Sanger 碱基识别、多序列比对与读长比对仅有单元测试；
+      MultiSite Gateway（attB4/attB3 系列）未对比。</div>
+  </div>
+  <div class="foot"><span class="url">github.com/ArchitektSpeer/GATC/blob/main/docs/CROSSCHECK.md</span><span class="dot"></span><span>验证脚本随仓库发布，可自行复跑</span></div>
+</div></div>
+
+</body></html>

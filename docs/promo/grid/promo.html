@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#070c17; --ink:#f1f5f9; --dim:#94a3b8; --faint:#64748b;
+    --g:#e2e8f0; --a:#34d399; --t:#f87171; --c:#60a5fa;
+    --line:rgba(148,163,184,.18);
+  }
+  html,body{background:#000;font-family:'Noto Sans SC','Noto Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;color:var(--ink)}
+  .sheet{position:relative;overflow:hidden;background:var(--bg);width:1200px;height:1200px}
+  .sheet::before{content:'';position:absolute;inset:0;
+    background:
+      radial-gradient(760px 520px at 76% 30%, rgba(59,130,246,.22), transparent 62%),
+      radial-gradient(560px 420px at 10% 92%, rgba(16,185,129,.14), transparent 66%),
+      radial-gradient(420px 320px at 4% 6%, rgba(239,68,68,.07), transparent 70%);}
+  .sheet::after{content:'';position:absolute;inset:0;opacity:.45;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:60px 60px;
+    -webkit-mask-image:radial-gradient(880px 760px at 50% 42%,#000,transparent 80%);}
+  .inner{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;padding:62px 56px 50px}
+
+  .logo{font-family:'DejaVu Sans Mono',monospace;font-weight:700;letter-spacing:.16em;line-height:1}
+  .logo .G{color:var(--g)} .logo .A{color:var(--a)} .logo .T{color:var(--t)} .logo .C{color:var(--c)}
+
+  /* --- capability tiles --- */
+  .tag{font-family:'DejaVu Sans Mono',monospace;font-size:19px;color:var(--faint);letter-spacing:.14em}
+  .ttl{font-size:46px;font-weight:800;letter-spacing:-.01em;margin:12px 0 14px;line-height:1.15}
+  .ttl .hi{background:linear-gradient(95deg,#7dd3fc,#60a5fa 45%,#34d399);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .desc{font-size:21.5px;line-height:1.62;color:#c3d0de}
+  .desc b{color:#fff;font-weight:600}
+  .frame{margin-top:30px;border-radius:14px;overflow:hidden;background:#fff;
+    border:1px solid rgba(148,163,184,.28);
+    box-shadow:0 44px 80px -28px rgba(0,0,0,.9);aspect-ratio:1.36}
+  /* A dialog shot is wider than it is tall; its frame follows the picture. */
+  .frame.wide{aspect-ratio:1.76}
+  .frame img{width:100%;display:block}
+  .mark{margin-top:auto;padding-top:26px;display:flex;align-items:center;gap:14px;
+    font-size:17px;color:#4a5a70}
+  .mark .logo{font-size:19px}
+  .mark .url{font-family:'DejaVu Sans Mono',monospace;color:#64748b}
+
+  /* --- cover --- */
+  .cover .inner{justify-content:center;padding:70px 64px}
+  .cover .logo{font-size:118px;letter-spacing:.14em}
+  .cover .full{color:var(--faint);font-size:24px;margin-top:20px;letter-spacing:.02em}
+  .cover h1{font-size:62px;font-weight:800;line-height:1.2;margin:46px 0 26px}
+  .cover h1 .hi{background:linear-gradient(95deg,#7dd3fc,#60a5fa 45%,#34d399);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .cover p{font-size:25px;line-height:1.62;color:#c3d0de}
+  .cover p b{color:#fff;font-weight:600}
+  .cover .stamp{display:inline-flex;align-items:center;gap:10px;margin-top:40px;
+    border:1px solid rgba(52,211,153,.42);background:rgba(16,185,129,.1);
+    border-radius:999px;color:#6ee7b7;font-weight:600;font-size:21px;padding:12px 24px;align-self:flex-start}
+  .cover .url{font-family:'DejaVu Sans Mono',monospace;color:#cbd5e1;font-size:22px;margin-top:34px}
+
+  /* --- verification tile --- */
+  .vrf .ttl{margin-bottom:10px}
+  .vrf .lead{font-size:19px;line-height:1.6;color:#9fb0c4;margin-bottom:22px}
+  .vrf table{width:100%;border-collapse:collapse;font-size:19.5px}
+  .vrf td{padding:9.5px 0;border-bottom:1px solid rgba(148,163,184,.12);color:#dbe3ec}
+  .vrf td.res{color:#6ee7b7;font-family:'DejaVu Sans Mono',monospace;font-size:18.5px;
+    text-align:right;white-space:nowrap}
+  .vrf .note{margin-top:20px;border:1px solid rgba(148,163,184,.2);border-radius:12px;
+    padding:16px 18px;background:rgba(148,163,184,.05);font-size:17px;line-height:1.6;color:#94a3b8}
+  .vrf .note b{color:#fca5a5}
+  .vrf .links{margin-top:22px;font-size:18.5px;line-height:1.75;
+    font-family:'DejaVu Sans Mono',monospace;color:#cbd5e1}
+  .vrf .tm{margin-top:18px;font-size:15.5px;color:#44546a;line-height:1.5}
+</style></head>
+<body>
+
+<!-- 1 -->
+<div class="sheet cover" id="g1"><div class="inner">
+  <div class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></div>
+  <div class="full">Gene Assembly &amp; Toolkit for Cloning</div>
+  <h1>开源的<span class="hi">分子克隆<br>工作台</span></h1>
+  <p><b>网页打开即用</b>，无需安装与账号；<br>序列只在本机浏览器内计算，不上传。</p>
+  <div class="stamp">GPL-3.0 · 可离线 · 中文 / English</div>
+  <div class="url">architektspeer.github.io/GATC</div>
+</div></div>
+
+<!-- 2 -->
+<div class="sheet" id="g2"><div class="inner">
+  <div class="tag">01 / 图谱与序列</div>
+  <div class="ttl">质粒图谱与<span class="hi">双链序列</span></div>
+  <div class="desc">环形与线性图谱并排联动：多轨道特征、防碰撞引线、ORF 与 GC 曲线；
+    序列区同屏显示酶切阶梯切口、引物与 CDS 翻译。图谱可导出 SVG、300 dpi PNG 与矢量 PDF。</div>
+  <div class="frame"><img src="../shots/v-dual.png"></div>
+  <div class="mark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span><span class="url">architektspeer.github.io/GATC</span></div>
+</div></div>
+
+<!-- 3 -->
+<div class="sheet" id="g3"><div class="inner">
+  <div class="tag">02 / 酶切分析</div>
+  <div class="ttl">580+ 市售酶，<span class="hi">3000+ 酶库</span></div>
+  <div class="desc">跨原点扫描、同裂酶查询、Dam/Dcm/CpG 甲基化阻断判定；
+    双酶切给出 NEB 缓冲液推荐与星号活性提示。酶定义与切点位置已与 REBASE 逐条比对。</div>
+  <div class="frame"><img src="../shots/v-enzymes.png"></div>
+  <div class="mark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span><span class="url">architektspeer.github.io/GATC</span></div>
+</div></div>
+
+<!-- 4 -->
+<div class="sheet" id="g4"><div class="inner">
+  <div class="tag">03 / 虚拟电泳</div>
+  <div class="ttl">跑胶之前<span class="hi">先看一眼</span></div>
+  <div class="desc">36 种商业 Ladder，琼脂糖浓度、电压与时间可调；
+    区分超螺旋、开环与线性构象，条带亮度按质量占比计算。酶切产物可直接送入泳道。</div>
+  <div class="frame"><img src="../shots/v-gel.png"></div>
+  <div class="mark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span><span class="url">architektspeer.github.io/GATC</span></div>
+</div></div>
+
+<!-- 5 -->
+<div class="sheet" id="g5"><div class="inner">
+  <div class="tag">04 / 引物与克隆</div>
+  <div class="ttl">引物设计与<span class="hi">11 类克隆向导</span></div>
+  <div class="desc">Tm 按 SantaLucia 1998 + Owczarzy 2008 盐校正，发夹与二聚体 ΔG 用动态规划求解；
+    向导覆盖酶切连接、Gibson、Golden Gate、Gateway、TA/TOPO、LIC、重组酶与定点突变。</div>
+  <div class="frame wide"><img src="../shots/v-primers.png"></div>
+  <div class="mark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span><span class="url">architektspeer.github.io/GATC</span></div>
+</div></div>
+
+<!-- 6 -->
+<div class="sheet" id="g6"><div class="inner">
+  <div class="tag">05 / 测序</div>
+  <div class="ttl">Sanger 峰图<span class="hi">比对到质粒</span></div>
+  <div class="desc">读入 .ab1：Mott 修剪、杂合双峰识别、跨原点比对，
+    并给出每处差异在氨基酸层面的影响。也支持 FASTQ 读长比对与多读长覆盖度。</div>
+  <div class="frame"><img src="../shots/v-sanger.png"></div>
+  <div class="mark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span><span class="url">architektspeer.github.io/GATC</span></div>
+</div></div>
+
+<!-- 7 -->
+<div class="sheet" id="g7"><div class="inner">
+  <div class="tag">06 / 多序列比对</div>
+  <div class="ttl">引导树 + <span class="hi">渐进式比对</span></div>
+  <div class="desc">DNA 与蛋白（BLOSUM62）均可，给出一致性序列、保守度与同一性矩阵。
+    内层循环编译为 WebAssembly，比原 JavaScript 实现快约 3.5 倍，且保留等价实现作回退。</div>
+  <div class="frame"><img src="../shots/v-msa.png"></div>
+  <div class="mark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span><span class="url">architektspeer.github.io/GATC</span></div>
+</div></div>
+
+<!-- 8 -->
+<div class="sheet" id="g8"><div class="inner">
+  <div class="tag">07 / 多步方案</div>
+  <div class="ttl">整条路线<span class="hi">先算一遍</span></div>
+  <div class="desc">把克隆路线写成有向无环图，12 种操作按拓扑序逐步计算；
+    每一步调用与对应向导相同的引擎，某步失败只拦住依赖它的分支，确认后才写入工作区。</div>
+  <div class="frame"><img src="../shots/v-pipeline-dialog.png"></div>
+  <div class="mark"><span class="logo"><span class="G">G</span><span class="A">A</span><span class="T">T</span><span class="C">C</span></span><span class="url">architektspeer.github.io/GATC</span></div>
+</div></div>
+
+<!-- 9 -->
+<div class="sheet vrf" id="g9"><div class="inner">
+  <div class="tag">08 / 验证与获取</div>
+  <div class="ttl">与独立实现<span class="hi">逐项比对</span></div>
+  <div class="lead">在 SnapGene 自己写出的真实文件上，与 Biopython、REBASE、primer3、pydna 对照（摘录）：</div>
+  <table>
+    <tr><td>.dna 导入 / 导出</td><td class="res">15 / 15 一致</td></tr>
+    <tr><td>酶定义（REBASE）</td><td class="res">699 / 699 一致</td></tr>
+    <tr><td>切点位置</td><td class="res">5592 / 5592 一致</td></tr>
+    <tr><td>引物 Tm（对 primer3）</td><td class="res">最大偏差 0.00 °C</td></tr>
+    <tr><td>酶切片段 / PCR 产物（对 pydna）</td><td class="res">164 / 164、105 / 105</td></tr>
+    <tr><td>Gateway BP / LR、Cre-lox</td><td class="res">12 / 12、14 / 14、8 / 8</td></tr>
+  </table>
+  <div class="note"><b>未覆盖的范围文档中同样列明</b>：电泳迁移模型只做自洽性检验，
+    Sanger 碱基识别与多序列比对仅有单元测试，MultiSite Gateway 未作比对。验证脚本随仓库发布，可自行复跑。</div>
+  <div class="links">在线　architektspeer.github.io/GATC<br>源码　github.com/ArchitektSpeer/GATC</div>
+  <div class="tm">下一步：整合更多生物信息学开源工具，统一经 MCP 供 Agent 调用。<br>
+    SnapGene 是 Dotmatics 的商标；GATC 为独立实现，与其无关联。</div>
+</div></div>
+
+</body></html>
