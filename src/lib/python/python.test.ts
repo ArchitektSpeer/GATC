@@ -51,26 +51,29 @@ describe('Biopython in the page', () => {
         (site) => `${site.enzyme.name}@${site.cutPositionTop}:${site.cutPositionBottom}`,
       ),
     );
-    // Two enzymes disagree on where the bottom strand is cut, and only those two.
-    // Both are on the list of enzymes whose definition had to be corrected from
-    // REBASE once already, so one of the two implementations is still wrong about
-    // them; until that is settled they are named here rather than hidden.
-    const KNOWN_DISAGREEMENT = new Set(['TscAI', 'TspRI']);
     const wrongCut = result.sites
       .filter((hit) => !bothStrands.has(`${hit.enzyme}@${hit.cutTop}:${hit.cutBottom}`))
-      .map((hit) => hit.enzyme);
-    expect([...new Set(wrongCut)].sort()).toEqual([...KNOWN_DISAGREEMENT].sort());
+      .map((hit) => `${hit.enzyme}@${hit.cutTop}:${hit.cutBottom}`);
+    expect({ wrongCut: wrongCut.slice(0, 8), count: wrongCut.length }).toEqual({ wrongCut: [], count: 0 });
 
-    // Not yet settled: which recognition site a cut belongs to, and the strand it
-    // reads on. Deriving it from fst5 works for an enzyme that cuts inside its site
-    // and fails for a Type IIS one read on the bottom strand, so `position` is null
-    // for those. The interface shows both, so this has to be right before the
-    // built-in scanner can be retired.
-    const unplaced = result.sites.filter((hit) => hit.position === null || hit.position === undefined);
-    console.log(
-      `sites: ${result.sites.length}, placed on a recognition site: ${result.sites.length - unplaced.length}, ` +
-        `not placed: ${unplaced.length}`,
+    // Which recognition site each cut belongs to, and the strand it reads on: the
+    // interface shows both, and the methylation check is keyed on the site.
+    const placed = new Set(
+      findCutSites(pUC19, COMMERCIAL_ENZYMES).map(
+        (site) =>
+          `${site.enzyme.name}@${site.position}/${site.strand}->${site.cutPositionTop}:${site.cutPositionBottom}`,
+      ),
     );
+    const wrongSite = result.sites
+      .filter(
+        (hit) =>
+          !placed.has(`${hit.enzyme}@${hit.position}/${hit.strand}->${hit.cutTop}:${hit.cutBottom}`),
+      )
+      .map((hit) => `${hit.enzyme}@${hit.position}/${hit.strand}->${hit.cutTop}:${hit.cutBottom}`);
+    expect({ wrongSite: wrongSite.slice(0, 8), count: wrongSite.length }).toEqual({
+      wrongSite: [],
+      count: 0,
+    });
 
     // And the gap in coverage is a fact the UI would have to live with.
     console.log(

@@ -61,17 +61,37 @@ def restriction_sites(sequence, circular, names):
         site = enzyme.site
         for position in positions:
             top = position - 1
+            # `ovhg` does not hold for every enzyme - on one that leaves a long 3'
+            # overhang reaching back before its site (TspRI, TscAI) it disagrees with
+            # the enzyme's own elucidate() by a base. `fst3`, the bottom-strand cut
+            # measured from the end of the site, always does; it is used below once
+            # the site this cut belongs to has been placed.
             bottom = top - enzyme.ovhg
-            # The site this cut belongs to lies fst5 bases before it on the strand
-            # it reads; try the top strand first, then the bottom.
-            start, strand = None, 1
-            for candidate, candidate_strand, pattern in (
-                (top - enzyme.fst5, 1, site),
-                (top + enzyme.fst5 - len(site), -1, _revcomp(site)),
-            ):
-                if _matches(sequence, candidate, pattern, circular):
-                    start, strand = candidate, candidate_strand
+            # Which recognition site this cut belongs to. Read on the top strand the
+            # site starts fst5 before the cut. Read on the bottom strand the enzyme's
+            # own frame runs the other way, so the cut reported here is its
+            # bottom-strand cut and the site starts fst3 after it.
+            # An enzyme that cuts on both sides of its site has a second pair of
+            # offsets, scd5/scd3, which behave exactly as fst5/fst3 do.
+            pairs = [(enzyme.fst5, enzyme.fst3)]
+            second = getattr(enzyme, "scd5", None)
+            if second is not None:
+                pairs.append((second, enzyme.scd3))
+
+            start, strand, offsets = None, 1, None
+            for five, three in pairs:
+                for candidate, candidate_strand, pattern in (
+                    (top - five, 1, site),
+                    (top + three, -1, _revcomp(site)),
+                ):
+                    if _matches(sequence, candidate, pattern, circular):
+                        start, strand, offsets = candidate, candidate_strand, (five, three)
+                        break
+                if start is not None:
                     break
+            if start is not None:
+                five, three = offsets
+                bottom = start + len(site) + three if strand == 1 else start + len(site) - five
             low, high = sorted((top, bottom))
             out.append(
                 {
