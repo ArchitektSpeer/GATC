@@ -72,7 +72,7 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] p-2">
         <Select aria-label={t('酶集')} value={enzymeSetId} onChange={(e) => setEnzymeSet(e.target.value)} title={t('用于扫描与图谱显示的酶集')}>
-          <option value={ALL_COMMERCIAL_SET}>全部市售酶 ({COMMERCIAL_ENZYMES.length})</option>
+          <option value={ALL_COMMERCIAL_SET}>{t('全部市售酶 ({n})', { n: COMMERCIAL_ENZYMES.length })}</option>
           <optgroup label={t('预设酶集')}>
             {ENZYME_SETS.map((es) => (
               <option key={es.id} value={es.id} title={es.description}>
@@ -99,7 +99,7 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
           <Input placeholder={t('搜索酶 / 识别序列')} value={filter.query} onChange={(e) => setFilter({ query: e.target.value })} />
         </div>
         <label className="flex items-center gap-1 text-xs">
-          <input type="checkbox" checked={filter.uniqueOnly} onChange={(e) => setFilter({ uniqueOnly: e.target.checked })} /> 单切点
+          <input type="checkbox" checked={filter.uniqueOnly} onChange={(e) => setFilter({ uniqueOnly: e.target.checked })} /> {t('单切点')}
         </label>
         <label className="flex items-center gap-1 text-xs">
           <input
@@ -107,7 +107,7 @@ export function EnzymePanel({ doc, sites }: { doc: PlasmidDocument; sites: CutSi
             checked={filter.excludeMethylationBlocked}
             onChange={(e) => setFilter({ excludeMethylationBlocked: e.target.checked })}
           />{' '}
-          排除甲基化阻断
+          {t('排除甲基化阻断')}
         </label>
         <Select value={filter.buffer ?? ''} onChange={(e) => setFilter({ buffer: (e.target.value || null) as NebBuffer | null })}>
           <option value="">{t('任意 Buffer')}</option>

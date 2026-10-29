@@ -109,12 +109,12 @@ export function NcbiDialog() {
             <Input className="w-28" inputMode="numeric" placeholder={t('终点')} value={end} onChange={(e) => setEnd(e.target.value.replace(/[^\d]/g, ''))} />
             <label className="flex items-center gap-1 text-xs">
               <input type="checkbox" checked={minus} onChange={(e) => setMinus(e.target.checked)} />
-              反向链
+              {t('反向链')}
             </label>
           </div>
         </Field>
         <div className="flex flex-wrap gap-1 text-xs">
-          示例：
+          {t('示例：')}
           {EXAMPLES.map((x) => (
             <button key={x} className="mono rounded bg-[var(--bg)] px-1.5 hover:underline" onClick={() => setInput(x)}>
               {x}

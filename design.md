@@ -67,6 +67,7 @@
 | 测序与比对 | AB1 峰图读取、质量处理、环状参考比对、突变影响注释、多序列比对 | `src/modules/alignment-gel/` |
 | 输出 | `.dna`、GenBank、FASTA、JSON；图谱 SVG、PNG、PDF；实验记录 Markdown / 网页 | `src/app/App.tsx`、`src/app/report.ts` |
 | 载体库 | 32 个内置载体（GenBank 记录随应用分发，离线可开）+ 105 个 SEVA 标准载体（按登录号从 NCBI 获取）；按分类、名称、登录号、抗性标记检索 | `src/app/vectors/`、`src/app/VectorLibrary.tsx` |
+| 语言 | 中英双语，运行时切换，消息以中文原文为 key；覆盖检查由浏览器走查完成 | `src/lib/i18n.ts`、`src/lib/messages.en.ts` |
 | 互通 | OpenCloning 克隆策略（LinkML JSON）双向读写；pydna 复现脚本生成，脚本自带断言 | `src/modules/io-adapter/opencloning.ts`、`pydna.ts` |
 | 基因组编辑 | CRISPR 靶点扫描与脱靶检查（限已打开的序列）、同源重组替换与鉴定引物设计 | `src/modules/cloning-primer/genome.ts`、`src/app/GenomeEditing.tsx` |
 | 组合克隆 | MoClo 标准语法表（PhytoBricks、YTK）、元件接头校验、位置链路与环化校验、位置引物设计、N×M 组合 Golden Gate | `src/modules/cloning-primer/moclo.ts`、`src/app/MocloAssembler.tsx` |
@@ -103,6 +104,9 @@
 - 记录每个依赖的版本、来源和实际使用范围。依赖清单以 `package.json` 与锁文件为准。
 - 逐项核实许可证与 GPL-3.0-or-later 的兼容性。`aioli` 本身的许可证不代表它加载的各个 WASM 工具的许可证，需要分别确认。
 - 内置数据（酶库、特征库、Ladder 条带、连接保真度数据等）同样记录来源、版本与许可。
+- 界面语言以中文原文作为消息 key：漏翻只会显示中文，不会出现 key 或空白，界面不可能比单语时更差。
+  常量表（视图名、向导页签、操作名等）保留中文原文，在渲染处调 `t()`，这样模块加载时就定好的常量
+  也能跟随语言切换。完整性由走查保证——切到英文后界面不得残留中文字符；静态提取只作为翻译工作表。
 - 生成给外部工具运行的代码，必须自己能跑通。pydna 脚本生成器只为能忠实表达的步骤写代码，
   其余按记录的序列给出并标 TODO；生成的脚本在 `npm run crosscheck` 第 6 阶段由真实 pydna 执行，
   每一步都与 GATC 自己的产物断言比对。

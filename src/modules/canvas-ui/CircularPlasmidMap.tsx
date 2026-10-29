@@ -550,7 +550,7 @@ export function CircularPlasmidMap({
               {doc.name || 'Untitled plasmid'}
             </div>
             <div style={{ fontSize: 11.5, color: tokens.muted }}>
-              {t('{v0} bp · {v1} · GC {v2}% · {v3} 个特征', { v0: formatBp(length), v1: circular ? '环状' : '线性', v2: trimNumber(stats.gc), v3: stats.features })}
+              {t('{v0} bp · {v1} · GC {v2}% · {v3} 个特征', { v0: formatBp(length), v1: t(circular ? '环状' : '线性'), v2: trimNumber(stats.gc), v3: stats.features })}
             </div>
           </div>
         </div>
@@ -1189,7 +1189,7 @@ export function CircularPlasmidMap({
               fontSize={9.5}
               letterSpacing="0.08em"
             >
-              {circular ? '环状' : '线性'}
+              {t(circular ? '环状' : '线性')}
             </text>
           </g>
 
@@ -1278,7 +1278,7 @@ export function CircularPlasmidMap({
           padding: '0 4px',
         }}
       >
-        <span>在环上拖动可选择区段，点击特征查看详情。</span>
+        <span>{t('在环上拖动可选择区段，点击特征查看详情。')}</span>
         <span style={{ fontFamily: tokens.fontMono }}>
           {t('{v0} 个切点 · {v1} 条引物 · {v2} 个特征', { v0: stats.cuts, v1: stats.primers, v2: stats.features })}
         </span>

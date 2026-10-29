@@ -543,7 +543,7 @@ function GibsonTab() {
       <MultiDocPicker value={ids} onChange={setIds} />
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <label className="flex items-center gap-2">
-          <input type="checkbox" checked={circular} onChange={(e) => setCircular(e.target.checked)} /> 环化产物
+          <input type="checkbox" checked={circular} onChange={(e) => setCircular(e.target.checked)} /> {t('环化产物')}
         </label>
         <label className="flex items-center gap-2">
           {t('试剂盒')}
@@ -565,7 +565,7 @@ function GibsonTab() {
             })
           }
         >
-          设计{kit}引物
+          {t('设计 {kit} 引物', { kit })}
         </Button>
         <Button
           variant="primary"
@@ -879,7 +879,7 @@ function TaTopoTab() {
       </Grid>
       {needsATail && (
         <label className="flex items-center gap-1.5 text-xs">
-          <input type="checkbox" checked={aTail} onChange={(e) => setATail(e.target.checked)} /> 先为 PCR 产物加 3′ A 尾（Taq 产物）
+          <input type="checkbox" checked={aTail} onChange={(e) => setATail(e.target.checked)} /> {t('先为 PCR 产物加 3′ A 尾（Taq 产物）')}
         </label>
       )}
       <div>
@@ -1052,7 +1052,7 @@ function InsertFragmentTab() {
   return (
     <div className="flex flex-col gap-3">
       <div className="text-xs text-[var(--muted)]">
-        把插入片段（全长或指定区间）放进载体的指定位置。载体区间为空（终点 = 起点 − 1）表示纯插入，否则替换该区间；环状载体上终点小于起点表示跨越原点的区间。坐标为 1-based 闭区间。
+        {t('把插入片段（全长或指定区间）放进载体的指定位置。载体区间为空（终点 = 起点 − 1）表示纯插入，否则替换该区间；环状载体上终点小于起点表示跨越原点的区间。坐标为 1-based 闭区间。')}
       </div>
       <Grid>
         <DocPicker label={t('载体')} value={vectorId} onChange={setVectorId} />
@@ -1071,7 +1071,7 @@ function InsertFragmentTab() {
         </Field>
       </Grid>
       <label className="flex items-center gap-1.5 text-xs">
-        <input type="checkbox" checked={reverse} onChange={(e) => setReverse(e.target.checked)} /> 反向插入
+        <input type="checkbox" checked={reverse} onChange={(e) => setReverse(e.target.checked)} /> {t('反向插入')}
       </label>
       <div>
         <Button

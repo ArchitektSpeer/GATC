@@ -527,7 +527,7 @@ export function LinearSequenceEditor({
           <MousePointer2 size={12} /> {t('拖动选择')}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Keyboard size={12} /> {onEdit ? '输入 ACGT 编辑' : '只读'}
+          <Keyboard size={12} /> {onEdit ? t('输入 ACGT 编辑') : t('只读')}
         </span>
         {liveSelection ? (
           <span style={{ fontFamily: tokens.fontMono, color: tokens.accent }}>
@@ -1103,7 +1103,7 @@ export function LinearSequenceEditor({
         <span>
           {t('第 {v0} / {v1} 行{v2}{v3}% · {v4} bp', { v0: Math.min(totalRows, Math.floor(scrollTop / layout.rowHeight) + 1), v1: totalRows, v2: ' · ', v3: trimNumber((Math.min(length, scrollTop / layout.rowHeight * bpPerRow + bpPerRow) / Math.max(1, length)) * 100), v4: formatBp(length) })}
         </span>
-        <span>选区 {liveSelection ? `${formatBp(liveSelectionLength)} bp` : '无'}</span>
+        <span>{t('选区 {v0}', { v0: liveSelection ? `${formatBp(liveSelectionLength)} bp` : t('无') })}</span>
       </div>
     </div>
   );

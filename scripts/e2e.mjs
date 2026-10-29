@@ -638,6 +638,65 @@ await check('窄窗口：图谱自适应，控件够大', async () => {
   return `map ${report.map.w}x${report.map.h} fits ${report.map.paneW}x${report.map.paneH}`;
 });
 
+await check('切换到英文后界面不残留中文', async () => {
+  await closeDialogs();
+  await page.getByRole('button', { name: /界面语言|Interface language/ }).click();
+  await page.waitForTimeout(900);
+  const sweep = async () => {
+    const found = await page.evaluate(() => {
+      const cjk = /[\u4e00-\u9fff]/;
+      const hits = [];
+      const walk = (node) => {
+        if (node.nodeType === 3) {
+          const text = node.textContent.trim();
+          if (text && cjk.test(text)) hits.push(text.slice(0, 60));
+          return;
+        }
+        if (node.nodeType !== 1) return;
+        // A toast raised before the switch still shows the language it was written in.
+        if (node.hasAttribute?.('data-toast')) return;
+        for (const attribute of ['title', 'aria-label', 'placeholder']) {
+          const value = node.getAttribute?.(attribute);
+          if (value && cjk.test(value)) hits.push(`[${attribute}] ${value.slice(0, 60)}`);
+        }
+        for (const child of node.childNodes) walk(child);
+      };
+      walk(document.body);
+      return { lang: document.documentElement.lang, hits: [...new Set(hits)] };
+    });
+    return found;
+  };
+  let leftovers = [];
+  for (const view of ['Split', 'Circular map', 'Sequence', 'Enzyme', 'Features', 'Virtual gel', 'History tree']) {
+    const button = page.getByRole('button', { name: view, exact: true });
+    if (!(await button.count())) throw new Error(`the "${view}" view button is missing in English`);
+    await button.click();
+    await page.waitForTimeout(1200);
+    const found = await sweep();
+    if (found.lang !== 'en') throw new Error(`html lang is ${found.lang}, not en`);
+    leftovers = leftovers.concat(found.hits);
+  }
+  await page.getByRole('button', { name: 'Cloning wizard' }).click();
+  await page.waitForTimeout(700);
+  for (const tabName of ['Primer design', 'Restriction cloning', 'Gibson', 'Golden Gate', 'TA / TOPO', 'Insert a fragment']) {
+    const button = page.locator('.fixed.inset-0').last().getByRole('button', { name: tabName, exact: true });
+    if (!(await button.count())) throw new Error(`the "${tabName}" wizard tab is missing in English`);
+    await button.click();
+    await page.waitForTimeout(500);
+    leftovers = leftovers.concat((await sweep()).hits);
+  }
+  await closeDialogs();
+  leftovers = [...new Set(leftovers)];
+  if (leftovers.length) throw new Error(`${leftovers.length} Chinese strings left in English: ${leftovers.slice(0, 4).join(' | ')}`);
+  await shot('29-english');
+  // And back, so the rest of the walkthrough sees the Chinese interface again.
+  await page.getByRole('button', { name: /Interface language/ }).click();
+  await page.waitForTimeout(700);
+  const back = await page.evaluate(() => document.documentElement.lang);
+  if (back !== 'zh-CN') throw new Error(`switching back gave lang=${back}`);
+  return 'no Chinese left across 7 views and 6 wizard tabs';
+});
+
 await browser.close();
 const report = { url: URL, passed: results.filter((r) => r.ok).length, total: results.length, results, consoleErrors: errors.slice(0, 30) };
 writeFileSync(`${out}/report.json`, JSON.stringify(report, null, 2));

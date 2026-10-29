@@ -108,7 +108,7 @@ function CrisprPanel() {
           </Select>
         </Field>
         <Badge tone="blue">PAM {nuclease.pam}</Badge>
-        <Badge tone="slate">间隔序列 {nuclease.spacerLength} nt</Badge>
+        <Badge tone="slate">{t('间隔序列 {n} nt', { n: nuclease.spacerLength })}</Badge>
         {nuclease.cutApproximate && <Badge tone="amber">{t('切点为近似值')}</Badge>}
         <div className="flex-1" />
         <Button size="sm" variant="primary" disabled={!doc} onClick={scan}>

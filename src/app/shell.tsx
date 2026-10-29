@@ -88,7 +88,7 @@ export function ViewRail({ value, onChange, disabled }: { value: ViewMode; onCha
               )}
             >
               <Icon size={18} strokeWidth={value === v ? 2.2 : 1.8} />
-              <span className="text-center">{t(short ?? label)}</span>
+              <span className="w-full break-words text-center leading-[1.15]">{t(short ?? label)}</span>
             </button>
           ))}
         </div>

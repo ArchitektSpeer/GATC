@@ -9,6 +9,7 @@ import type { Primer } from '../../types/schema';
 import { designGoldenGatePrimers, goldenGatePartEnds, simulateGoldenGateAssembly } from './cloning';
 import { findCutSites, resolveEnzyme, scoreOverhang } from './enzymes';
 import { reverseComplement, sequenceSlice } from './utils';
+import { t as translate } from '../../lib/i18n';
 
 /** One position in a syntax, named by the fusion sites that flank it. */
 export interface MocloSlot {
@@ -316,7 +317,7 @@ export function designSlotPrimers(
   const warnings: string[] = [];
   if (internalSites) {
     warnings.push(
-      `选区内还有 ${internalSites} 个 ${enzyme.name} 位点，必须先用同义突变去掉（domestication），否则装配时片段会被切碎。`,
+      translate('选区内还有 {n} 个 {enzyme} 位点，必须先用同义突变去掉（domestication），否则装配时片段会被切碎。', { n: internalSites, enzyme: enzyme.name }),
     );
   }
   if (slot.upstream === 'AATG') {

@@ -36,6 +36,9 @@ export function collectKeys(root = SOURCE_ROOT) {
     const source = readFileSync(file, 'utf8');
     for (const match of source.matchAll(LITERAL)) {
       const raw = match[1] ?? match[2] ?? '';
+      // A literal that still holds a quote is a fragment the scanner tore out of a
+      // ternary inside a template, not a message.
+      if (/['"`]/.test(raw)) continue;
       // Only messages written in Chinese are keys; the rest are identifiers passed through.
       if (!/[一-鿿]/.test(raw)) continue;
       const key = raw.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\n/g, '\n');

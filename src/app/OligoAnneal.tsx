@@ -281,7 +281,7 @@ export function OligoAnnealDialog() {
 
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={phosphorylated} onChange={(e) => setPhosphorylated(e.target.checked)} />
-          引物已 5′ 磷酸化（订购时加磷酸修饰，或用 T4 PNK 处理）
+          {t('引物已 5′ 磷酸化（订购时加磷酸修饰，或用 T4 PNK 处理）')}
         </label>
 
         {outcome && 'error' in outcome && <p className="rounded-md bg-red-500/10 px-3 py-2 text-red-600">{outcome.error}</p>}
