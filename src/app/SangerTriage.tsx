@@ -30,7 +30,7 @@ import { useT } from '../lib/i18n';
 export function junctionsFromHistory(doc: PlasmidDocument): TraceJunction[] {
   const names = new Set<string>();
   for (const node of doc.history) {
-    if (node.operation !== 'restriction_ligation' && node.operation !== 'blunting') continue;
+    if (node.operation !== 'restriction_ligation') continue;
     for (const name of node.enzymesUsed ?? []) names.add(name);
   }
   const junctions: TraceJunction[] = [];

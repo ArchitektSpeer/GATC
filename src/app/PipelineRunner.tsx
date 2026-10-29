@@ -4,7 +4,7 @@
 // Runs a multi-step plan in the sandbox before anything is committed: every step
 // calls the same engine the matching wizard calls, the products stay in memory,
 // and only the button at the bottom opens them as documents.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clipboard, CircleSlash, FlaskConical, Play, XCircle } from 'lucide-react';
 import type { PipelinePlan } from '../types/schema';
 import { dryRunPipeline, pipelineToMarkdown, validatePipelinePlan, PIPELINE_OP_LABELS, type PipelineRun } from './pipeline';
@@ -110,27 +110,24 @@ export function PipelineRunnerDialog() {
     setError(null);
   }, [locale]);
 
-  const execute = useMemo(
-    () => () => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch (caught) {
-        setRun(null);
-        setError(t('JSON 解析失败：{v0}', { v0: caught instanceof Error ? caught.message : String(caught) }));
-        return;
-      }
-      const checked = validatePipelinePlan(parsed, docs);
-      if (!checked.ok) {
-        setRun(null);
-        setError(checked.error);
-        return;
-      }
-      setError(null);
-      setRun(dryRunPipeline(checked.plan, docs));
-    },
-    [text, docs, t],
-  );
+  const execute = useCallback(() => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (caught) {
+      setRun(null);
+      setError(t('JSON 解析失败：{v0}', { v0: caught instanceof Error ? caught.message : String(caught) }));
+      return;
+    }
+    const checked = validatePipelinePlan(parsed, docs);
+    if (!checked.ok) {
+      setRun(null);
+      setError(checked.error);
+      return;
+    }
+    setError(null);
+    setRun(dryRunPipeline(checked.plan, docs));
+  }, [text, docs, t]);
 
   // A plan that arrived from the copilot is run straight away.
   useEffect(() => {

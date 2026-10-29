@@ -65,6 +65,11 @@ async function aligned(trace: SangerTraceData, doc: PlasmidDocument): Promise<Sa
   return alignTraceToPlasmid(trace, doc);
 }
 
+/** The finding for the event at `refStart`, if the read carries one. */
+function diagnosisFinding(trace: SangerTraceData, doc: PlasmidDocument, refStart: number) {
+  return attributeSangerFailures(trace, doc).findings.find((item) => item.event?.refStart === refStart);
+}
+
 describe('grouping', () => {
   it('reads a run of deletions as one event, which is what decides the frame', async () => {
     const doc = plasmid(SEQ);
@@ -100,6 +105,21 @@ describe('attribution', () => {
     expect(finding?.cause).toBe('primer_tail');
     expect(finding?.primerName).toBe('F_BamHI');
     expect(finding?.suggestion).toContain('重新合成');
+  });
+
+  it('does not read a tail that falls off a linear molecule as a footprint on it', async () => {
+    // A primer recorded against a template, whose tail would sit before base 0.
+    const doc = plasmid(SEQ, {
+      topology: 'linear',
+      primers: [primer({ name: 'F_tailed', bindingStart: 4, bindingEnd: 28, tailSequence: 'GGATCCAAAAAA' })],
+    });
+    // The change is at the far end, which is where a wrapped footprint would land.
+    const position = SEQ.length - 60;
+    const mutated = SEQ.slice(0, position) + (SEQ[position] === 'A' ? 'C' : 'A') + SEQ.slice(position + 1);
+    const trace = await aligned(createSyntheticTrace(mutated, { start: SEQ.length - 200, length: 200, seed: 31 }), doc);
+    const finding = diagnosisFinding(trace, doc, position);
+    expect(finding).toBeDefined();
+    expect(finding?.cause).toBe('unexplained');
   });
 
   it('points at the primer when the change sits in its annealing footprint', async () => {

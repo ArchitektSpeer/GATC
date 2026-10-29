@@ -104,12 +104,26 @@ function circularDistance(a: number, b: number, length: number, circular: boolea
   return Math.min(direct, length - direct);
 }
 
-/** Where the 5' tail of a primer sits on this molecule, or null when it has none. */
-function tailFootprint(primer: Primer, length: number): { start: number; end: number } | null {
+/**
+ * Where the 5' tail of a primer sits on this molecule, or null when it has none
+ * or does not fit. On a product of PCR the whole primer is in the molecule, the
+ * tail immediately 5' of the annealing stretch on its own strand; where a
+ * primer is recorded against a template instead, the tail can fall off the end,
+ * and on a linear molecule that is not a position at all.
+ */
+function tailFootprint(
+  primer: Primer,
+  length: number,
+  circular: boolean,
+): { start: number; end: number } | null {
   const tail = primer.tailSequence?.length ?? 0;
   if (!tail) return null;
-  if (primer.strand === 1) return { start: primer.bindingStart - tail, end: primer.bindingStart };
-  return { start: primer.bindingEnd, end: primer.bindingEnd + tail };
+  const span =
+    primer.strand === 1
+      ? { start: primer.bindingStart - tail, end: primer.bindingStart }
+      : { start: primer.bindingEnd, end: primer.bindingEnd + tail };
+  if (!circular && (span.start < 0 || span.end > length)) return null;
+  return span;
 }
 
 /**
@@ -347,7 +361,7 @@ function attributeEvent(event: SangerEvent, context: AttributionContext): Sanger
 
   // 2. Bases that came from a synthesised oligo are the next most likely source.
   for (const primer of doc.primers) {
-    const tail = tailFootprint(primer, length);
+    const tail = tailFootprint(primer, length, circular);
     if (tail && inRange(event.refStart, tail.start, tail.end, length)) {
       return {
         event,
