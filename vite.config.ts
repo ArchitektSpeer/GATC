@@ -21,7 +21,24 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
       },
-      workbox: { maximumFileSizeToCacheInBytes: 10 * 1024 * 1024 },
+      workbox: {
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+        // The Python runtime is tens of megabytes and most sessions never need it,
+        // so it is left out of the precache and kept only once it has been asked
+        // for; after that first use it is available offline like everything else.
+        globIgnores: ['**/pyodide/**'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }: { url: URL }) => url.pathname.includes('/pyodide/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'gatc-python',
+              expiration: { maxEntries: 32 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
     }),
   ],
   worker: { format: 'es' },
