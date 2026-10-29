@@ -5,9 +5,20 @@
 // it does not, the swap would change what the app reports.
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PlasmidDocument } from '../../types/schema';
-import { COMMERCIAL_ENZYMES, findCutSites, getEnzymeByName } from '../../modules/seq-engine';
+import { COMMERCIAL_ENZYMES, ENZYME_DATABASE, findCutSites, getEnzymeByName } from '../../modules/seq-engine';
 import { loadSampleLibrary } from '../../app/samples';
-import { restrictionSites, pythonVersions } from './index';
+import { restrictionSites, pythonVersions, type EnzymeDefinition } from './index';
+
+/** An enzyme as the bridge takes it: cuts as offsets from the start of the site. */
+function definition(enzyme: (typeof COMMERCIAL_ENZYMES)[number]): EnzymeDefinition {
+  return {
+    name: enzyme.name,
+    site: enzyme.recognitionSeq,
+    cutTop: enzyme.cutIndexTop,
+    cutBottom: enzyme.cutIndexBottom,
+    ...(enzyme.secondCut ? { second: enzyme.secondCut } : {}),
+  };
+}
 
 let pUC19: PlasmidDocument;
 
@@ -22,19 +33,18 @@ describe('Biopython in the page', () => {
 
   it('finds the same EcoRI and HindIII cuts as the built-in scanner', async () => {
     const names = ['EcoRI', 'HindIII', 'BamHI', 'PstI'];
-    const ours = findCutSites(pUC19, names.map((n) => getEnzymeByName(n)!))
+    const chosen = names.map((n) => getEnzymeByName(n)!);
+    const ours = findCutSites(pUC19, chosen)
       .map((site) => `${site.enzyme.name}@${site.cutPositionTop}`)
       .sort();
-    const theirs = (await restrictionSites(pUC19.sequence, true, names)).sites
+    const theirs = (await restrictionSites(pUC19.sequence, true, chosen.map(definition))).sites
       .map((hit) => `${hit.enzyme}@${hit.cutTop}`)
       .sort();
     expect(theirs).toEqual(ours);
   }, 300_000);
 
   it('agrees across the whole commercial set, and says which names it does not know', async () => {
-    const names = COMMERCIAL_ENZYMES.map((e) => e.name);
-    const result = await restrictionSites(pUC19.sequence, true, names);
-    const known = new Set(result.sites.map((hit) => hit.enzyme));
+    const result = await restrictionSites(pUC19.sequence, true, COMMERCIAL_ENZYMES.map(definition));
 
     // Every site Biopython reports for an enzyme it knows must be one we report too.
     const ours = new Set(
@@ -75,10 +85,31 @@ describe('Biopython in the page', () => {
       count: 0,
     });
 
-    // And the gap in coverage is a fact the UI would have to live with.
     console.log(
-      `commercial enzymes: ${names.length}, known to Bio.Restriction: ${names.length - result.unknown.length}, ` +
-        `unknown: ${result.unknown.length}, cutting pUC19: ${known.size}`,
+      `commercial enzymes: ${COMMERCIAL_ENZYMES.length}, carried by Bio.Restriction: ` +
+        `${COMMERCIAL_ENZYMES.length - result.built.length}, built from our definition: ${result.built.length}`,
     );
   }, 600_000);
+
+  it('covers the whole enzyme database, building what Bio.Restriction does not carry', async () => {
+    const result = await restrictionSites(pUC19.sequence, true, ENZYME_DATABASE.map(definition));
+    const ours = new Set(
+      findCutSites(pUC19, ENZYME_DATABASE).map(
+        (site) =>
+          `${site.enzyme.name}@${site.position}/${site.strand}->${site.cutPositionTop}:${site.cutPositionBottom}`,
+      ),
+    );
+    const wrong = result.sites
+      .filter(
+        (hit) =>
+          !ours.has(`${hit.enzyme}@${hit.position}/${hit.strand}->${hit.cutTop}:${hit.cutBottom}`),
+      )
+      .map((hit) => `${hit.enzyme}@${hit.position}/${hit.strand}->${hit.cutTop}:${hit.cutBottom}`);
+    expect({ wrong: wrong.slice(0, 8), count: wrong.length }).toEqual({ wrong: [], count: 0 });
+    console.log(
+      `database enzymes: ${ENZYME_DATABASE.length}, carried by Bio.Restriction: ` +
+        `${ENZYME_DATABASE.length - result.built.length}, built from our definition: ${result.built.length}, ` +
+        `sites found: ${result.sites.length}`,
+    );
+  }, 900_000);
 });

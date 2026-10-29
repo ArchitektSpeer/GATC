@@ -21,15 +21,23 @@ export interface RestrictionHit {
   cutTop: number;
   /** 0-based cut on the bottom strand. */
   cutBottom: number;
-  /** Negative for a 5' overhang, positive for a 3' one, 0 for a blunt cut. */
-  ovhg: number;
   overhang: string;
+}
+
+/** An enzyme as REBASE states it: cuts are offsets from the start of the site. */
+export interface EnzymeDefinition {
+  name: string;
+  site: string;
+  cutTop: number;
+  cutBottom: number;
+  /** The second pair of cuts of an enzyme that cleaves on both sides of its site. */
+  second?: { top: number; bottom: number };
 }
 
 export interface RestrictionResult {
   sites: RestrictionHit[];
-  /** Names Bio.Restriction does not know; the caller decides what to do about them. */
-  unknown: string[];
+  /** Enzymes Bio.Restriction does not carry, built from the definition given. */
+  built: string[];
 }
 
 interface Runtime {
@@ -119,18 +127,18 @@ function callSync<T>(name: string, args: unknown[]): T {
 export function restrictionSitesSync(
   sequence: string,
   circular: boolean,
-  names: string[],
+  enzymes: EnzymeDefinition[],
 ): RestrictionResult {
-  return callSync('restriction_sites', [sequence.toUpperCase(), circular, names]);
+  return callSync('restriction_sites', [sequence.toUpperCase(), circular, enzymes]);
 }
 
-/** Cut sites found by Bio.Restriction. Names it does not know are reported, not guessed. */
+/** Cut sites found by Bio.Restriction, for callers that cannot wait for a start-up. */
 export function restrictionSites(
   sequence: string,
   circular: boolean,
-  names: string[],
+  enzymes: EnzymeDefinition[],
 ): Promise<RestrictionResult> {
-  return call('restriction_sites', [sequence.toUpperCase(), circular, names]);
+  return call('restriction_sites', [sequence.toUpperCase(), circular, enzymes]);
 }
 
 /** The versions actually loaded, for the about box and for the tests. */
