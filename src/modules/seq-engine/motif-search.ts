@@ -1,7 +1,6 @@
 // GATC - Gene Assembly & Toolkit for Cloning
 // Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { GENETIC_CODE } from '../../lib/genetic-code';
 import type { PlasmidDocument } from '../../types/schema';
 
 export interface MotifHit {
@@ -56,6 +55,25 @@ const COMPLEMENT: Record<string, string> = {
   H: 'D',
   V: 'B',
   N: 'N',
+};
+
+const CODON_TABLE: Record<string, string> = {
+  TTT: 'F', TTC: 'F', TTA: 'L', TTG: 'L',
+  CTT: 'L', CTC: 'L', CTA: 'L', CTG: 'L',
+  ATT: 'I', ATC: 'I', ATA: 'I', ATG: 'M',
+  GTT: 'V', GTC: 'V', GTA: 'V', GTG: 'V',
+  TCT: 'S', TCC: 'S', TCA: 'S', TCG: 'S',
+  CCT: 'P', CCC: 'P', CCA: 'P', CCG: 'P',
+  ACT: 'T', ACC: 'T', ACA: 'T', ACG: 'T',
+  GCT: 'A', GCC: 'A', GCA: 'A', GCG: 'A',
+  TAT: 'Y', TAC: 'Y', TAA: '*', TAG: '*',
+  CAT: 'H', CAC: 'H', CAA: 'Q', CAG: 'Q',
+  AAT: 'N', AAC: 'N', AAA: 'K', AAG: 'K',
+  GAT: 'D', GAC: 'D', GAA: 'E', GAG: 'E',
+  TGT: 'C', TGC: 'C', TGA: '*', TGG: 'W',
+  CGT: 'R', CGC: 'R', CGA: 'R', CGG: 'R',
+  AGT: 'S', AGC: 'S', AGA: 'R', AGG: 'R',
+  GGT: 'G', GGC: 'G', GGA: 'G', GGG: 'G',
 };
 
 function normalizeSequence(sequence: string): string {
@@ -204,7 +222,7 @@ function translateFrame(sequence: string, frame: number): string {
   let protein = '';
   for (let position = frame; position + 3 <= sequence.length; position += 3) {
     const codon = sequence.slice(position, position + 3);
-    protein += GENETIC_CODE[codon] ?? 'X';
+    protein += CODON_TABLE[codon] ?? 'X';
   }
   return protein;
 }

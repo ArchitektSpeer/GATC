@@ -21,6 +21,9 @@ describe('bio worker failure', () => {
       terminate() {}
     }
     vi.stubGlobal('Worker', FakeWorker);
+    // The client keeps its pool in module state, and the suite shares workers
+    // between files, so this has to start from a module that has not been used.
+    vi.resetModules();
     const { callBio } = await import('./bio-client');
     await expect(callBio('calcCrossDimer', 'ACGTACGTAC', 'GTACGTACGT')).rejects.toThrow(/计算线程出错/);
     expect(created.length).toBeGreaterThan(0);

@@ -228,50 +228,6 @@ def restriction_sites(sequence, circular, definitions):
     return {"sites": out, "built": built}
 
 
-def translate(sequence, table=1, to_stop=False):
-    """The protein `sequence` codes for, by Biopython's genetic code tables.
-
-    Bases left over at the end are dropped, and anything Biopython cannot read as
-    a codon comes back as X, which is what the views expect.
-    """
-    usable = len(sequence) - len(sequence) % 3
-    if usable <= 0:
-        return ""
-    return str(Seq(sequence[:usable]).translate(table=table, to_stop=to_stop))
-
-
-def codon_table(table=1):
-    """The genetic code as a codon -> residue map, stops included, from Biopython."""
-    from Bio.Data import CodonTable
-
-    chosen = CodonTable.unambiguous_dna_by_id[table]
-    out = dict(chosen.forward_table)
-    for stop in chosen.stop_codons:
-        out[stop] = "*"
-    return out
-
-
-def protein_properties(sequence):
-    """Molecular weight and isoelectric point, from Bio.SeqUtils.
-
-    Residues outside the twenty standard ones have no tabulated weight or pKa, so
-    they are left out of both rather than guessed at; `counted` says how many were
-    used so a caller can tell the reader.
-    """
-    from Bio.SeqUtils import molecular_weight
-    from Bio.SeqUtils.ProtParam import ProteinAnalysis
-
-    standard = "".join(residue for residue in sequence.upper() if residue in "ACDEFGHIKLMNPQRSTVWY")
-    if not standard:
-        return {"molecularWeight": 0.0, "isoelectricPoint": 0.0, "counted": 0, "length": len(sequence)}
-    return {
-        "molecularWeight": molecular_weight(standard, seq_type="protein"),
-        "isoelectricPoint": ProteinAnalysis(standard).isoelectric_point(),
-        "counted": len(standard),
-        "length": len(sequence),
-    }
-
-
 def versions():
     import Bio
 

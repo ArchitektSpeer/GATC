@@ -1,9 +1,6 @@
 // GATC - Gene Assembly & Toolkit for Cloning
 // Copyright (C) 2026 Xu Zhonghe
 // SPDX-License-Identifier: GPL-3.0-or-later
-export { GENETIC_CODE as CODON_TABLE, SYNONYMOUS_CODONS } from '../../lib/genetic-code';
-import { GENETIC_CODE } from '../../lib/genetic-code';
-
 import type {
   CloningHistoryNode,
   CloningOperationType,
@@ -54,6 +51,73 @@ const IUPAC_CLASSES: Record<string, string> = {
   N: '[ACGT]',
 };
 
+export const CODON_TABLE: Record<string, string> = {
+  TTT: 'F',
+  TTC: 'F',
+  TTA: 'L',
+  TTG: 'L',
+  TCT: 'S',
+  TCC: 'S',
+  TCA: 'S',
+  TCG: 'S',
+  TAT: 'Y',
+  TAC: 'Y',
+  TAA: '*',
+  TAG: '*',
+  TGT: 'C',
+  TGC: 'C',
+  TGA: '*',
+  TGG: 'W',
+  CTT: 'L',
+  CTC: 'L',
+  CTA: 'L',
+  CTG: 'L',
+  CCT: 'P',
+  CCC: 'P',
+  CCA: 'P',
+  CCG: 'P',
+  CAT: 'H',
+  CAC: 'H',
+  CAA: 'Q',
+  CAG: 'Q',
+  CGT: 'R',
+  CGC: 'R',
+  CGA: 'R',
+  CGG: 'R',
+  ATT: 'I',
+  ATC: 'I',
+  ATA: 'I',
+  ATG: 'M',
+  ACT: 'T',
+  ACC: 'T',
+  ACA: 'T',
+  ACG: 'T',
+  AAT: 'N',
+  AAC: 'N',
+  AAA: 'K',
+  AAG: 'K',
+  AGT: 'S',
+  AGC: 'S',
+  AGA: 'R',
+  AGG: 'R',
+  GTT: 'V',
+  GTC: 'V',
+  GTA: 'V',
+  GTG: 'V',
+  GCT: 'A',
+  GCC: 'A',
+  GCA: 'A',
+  GCG: 'A',
+  GAT: 'D',
+  GAC: 'D',
+  GAA: 'E',
+  GAG: 'E',
+  GGT: 'G',
+  GGC: 'G',
+  GGA: 'G',
+  GGG: 'G',
+};
+
 export const AMINO_ACID_NAMES: Record<string, string> = {
   A: 'Ala',
   R: 'Arg',
@@ -77,6 +141,15 @@ export const AMINO_ACID_NAMES: Record<string, string> = {
   V: 'Val',
   '*': 'Stop',
 };
+
+export const SYNONYMOUS_CODONS: Record<string, string[]> = (() => {
+  const out: Record<string, string[]> = {};
+  for (const [codon, aa] of Object.entries(CODON_TABLE)) {
+    if (!out[aa]) out[aa] = [];
+    out[aa].push(codon);
+  }
+  return out;
+})();
 
 let idCounter = 0;
 
@@ -279,7 +352,7 @@ export function translateSequence(sequence: string, frame = 0, stopAtStop = fals
   let protein = '';
   for (let i = frame; i + 3 <= seq.length; i += 3) {
     const codon = seq.slice(i, i + 3);
-    const aa = GENETIC_CODE[codon] ?? 'X';
+    const aa = CODON_TABLE[codon] ?? 'X';
     if (aa === '*' && stopAtStop) break;
     protein += aa;
   }

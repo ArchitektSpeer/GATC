@@ -20,7 +20,7 @@ import {
   calculatePercentGC,
   getReverseComplementSequenceString,
 } from '@teselagen/sequence-utils';
-import { codonTableSync, restrictionSitesSync, type EnzymeDefinition } from '../../lib/python';
+import { restrictionSitesSync, type EnzymeDefinition } from '../../lib/python';
 import { COMMERCIAL_ENZYMES, getEnzymeByName } from './enzymes';
 import { FEATURE_LIBRARY } from './feature-library';
 import type { FeatureLibraryEntry } from './feature-library';
@@ -65,6 +65,25 @@ type Strand = 1 | -1;
 
 const STOP_CODONS = new Set(['TAA', 'TAG', 'TGA']);
 const START_CODON = 'ATG';
+
+const CODON_TABLE: Record<string, string> = {
+  TTT: 'F', TTC: 'F', TTA: 'L', TTG: 'L',
+  CTT: 'L', CTC: 'L', CTA: 'L', CTG: 'L',
+  ATT: 'I', ATC: 'I', ATA: 'I', ATG: 'M',
+  GTT: 'V', GTC: 'V', GTA: 'V', GTG: 'V',
+  TCT: 'S', TCC: 'S', TCA: 'S', TCG: 'S',
+  CCT: 'P', CCC: 'P', CCA: 'P', CCG: 'P',
+  ACT: 'T', ACC: 'T', ACA: 'T', ACG: 'T',
+  GCT: 'A', GCC: 'A', GCA: 'A', GCG: 'A',
+  TAT: 'Y', TAC: 'Y', TAA: '*', TAG: '*',
+  CAT: 'H', CAC: 'H', CAA: 'Q', CAG: 'Q',
+  AAT: 'N', AAC: 'N', AAA: 'K', AAG: 'K',
+  GAT: 'D', GAC: 'D', GAA: 'E', GAG: 'E',
+  TGT: 'C', TGC: 'C', TGA: '*', TGG: 'W',
+  CGT: 'R', CGC: 'R', CGA: 'R', CGG: 'R',
+  AGT: 'S', AGC: 'S', AGA: 'R', AGG: 'R',
+  GGT: 'G', GGC: 'G', GGA: 'G', GGG: 'G',
+};
 
 const AMINO_ACID_MASS: Record<string, number> = {
   A: 89.09, R: 174.2, N: 132.12, D: 133.1, C: 121.16,
@@ -131,24 +150,12 @@ export function reverseComplement(seq: string): string {
   );
 }
 
-/**
- * The genetic code, read once from Biopython rather than written out here. The
- * translation loop itself stays in this process: it is three array lookups per
- * codon, and annotation calls it once per candidate match, where crossing into
- * Python would cost far more than the work.
- */
-let codonsByTriplet: Record<string, string> | null = null;
-function codons(): Record<string, string> {
-  return (codonsByTriplet ??= codonTableSync());
-}
-
-/** The protein a stretch of DNA codes for, by Biopython's standard code. */
 export function translateDna(seq: string): string {
   const clean = normalizeSequence(seq).replace(/U/g, 'T');
-  const table = codons();
   let protein = '';
   for (let index = 0; index + 2 < clean.length; index += 3) {
-    protein += table[clean.slice(index, index + 3)] ?? 'X';
+    const codon = clean.slice(index, index + 3);
+    protein += CODON_TABLE[codon] ?? 'X';
   }
   return protein;
 }
@@ -183,25 +190,15 @@ const AMINO_ACID_CODE: Record<string, number> = {
   Y: 19,
 };
 
-/**
- * The genetic code packed into a lookup, so matching a protein against six
- * reading frames costs an array index rather than a string compare. The code
- * itself comes from Biopython; this only arranges it, and only once.
- */
-let codonAminoAcidCode: Int8Array | null = null;
-function codonCodes(): Int8Array {
-  if (codonAminoAcidCode) return codonAminoAcidCode;
-  const packed = new Int8Array(64).fill(-1);
-  for (const [codon, aminoAcid] of Object.entries(codons())) {
-    const a = TRANSLATION_BASE[codon[0]];
-    const c = TRANSLATION_BASE[codon[1]];
-    const g = TRANSLATION_BASE[codon[2]];
-    if (a === undefined || c === undefined || g === undefined) continue;
-    const code = AMINO_ACID_CODE[aminoAcid];
-    if (code !== undefined) packed[a * 16 + c * 4 + g] = code;
-  }
-  codonAminoAcidCode = packed;
-  return packed;
+const CODON_AMINO_ACID_CODE = new Int8Array(64).fill(-1);
+for (const [codon, aminoAcid] of Object.entries(CODON_TABLE)) {
+  const a = TRANSLATION_BASE[codon[0]];
+  const c = TRANSLATION_BASE[codon[1]];
+  const g = TRANSLATION_BASE[codon[2]];
+  if (a === undefined || c === undefined || g === undefined) continue;
+  const index = a * 16 + c * 4 + g;
+  const code = AMINO_ACID_CODE[aminoAcid];
+  if (code !== undefined) CODON_AMINO_ACID_CODE[index] = code;
 }
 function encodeSequence(sequence: string): Uint8Array {
   const encoded = new Uint8Array(sequence.length);
@@ -1498,7 +1495,6 @@ class ProteinAnnotationAutomaton {
     const results: Array<{ entryIndex: number; start: number }> = [];
     let state = 0;
     const length = Math.max(0, Math.floor((sequence.length - frame) / 3));
-    const codes = codonCodes();
     for (let index = 0; index < length; index += 1) {
       const offset = frame + index * 3;
       const a = TRANSLATION_BASE[sequence[offset]];
@@ -1507,7 +1503,7 @@ class ProteinAnnotationAutomaton {
       const code =
         a === undefined || c === undefined || g === undefined
           ? -1
-          : codes[a * 16 + c * 4 + g];
+          : CODON_AMINO_ACID_CODE[a * 16 + c * 4 + g];
       if (code < 0) {
         state = 0;
         continue;
