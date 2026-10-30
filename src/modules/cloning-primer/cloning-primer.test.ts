@@ -150,22 +150,22 @@ describe('SantaLucia / Owczarzy thermodynamics', () => {
       expect(Math.abs(result.tm - entry.tm)).toBeLessThanOrEqual(0.1);
       hairpinErrors.push(Math.abs(result.hairpinDeltaG - entry.hairpinDeltaG));
       homodimerErrors.push(Math.abs(result.selfDimerDeltaG - entry.homodimerDeltaG));
+      // An oligo primer3 says has no structure must not acquire one here.
       if (entry.hairpinDeltaG === 0) {
-        expect(result.hairpinDeltaG).toBeGreaterThanOrEqual(-1);
+        expect(result.hairpinDeltaG).toBe(0);
       }
       if (entry.homodimerDeltaG === 0) {
-        expect(result.selfDimerDeltaG).toBeGreaterThanOrEqual(-1);
+        expect(result.selfDimerDeltaG).toBe(0);
       }
     }
-    const requiredWithinOne = Math.ceil(reference.oligos.length * 0.9);
-    expect(hairpinErrors.filter((error) => error <= 1).length).toBeGreaterThanOrEqual(
-      requiredWithinOne,
-    );
-    expect(homodimerErrors.filter((error) => error <= 1).length).toBeGreaterThanOrEqual(
-      requiredWithinOne,
-    );
-    expect(Math.max(...hairpinErrors)).toBeLessThanOrEqual(2);
-    expect(Math.max(...homodimerErrors)).toBeLessThanOrEqual(2);
+    // The structure energies come from primer3's own thal, so this is not an
+    // approximation any more: it checks that the WebAssembly build of thal
+    // answers what the command-line tool answered. The worst of the 46 oligos
+    // is 0.015 kcal/mol for hairpins and 0.061 for homodimers, which is the
+    // single-precision arithmetic in the structure search; 0.1 leaves room for
+    // that without leaving room for a build that computes something else.
+    expect(Math.max(...hairpinErrors)).toBeLessThanOrEqual(0.1);
+    expect(Math.max(...homodimerErrors)).toBeLessThanOrEqual(0.1);
   });
 });
 

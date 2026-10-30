@@ -135,6 +135,7 @@ npm run check:session                 # browser run: edit → force quit → rec
 npm run mcp:build && node scripts/mcp-check.mjs   # start the MCP server over stdio and call it
 node scripts/make-audit-bundle.mjs    # write AUDIT_BUNDLE.md for an external review
 npm run crosscheck                    # compare with Biopython, REBASE, primer3 and pydna (needs Python 3)
+npm run build:thal                    # rebuild src/lib/wasm/thal.wasm from primer3 (needs clang)
 ```
 
 `npm run crosscheck` runs every computation against an independent implementation, using `.dna`
@@ -287,6 +288,7 @@ npm run check:session                 # 浏览器走查：编辑 → 强制关�
 npm run mcp:build && node scripts/mcp-check.mjs   # 以 stdio 启动 MCP 服务器并调用工具
 node scripts/make-audit-bundle.mjs    # 生成 AUDIT_BUNDLE.md 供外部审计
 npm run crosscheck                    # 与 Biopython / REBASE / primer3 / pydna 交叉验证（需 Python 3）
+npm run build:thal                    # 从 primer3 源码重新编译 src/lib/wasm/thal.wasm（需 clang）
 ```
 
 `npm run crosscheck` 用 **SnapGene 自身生成的真实 `.dna` 文件**，把每一项计算与独立实现逐项对比：
