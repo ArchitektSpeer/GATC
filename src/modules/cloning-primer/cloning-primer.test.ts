@@ -108,14 +108,19 @@ describe('SantaLucia / Owczarzy thermodynamics', () => {
 
   it('predicts a hairpin and a self-dimer for a self-complementary oligo', () => {
     const result = evaluateOligoThermodynamics('GAATTCGAATTC');
-    expect(result.hairpinAscii).toContain("5'-");
+    // The drawing is primer3's own: a header line with the energies, then the
+    // two strands with a row of bars for the bases that pair.
+    expect(result.hairpinAscii).toMatch(/dG: -?\d+ cal\/mol/);
+    expect(result.selfDimerAscii).toContain("5'");
+    expect(result.selfDimerAscii).toContain("3'");
     expect(result.selfDimerAscii).toContain('|');
     expect(result.selfDimerDeltaG).toBeLessThan(0);
   });
 
   it('calculates cross-dimer free energy and ASCII pairing', () => {
     const result = calcCrossDimer('AGCGGATAACAATTTCACACAGGA', 'TCCTGTGTGAAATTGTTATCCGCT');
-    expect(result.ascii).toContain("5'-");
+    expect(result.ascii).toContain("5'");
+    expect(result.ascii).toContain('|');
     expect(result.deltaG).toBeLessThanOrEqual(0);
   });
 

@@ -5,6 +5,7 @@
 import './worker-globals';
 import { setLocale } from '../lib/i18n';
 import { initPython, setPythonIndexURL } from '../lib/python';
+import { initThal } from '../lib/wasm/thal';
 import { bioApi, type BioRequest, type BioResponse } from './bio-api';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -14,7 +15,7 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 // the only asynchronous step, and it happens on the first request rather than at
 // load, so a session that never touches an enzyme never pays for it.
 let started: Promise<void> | null = null;
-const ready = () => (started ??= initPython());
+const ready = () => (started ??= Promise.all([initPython(), initThal()]).then(() => undefined));
 
 ctx.onmessage = async (e: MessageEvent<BioRequest | { pyodideURL: string }>) => {
   // The first message says where the interpreter is served from; see bio-client.

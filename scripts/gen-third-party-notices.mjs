@@ -32,6 +32,42 @@ const OVERRIDES = {
   'emitter-component': ['MIT', 'component-emitter.txt', 'https://github.com/component/emitter/blob/master/LICENSE'],
 };
 
+// Not everything in a build arrives through npm. These three do, and their licences have to
+// travel with the binary just as the npm ones do: primer3's thermodynamic code is compiled into
+// src/lib/wasm/thal.wasm by scripts/build-thal.mjs, and the Biopython and NumPy wheels are
+// downloaded into public/pyodide/ by scripts/vendor-pyodide.mjs and served from there. The licence
+// texts are kept under scripts/licence-overrides so this file can be regenerated without a network
+// and the determination can be audited.
+const VENDORED = [
+  {
+    name: 'Primer3',
+    version: 'commit 345cba9ca22f',
+    declared: 'GPL-2.0-or-later',
+    homepage: 'https://github.com/primer3-org/primer3',
+    how: 'src/thal.c, thal_params.c, thal_util.c, thal_draw.c and thal_trace.c compiled to `src/lib/wasm/thal.wasm`',
+    file: 'primer3.txt',
+  },
+  {
+    name: 'Biopython',
+    version: '1.87',
+    declared: 'Biopython License Agreement / BSD-3-Clause',
+    homepage: 'https://biopython.org/',
+    how: 'wheel served from `public/pyodide/` and imported by `src/lib/python/bio.py`',
+    file: 'biopython.txt',
+  },
+  {
+    name: 'NumPy',
+    version: '2.4.6',
+    declared: 'BSD-3-Clause',
+    homepage: 'https://numpy.org/',
+    how: 'wheel served from `public/pyodide/`, as Biopython requires it',
+    file: 'numpy.txt',
+  },
+].map((item) => ({
+  ...item,
+  text: readFileSync(join(root, 'scripts/licence-overrides', item.file), 'utf8').trim(),
+}));
+
 const packages = [];
 for (const dir of dirs) {
   let meta;
@@ -76,7 +112,7 @@ packages.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(
 // Most of these are the same MIT text with a different copyright line, so group by exact text:
 // every distinct notice is reproduced once, next to the packages it covers.
 const groups = new Map();
-for (const pkg of packages) {
+for (const pkg of [...packages, ...VENDORED]) {
   if (!pkg.text) continue;
   const key = createHash('sha256').update(pkg.text).digest('hex');
   if (!groups.has(key)) groups.set(key, { text: pkg.text, members: [] });
@@ -93,8 +129,10 @@ lines.push('# Third-party notices');
 lines.push('');
 lines.push(
   'GATC is distributed under the GNU General Public License v3.0 or later (see `LICENSE`).',
-  'A build also contains the npm packages listed here. Their licences are reproduced in full',
-  'below, as those licences require. Nothing in this file changes the terms of GATC itself.',
+  'A build also contains the npm packages listed here, and the three components below them that',
+  'are compiled or downloaded from source rather than installed from npm. Their licences are',
+  'reproduced in full below, as those licences require. Nothing in this file changes the terms of',
+  'GATC itself.',
 );
 lines.push('');
 lines.push(
@@ -111,10 +149,22 @@ for (const pkg of packages) {
   lines.push(`| ${name} | ${pkg.version} | ${pkg.declared} |`);
 }
 lines.push('');
+lines.push('## Components built or downloaded from source');
+lines.push('');
+lines.push('| Component | Version | Licence | How it enters a build |');
+lines.push('|---|---|---|---|');
+for (const item of VENDORED) {
+  lines.push(
+    `| [${item.name}](${item.homepage}) | ${item.version} | ${item.declared} | ${item.how} |`,
+  );
+}
+lines.push('');
 lines.push('## Licence texts');
 lines.push('');
 for (const [index, group] of ordered.entries()) {
-  const names = group.members.map((pkg) => `\`${pkg.name}@${pkg.version}\``).join(', ');
+  const names = group.members
+    .map((pkg) => (pkg.file ? `${pkg.name} ${pkg.version}` : `\`${pkg.name}@${pkg.version}\``))
+    .join(', ');
   lines.push(`### ${index + 1}. ${group.members[0].declared} — ${group.members.length} package(s)`);
   lines.push('');
   lines.push(names);
@@ -138,6 +188,6 @@ if (missing.length) {
 
 writeFileSync(out, `${lines.join('\n')}\n`);
 console.log(
-  `THIRD-PARTY-NOTICES.md: ${packages.length} packages, ${ordered.length} distinct licence texts,` +
-    ` ${missing.length} without a licence file`,
+  `THIRD-PARTY-NOTICES.md: ${packages.length} packages + ${VENDORED.length} built from source,` +
+    ` ${ordered.length} distinct licence texts, ${missing.length} without a licence file`,
 );

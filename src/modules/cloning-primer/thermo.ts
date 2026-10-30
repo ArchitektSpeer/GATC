@@ -9,6 +9,11 @@
  * at 37 degrees Celsius.
  */
 import {
+  duplex as duplexStructure,
+  hairpin as hairpinStructure,
+  type ThalConditions,
+} from '../../lib/wasm/thal';
+import {
   GAS_CONSTANT,
   clamp,
   complementBase,
@@ -436,109 +441,38 @@ function duplexAscii(
  * loops; the terminal loop is treated with the Jacobson-Stockmayer length
  * extrapolation and a small terminal-contact correction.
  */
+/**
+ * The hairpin an oligo folds into and the duplex two oligos form, both from
+ * primer3's thermodynamic alignment compiled to WebAssembly (lib/wasm/thal).
+ * The drawing comes back from the same call as the energy, so the picture and
+ * the number beside it are always the same structure.
+ */
+function thalConditions(conditions?: ReactionConditions): ThalConditions {
+  const merged = { ...DEFAULT_REACTION_CONDITIONS, ...conditions };
+  return {
+    monovalentMm: merged.naMm,
+    divalentMm: merged.mgMm,
+    dntpMm: merged.dntpMm,
+    oligoNm: merged.oligoNm,
+    temperatureC: 37,
+  };
+}
+
+/** primer3 writes its drawing with escaped newlines and an HTML degree sign. */
+function fromThal(result: { deltaG: number; structure: string } | null): HairpinPrediction {
+  if (!result) {
+    throw new Error('primer3 thermodynamics is not loaded; call initThal() before using it');
+  }
+  return {
+    deltaG: result.deltaG,
+    ascii: result.structure.replace(/\\n/g, '\n').replace(/&deg;/g, '\u00b0').trimEnd(),
+  };
+}
+
 export function predictHairpin(sequence: string, conditions?: ReactionConditions): HairpinPrediction {
   const seq = normalizeDNA(sequence);
-  const length = seq.length;
-  if (length < 6) return { deltaG: 0, ascii: hairpinAscii(seq, []) };
-  const context = structureConditions(conditions);
-  const total = length * length;
-  const dp = new Float64Array(total);
-  dp.fill(Number.POSITIVE_INFINITY);
-  const previous = new Int32Array(total);
-  previous.fill(-1);
-  let bestEnergy = 0;
-  let bestIndex = -1;
-  for (let span = 4; span <= length; span += 1) {
-    for (let i = 0; i + span <= length; i += 1) {
-      const j = i + span - 1;
-      if (!isCanonicalPair(seq[i], seq[j])) continue;
-      const index = i * length + j;
-      let energy = Number.POSITIVE_INFINITY;
-      let back = -1;
-      const loopLength = j - i - 1;
-      if (loopLength >= 3) {
-        const penalty = hairpinLoopPenalty(loopLength, seq[i + 1]);
-        if (penalty < energy) {
-          energy = penalty;
-          back = -1;
-        }
-      }
-      if (i + 1 < j - 1 && isCanonicalPair(seq[i + 1], seq[j - 1])) {
-        const inner = dp[(i + 1) * length + (j - 1)];
-        if (Number.isFinite(inner)) {
-          const candidate = stackEnergy(seq.slice(i, i + 2), context) + inner;
-          if (candidate < energy) {
-            energy = candidate;
-            back = (i + 1) * length + (j - 1);
-          }
-        }
-      }
-      for (let leftGap = 1; leftGap <= HAIRPIN_MAX_LOOP; leftGap += 1) {
-        const innerTop = i + 1 + leftGap;
-        if (innerTop >= j - 1) break;
-        if (!isCanonicalPair(seq[innerTop], seq[j - 1])) continue;
-        const inner = dp[innerTop * length + (j - 1)];
-        if (!Number.isFinite(inner)) continue;
-        const candidate = hairpinBulgePenalty(leftGap) + inner;
-        if (candidate < energy) {
-          energy = candidate;
-          back = innerTop * length + (j - 1);
-        }
-      }
-      for (let rightGap = 1; rightGap <= HAIRPIN_MAX_LOOP; rightGap += 1) {
-        const innerBottom = j - 1 - rightGap;
-        if (innerBottom <= i + 1) break;
-        if (!isCanonicalPair(seq[i + 1], seq[innerBottom])) continue;
-        const inner = dp[(i + 1) * length + innerBottom];
-        if (!Number.isFinite(inner)) continue;
-        const candidate = hairpinBulgePenalty(rightGap) + inner;
-        if (candidate < energy) {
-          energy = candidate;
-          back = (i + 1) * length + innerBottom;
-        }
-      }
-      for (let leftGap = 1; leftGap <= HAIRPIN_MAX_LOOP; leftGap += 1) {
-        const innerTop = i + 1 + leftGap;
-        if (innerTop >= j - 2) break;
-        for (let rightGap = 1; rightGap <= HAIRPIN_MAX_LOOP; rightGap += 1) {
-          const innerBottom = j - 1 - rightGap;
-          if (innerTop >= innerBottom) break;
-          if (!isCanonicalPair(seq[innerTop], seq[innerBottom])) continue;
-          const inner = dp[innerTop * length + innerBottom];
-          if (!Number.isFinite(inner)) continue;
-          const candidate =
-            hairpinInternalLoopPenalty(leftGap, rightGap) + inner;
-          if (candidate < energy) {
-            energy = candidate;
-            back = innerTop * length + innerBottom;
-          }
-        }
-      }
-      if (Number.isFinite(energy)) {
-        dp[index] = energy;
-        previous[index] = back;
-        if (energy < bestEnergy) {
-          bestEnergy = energy;
-          bestIndex = index;
-        }
-      }
-    }
-  }
-  if (bestIndex < 0) {
-    return { deltaG: 0, ascii: hairpinAscii(seq, []) };
-  }
-  const pairs: Array<[number, number]> = [];
-  let cursor = bestIndex;
-  while (cursor >= 0) {
-    pairs.push([Math.floor(cursor / length), cursor % length]);
-    cursor = previous[cursor];
-  }
-  pairs.reverse();
-  const rounded = Number(bestEnergy.toFixed(3));
-  return {
-    deltaG: rounded < 0 ? rounded : 0,
-    ascii: hairpinAscii(seq, pairs),
-  };
+  if (seq.length < 6) return { deltaG: 0, ascii: '' };
+  return fromThal(hairpinStructure(seq, thalConditions(conditions)));
 }
 
 /**
@@ -555,109 +489,8 @@ export function predictDuplex(
 ): DuplexPrediction {
   const top = normalizeDNA(topSequence);
   const bottom = normalizeDNA(bottomSequence);
-  const pairingBottom = reverseComplement(bottom);
-  const n = top.length;
-  const m = pairingBottom.length;
-  if (n < 2 || m < 2) {
-    return {
-      deltaG: 0,
-      ascii: duplexAscii(top, bottom, []),
-    };
-  }
-  const context = structureConditions(conditions);
-  const total = n * m;
-  const dp = new Float64Array(total);
-  dp.fill(Number.POSITIVE_INFINITY);
-  const previous = new Int32Array(total);
-  previous.fill(-1);
-  let bestEnergy = 0;
-  let bestIndex = -1;
-  for (let i = 0; i < n; i += 1) {
-    for (let j = 0; j < m; j += 1) {
-      const index = i * m + j;
-      const bottomBase = complementBase(pairingBottom[j]);
-      const canonical = isCanonicalPair(top[i], bottomBase);
-      const pairPenalty = canonical ? 0 : mismatchPenalty(top[i], bottomBase);
-      const startEnergy =
-        initiationEnergy(top[i]) +
-        pairPenalty +
-        duplexTerminalPenalty(top[i], bottomBase) +
-        duplexDangle(i > 0, j > 0);
-      let energy = startEnergy;
-      let back = -1;
-      if (i > 0 && j > 0) {
-        const previousIndex = index - m - 1;
-        if (Number.isFinite(dp[previousIndex])) {
-          const previousBottom = complementBase(pairingBottom[j - 1]);
-          const previousCanonical = isCanonicalPair(top[i - 1], previousBottom);
-          let step: number;
-          if (canonical && previousCanonical) {
-            step = stackEnergy(top.slice(i - 1, i + 1), context);
-          } else {
-            step =
-              DUPLEX_MISMATCH_STEP +
-              (canonical ? 0 : pairPenalty) +
-              (previousCanonical ? 0 : mismatchPenalty(top[i - 1], previousBottom));
-          }
-          const candidate = dp[previousIndex] + step;
-          if (candidate < energy) {
-            energy = candidate;
-            back = previousIndex;
-          }
-        }
-      }
-      for (let leftGap = 0; leftGap <= STRUCTURE_MAX_LOOP; leftGap += 1) {
-        for (let rightGap = 0; rightGap <= STRUCTURE_MAX_LOOP; rightGap += 1) {
-          if (leftGap === 0 && rightGap === 0) continue;
-          const previousTop = i - leftGap - 1;
-          const previousBottom = j - rightGap - 1;
-          if (previousTop < 0 || previousBottom < 0) continue;
-          const previousIndex = previousTop * m + previousBottom;
-          if (!Number.isFinite(dp[previousIndex])) continue;
-          let loop: number;
-          if (rightGap === 0) {
-            loop = bulgePenalty(leftGap);
-          } else if (leftGap === 0) {
-            loop = bulgePenalty(rightGap);
-          } else {
-            loop = internalLoopPenalty(leftGap, rightGap);
-          }
-          const candidate = dp[previousIndex] + loop;
-          if (candidate < energy) {
-            energy = candidate;
-            back = previousIndex;
-          }
-        }
-      }
-      dp[index] = energy;
-      previous[index] = back;
-      const endEnergy =
-        energy +
-        initiationEnergy(top[i]) +
-        pairPenalty +
-        duplexTerminalPenalty(top[i], bottomBase) +
-        duplexDangle(i + 1 < n, j + 1 < m);
-      if (endEnergy < bestEnergy) {
-        bestEnergy = endEnergy;
-        bestIndex = index;
-      }
-    }
-  }
-  if (bestIndex < 0) {
-    return { deltaG: 0, ascii: duplexAscii(top, bottom, []) };
-  }
-  const pairs: Array<[number, number]> = [];
-  let cursor = bestIndex;
-  while (cursor >= 0) {
-    pairs.push([Math.floor(cursor / m), cursor % m]);
-    cursor = previous[cursor];
-  }
-  pairs.reverse();
-  const rounded = Number(bestEnergy.toFixed(3));
-  return {
-    deltaG: rounded < 0 ? rounded : 0,
-    ascii: duplexAscii(top, bottom, pairs),
-  };
+  if (!top.length || !bottom.length) return { deltaG: 0, ascii: '' };
+  return fromThal(duplexStructure(top, bottom, thalConditions(conditions)));
 }
 
 export interface OligoThermo {

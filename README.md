@@ -73,7 +73,7 @@ Shortcuts: `Ctrl/Cmd+K` command palette, `Ctrl/Cmd+F` find, `Ctrl/Cmd+Z` undo,
 | Oligo annealing | Hybridise two ordered oligos into a short duplex with defined ends, or work backwards from the insert and the ends it must present and get the two oligos to order — how sgRNA spacers, linkers, adaptors and tags are actually cloned. Takes the overhangs straight off a digested vector, and the product feeds the ligation and Golden Gate wizards |
 | Annotation | Local auto-annotation from 300+ common parts (exact and tolerant DNA matching, CDS parts also matched by protein translation), six-frame ORFs with MW and pI |
 | Cloning | Single and double digest ligation (compatible ends, fill-in/chew-back, dephosphorylation), insert fragment, Gibson / NEBuilder HiFi / In-Fusion, Golden Gate (fidelity score, internal-site warnings), Gateway BP/LR/MultiSite LR, TA / GC / TOPO (TA, blunt, directional), LIC, Cre/lox and Flp/FRT recombination (excision, inversion, integration), PCR, fusion PCR, site-directed mutagenesis (QuikChange and Q5 back-to-back, with silent restriction-site suggestions) |
-| Primers | SantaLucia 1998 nearest-neighbour with Owczarzy 2008 Mg²⁺/dNTP salt correction (Tm within 0.01 °C of 46 reference primers), SantaLucia & Hicks 2004 dynamic-programming hairpin and dimer ΔG (mean error 0.3–0.5 kcal/mol), restriction-site and homology-arm primer design, a primer library that persists across sessions |
+| Primers | SantaLucia 1998 nearest-neighbour with Owczarzy 2008 Mg²⁺/dNTP salt correction (Tm within 0.01 °C of 46 reference primers), primer3's own `thal` compiled to WebAssembly for hairpin and dimer ΔG and the structure drawing (within 0.02 kcal/mol of primer3's reference output), restriction-site and homology-arm primer design, a primer library that persists across sessions |
 | Alignment | Sanger `.ab1` (Mott trimming, heterozygous double peaks, alignment across the origin, amino-acid impact, multi-read consensus and coverage), FASTQ read alignment, multiple sequence alignment (guide tree plus progressive profile alignment, DNA and protein BLOSUM62), pairwise global/local/semi-global alignment |
 | Protein | Back-translation and codon optimisation for 8 hosts (optionally avoiding named restriction sites), CAI |
 | Gels | 36 commercial ladders, 0.5–3% agarose, voltage and run time, supercoiled/nicked/linear conformations, mass-weighted band intensity |
@@ -228,7 +228,7 @@ npm run tauri:build
 | 寡核苷酸退火 | 两条引物退火成带末端的短双链片段；也可反过来，给定要插入的序列和需要的末端，直接算出该订哪两条引物——sgRNA 间隔序列、linker、接头、标签都这么连。末端可从已酶切的载体直接取，产物可送入酶切连接与 Golden Gate 向导 |
 | 注释 | 300+ 常用元件的本地自动注释（DNA 精确与容错匹配，CDS 元件可按蛋白翻译匹配），6 框 ORF 与分子量/等电点 |
 | 克隆 | 单双酶切连接（同尾酶、补平/削平、去磷酸化）、插入片段、Gibson / NEBuilder HiFi / In-Fusion、Golden Gate（保真度评分、内部位点预警）、Gateway BP/LR/MultiSite LR、TA / GC / TOPO（TA、平端、定向）、LIC、Cre/lox 与 Flp/FRT 重组（切除、倒位、整合）、PCR、融合 PCR、定点突变（QuikChange 与 Q5 背靠背，附静默酶切位点推荐） |
-| 引物 | SantaLucia 1998 最邻近 + Owczarzy 2008 Mg²⁺/dNTP 盐校正（46 条参考引物 Tm 误差 < 0.01 °C），SantaLucia & Hicks 2004 动态规划发夹与二聚体 ΔG（平均误差 0.3–0.5 kcal/mol），酶切位点加保护碱基、同源臂引物设计，跨会话保存的引物库 |
+| 引物 | SantaLucia 1998 最邻近 + Owczarzy 2008 Mg²⁺/dNTP 盐校正（46 条参考引物 Tm 误差 < 0.01 °C），发夹、二聚体 ΔG 和结构图直接用 primer3 自带的 `thal` 编译成 WebAssembly（与 primer3 参考输出差异 < 0.02 kcal/mol），酶切位点加保护碱基、同源臂引物设计，跨会话保存的引物库 |
 | 比对 | Sanger `.ab1`（Mott 修剪、杂合双峰、跨原点比对、氨基酸影响、多读长一致性与覆盖度）、FASTQ 读长比对、多序列比对（引导树 + 渐进式 profile 比对，DNA 与蛋白 BLOSUM62）、双序列全局/局部/半全局比对 |
 | 蛋白 | 反向翻译与 8 种宿主密码子优化（可避开指定酶切位点）、CAI 计算 |
 | 电泳 | 36 种商业 Ladder、0.5–3% 胶浓度、电压与时间、超螺旋/开环/线性构象、按质量计算亮度 |
@@ -332,6 +332,18 @@ binary. The two GATC leans on most are
 `@teselagen/range-utils` 0.3.20, `@teselagen/sequence-utils` 0.3.42) and
 [SeqViz](https://github.com/Lattice-Automation/seqviz) 3.10.25 (MIT).
 
+Three parts of a build do not arrive through npm, and so are listed separately in that file.
+[Primer3](https://github.com/primer3-org/primer3) (GPL-2.0-or-later, commit `345cba9ca22f`) supplies
+the thermodynamic alignment behind every hairpin and dimer readout: `scripts/build-thal.mjs`
+compiles its `thal` sources to `src/lib/wasm/thal.wasm`, and `src/lib/wasm/thal-wrap.c` is the only
+code GATC adds, a few lines that pass arguments in and read results out.
+[Biopython](https://biopython.org/) 1.87 (Biopython License Agreement / BSD-3-Clause) does the
+restriction-site search and the codon tables, and [NumPy](https://numpy.org/) 2.4.6
+(BSD-3-Clause) comes with it; `scripts/vendor-pyodide.mjs` downloads both wheels, and the runtime
+files of the `pyodide` npm package 314.0.7 (MPL-2.0), into `public/pyodide/`, from where the browser
+loads them. GPL-2.0-or-later and MPL-2.0 are both compatible with GPL-3.0-or-later, the licence of
+GATC as a whole.
+
 **Consulted, then implemented independently.** No code was copied from these projects. They
 document the SnapGene `.dna` and Vector NTI `.xdna` binary layouts; the parsers in
 `src/modules/io-adapter/` were written against that documented format:
@@ -372,8 +384,10 @@ checks GATC's output against it, and the results are in [docs/CROSSCHECK.md](doc
 [primer3-py](https://github.com/libnano/primer3-py) 2.4.0 (GPL-2.0),
 [pydna](https://github.com/pydna-group/pydna) 5.5.16 (BSD-3-Clause).
 `test-data/primer3-reference.json` holds values produced by
-[Primer3](https://github.com/primer3-org/primer3) (GPL-2.0) and is used for accuracy regression;
-those numbers are measurements rather than Primer3 code, and no Primer3 source is present here.
+[Primer3](https://github.com/primer3-org/primer3) (GPL-2.0-or-later) and is used for accuracy
+regression. Primer3's own `thal` now answers the hairpin and dimer questions inside GATC, so that
+file checks the WebAssembly build against the numbers the command-line tool prints, rather than
+checking an independent implementation against them.
 
 **Data and literature.** Enzyme definitions and cut positions come from REBASE, read through
 Biopython's restriction tables. REBASE is free for academic use and asks to be cited:
