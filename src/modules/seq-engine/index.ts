@@ -20,6 +20,8 @@ import {
   calculatePercentGC,
   getReverseComplementSequenceString,
 } from '@teselagen/sequence-utils';
+import { GENETIC_CODE } from '../../lib/genetic-code';
+import { restrictionSitesSync, type EnzymeDefinition } from '../../lib/python';
 import { COMMERCIAL_ENZYMES, getEnzymeByName } from './enzymes';
 import { FEATURE_LIBRARY } from './feature-library';
 import type { FeatureLibraryEntry } from './feature-library';
@@ -65,25 +67,6 @@ type Strand = 1 | -1;
 const STOP_CODONS = new Set(['TAA', 'TAG', 'TGA']);
 const START_CODON = 'ATG';
 
-const CODON_TABLE: Record<string, string> = {
-  TTT: 'F', TTC: 'F', TTA: 'L', TTG: 'L',
-  CTT: 'L', CTC: 'L', CTA: 'L', CTG: 'L',
-  ATT: 'I', ATC: 'I', ATA: 'I', ATG: 'M',
-  GTT: 'V', GTC: 'V', GTA: 'V', GTG: 'V',
-  TCT: 'S', TCC: 'S', TCA: 'S', TCG: 'S',
-  CCT: 'P', CCC: 'P', CCA: 'P', CCG: 'P',
-  ACT: 'T', ACC: 'T', ACA: 'T', ACG: 'T',
-  GCT: 'A', GCC: 'A', GCA: 'A', GCG: 'A',
-  TAT: 'Y', TAC: 'Y', TAA: '*', TAG: '*',
-  CAT: 'H', CAC: 'H', CAA: 'Q', CAG: 'Q',
-  AAT: 'N', AAC: 'N', AAA: 'K', AAG: 'K',
-  GAT: 'D', GAC: 'D', GAA: 'E', GAG: 'E',
-  TGT: 'C', TGC: 'C', TGA: '*', TGG: 'W',
-  CGT: 'R', CGC: 'R', CGA: 'R', CGG: 'R',
-  AGT: 'S', AGC: 'S', AGA: 'R', AGG: 'R',
-  GGT: 'G', GGC: 'G', GGA: 'G', GGG: 'G',
-};
-
 const AMINO_ACID_MASS: Record<string, number> = {
   A: 89.09, R: 174.2, N: 132.12, D: 133.1, C: 121.16,
   E: 147.13, Q: 146.15, G: 75.07, H: 155.16, I: 131.17,
@@ -113,22 +96,6 @@ const BASES_BY_MASK: Record<number, string> = {
   7: 'ACG', 11: 'ACT', 13: 'AGT', 14: 'CGT',
   15: 'ACGT',
 };
-
-function expandIupacPattern(pattern: string, limit: number): string[] | null {
-  let variants = [''];
-  for (const letter of pattern) {
-    const mask = IUPAC_MASK[letter];
-    const bases = mask === undefined ? undefined : BASES_BY_MASK[mask];
-    if (!bases || variants.length * bases.length > limit) return null;
-    const next: string[] = [];
-    for (const prefix of variants) {
-      for (const base of bases) next.push(prefix + base);
-    }
-    variants = next;
-  }
-  return variants;
-}
-
 let identifierCounter = 0;
 
 function nextIdentifier(prefix: string): string {
@@ -165,12 +132,17 @@ export function reverseComplement(seq: string): string {
   );
 }
 
+/**
+ * The protein a stretch of DNA codes for. The code itself is GENETIC_CODE,
+ * generated from Biopython; the loop stays here because this runs on the
+ * drawing thread as well, where the interpreter does not, and because
+ * annotation translates once per candidate match.
+ */
 export function translateDna(seq: string): string {
   const clean = normalizeSequence(seq).replace(/U/g, 'T');
   let protein = '';
   for (let index = 0; index + 2 < clean.length; index += 3) {
-    const codon = clean.slice(index, index + 3);
-    protein += CODON_TABLE[codon] ?? 'X';
+    protein += GENETIC_CODE[clean.slice(index, index + 3)] ?? 'X';
   }
   return protein;
 }
@@ -205,21 +177,26 @@ const AMINO_ACID_CODE: Record<string, number> = {
   Y: 19,
 };
 
-const CODON_AMINO_ACID_CODE = new Int8Array(64).fill(-1);
-for (const [codon, aminoAcid] of Object.entries(CODON_TABLE)) {
-  const a = TRANSLATION_BASE[codon[0]];
-  const c = TRANSLATION_BASE[codon[1]];
-  const g = TRANSLATION_BASE[codon[2]];
-  if (a === undefined || c === undefined || g === undefined) continue;
-  const index = a * 16 + c * 4 + g;
-  const code = AMINO_ACID_CODE[aminoAcid];
-  if (code !== undefined) CODON_AMINO_ACID_CODE[index] = code;
+/**
+ * The genetic code packed into a lookup, so matching a protein against six
+ * reading frames costs an array index rather than a string compare. The code
+ * itself comes from Biopython; this only arranges it, and only once.
+ */
+let codonAminoAcidCode: Int8Array | null = null;
+function codonCodes(): Int8Array {
+  if (codonAminoAcidCode) return codonAminoAcidCode;
+  const packed = new Int8Array(64).fill(-1);
+  for (const [codon, aminoAcid] of Object.entries(GENETIC_CODE)) {
+    const a = TRANSLATION_BASE[codon[0]];
+    const c = TRANSLATION_BASE[codon[1]];
+    const g = TRANSLATION_BASE[codon[2]];
+    if (a === undefined || c === undefined || g === undefined) continue;
+    const code = AMINO_ACID_CODE[aminoAcid];
+    if (code !== undefined) packed[a * 16 + c * 4 + g] = code;
+  }
+  codonAminoAcidCode = packed;
+  return packed;
 }
-
-function isPalindromic(sequence: string): boolean {
-  return reverseComplement(sequence) === sequence;
-}
-
 function encodeSequence(sequence: string): Uint8Array {
   const encoded = new Uint8Array(sequence.length);
   for (let position = 0; position < sequence.length; position += 1) {
@@ -426,6 +403,25 @@ function orderCutSites(sites: CutSite[], sequenceLength: number): CutSite[] {
   return ordered;
 }
 
+/** An enzyme as the Biopython bridge takes it: cuts offset from the start of the site. */
+function enzymeDefinition(enzyme: RestrictionEnzyme): EnzymeDefinition {
+  return {
+    name: enzyme.name,
+    site: enzyme.recognitionSeq.toUpperCase(),
+    cutTop: enzyme.cutIndexTop,
+    cutBottom: enzyme.cutIndexBottom,
+    ...(enzyme.secondCut ? { second: enzyme.secondCut } : {}),
+  };
+}
+
+/**
+ * Where the given enzymes cut this molecule. Finding the sites and working out
+ * the cuts is Bio.Restriction's, through the bridge in lib/python; what is added
+ * here is what no package carries - whether the host's methylation blocks the
+ * cut, the buffer the enzyme needs, and the order the interface wants them in.
+ *
+ * The interpreter has to be running: call initPython() once before this.
+ */
 export function findCutSites(
   doc: PlasmidDocument,
   enzymes: RestrictionEnzyme[] = COMMERCIAL_ENZYMES,
@@ -452,96 +448,18 @@ export function findCutSites(
     return true;
   });
   if (selected.length === 0) return [];
-  // Generating sites in enzyme-name order lets a stable counting sort below
-  // reproduce the historical position/name/strand ordering without comparing
-  // every pair of cut sites.
-  selected.sort((left, right) => left.name.localeCompare(right.name));
 
-  let maximumRecognitionLength = 0;
-  for (const enzyme of selected) {
-    maximumRecognitionLength = Math.max(
-      maximumRecognitionLength,
-      enzyme.recognitionSeq.length,
-    );
-  }
-  const scanSequence = circular
-    ? sequence + sequence.slice(0, maximumRecognitionLength)
-    : sequence;
-  const encodedScan = encodeSequence(scanSequence);
-  const masks = buildMethylationMasks(
-    sequence,
-    circular,
-    doc.methylationProfile,
-  );
-
-  // Isoschizomers and commercial aliases share recognition sequences, so the
-  // scan is performed once per unique motif and reused by every enzyme.
-  const patternCache = new Map<string, number[]>();
-  const patterns = new Set<string>();
-  for (const enzyme of selected) {
-    const recognition = enzyme.recognitionSeq.toUpperCase();
-    patterns.add(recognition);
-    if (!isPalindromic(recognition)) {
-      patterns.add(reverseComplement(recognition));
-    }
-  }
-
-  // Motifs with a small IUPAC expansion share one Aho-Corasick pass. Highly
-  // degenerate motifs fall back to the bit-parallel matcher.
-  const automaton = new AnnotationAutomaton();
-  const expandedPatterns: string[] = [];
-  const entryPatterns: number[] = [];
-  const fallbackPatterns: string[] = [];
-  for (const pattern of patterns) {
-    const variants = expandIupacPattern(pattern, 64);
-    if (!variants) {
-      fallbackPatterns.push(pattern);
-      continue;
-    }
-    const patternIndex = expandedPatterns.length;
-    expandedPatterns.push(pattern);
-    for (const variant of variants) {
-      entryPatterns.push(patternIndex);
-      automaton.add(variant, {
-        libraryIndex: patternIndex,
-        strand: 1,
-        kind: 'full',
-        offset: 0,
-      });
-    }
-  }
-
-  if (expandedPatterns.length > 0) {
-    automaton.build();
-    const buckets = expandedPatterns.map(() => [] as number[]);
-    for (const match of automaton.search(scanSequence)) {
-      buckets[entryPatterns[match.entryIndex]].push(match.start);
-    }
-    for (let index = 0; index < expandedPatterns.length; index += 1) {
-      patternCache.set(
-        expandedPatterns[index],
-        buckets[index].filter((position) => position < length),
-      );
-    }
-  }
-
-  for (const pattern of fallbackPatterns) {
-    patternCache.set(
-      pattern,
-      findPatternPositions(scanSequence, pattern, encodedScan).filter(
-        (position) => position < length,
-      ),
-    );
-  }
-
-  const positionsFor = (pattern: string): number[] =>
-    patternCache.get(pattern) ?? [];
+  const byName = new Map(selected.map((enzyme) => [enzyme.name, enzyme]));
+  const masks = buildMethylationMasks(sequence, circular, doc.methylationProfile);
+  const { sites } = restrictionSitesSync(sequence, circular, selected.map(enzymeDefinition));
 
   const allSites: CutSite[] = [];
+  const cutsPerEnzyme = new Map<string, number>();
+  const usedIds = new Set<string>();
+  for (const hit of sites) {
+    const enzyme = byName.get(hit.enzyme);
+    if (!enzyme) continue;
 
-  for (const enzyme of selected) {
-    const recognition = enzyme.recognitionSeq.toUpperCase();
-    const recognitionLength = recognition.length;
     const enzymeIsDpnI = enzyme.name.toUpperCase() === 'DPNI';
     const sensitivity = enzyme.methylationSensitivity;
     const hasBlockingMethylation =
@@ -550,85 +468,43 @@ export function findCutSites(
         ((sensitivity.dam === 'blocked' && masks.profile.dam) ||
           (sensitivity.dcm === 'blocked' && masks.profile.dcm) ||
           (sensitivity.cpg === 'blocked' && masks.profile.cpg)));
-    const firstSiteIndex = allSites.length;
 
-    const cuts = [{ top: enzyme.cutIndexTop, bottom: enzyme.cutIndexBottom, suffix: '' }];
-    if (enzyme.secondCut) cuts.push({ ...enzyme.secondCut, suffix: ':2' });
+    const difference = hit.rawBottom - hit.rawTop;
+    const position = hit.position ?? hit.cutTop;
+    // An enzyme that cuts on both sides of one site produces two cuts that would
+    // otherwise share an id.
+    let id = `${enzyme.name}:${position}:${hit.strand}`;
+    if (usedIds.has(id)) id += ':2';
+    usedIds.add(id);
 
-    const addPosition = (position: number, strand: Strand): void => {
-      for (const cut of cuts) addCut(position, strand, cut.top, cut.bottom, cut.suffix);
-    };
-
-    const addCut = (position: number, strand: Strand, cutTop: number, cutBottom: number, suffix: string): void => {
-      const rawTop =
-        strand === 1
-          ? position + cutTop
-          : position + recognitionLength - cutBottom;
-      const rawBottom =
-        strand === 1
-          ? position + cutBottom
-          : position + recognitionLength - cutTop;
-
-      if (
-        !circular &&
-        (rawTop < 0 || rawTop > length || rawBottom < 0 || rawBottom > length)
-      ) {
-        return;
-      }
-
-      const difference = rawBottom - rawTop;
-      const overhangType: CutSite['overhangType'] =
-        difference === 0 ? 'blunt' : difference > 0 ? '5-prime' : '3-prime';
-      const overhangSeq =
-        difference === 0
-          ? ''
-          : extractSegment(
-              sequence,
-              circular,
-              Math.min(rawTop, rawBottom),
-              Math.abs(difference),
-            );
-      allSites.push({
-        id: `${enzyme.name}:${position}:${strand}${suffix}`,
-        enzyme,
-        position,
-        strand,
-        cutPositionTop: circular ? mod(rawTop, length) : rawTop,
-        cutPositionBottom: circular ? mod(rawBottom, length) : rawBottom,
-        overhangType,
-        overhangSeq,
-        isMethylationBlocked: hasBlockingMethylation
-          ? isMethylationBlocked(
-              enzyme,
-              enzymeIsDpnI,
-              position,
-              recognitionLength,
-              rawTop,
-              rawBottom,
-              masks,
-              length,
-              circular,
-            )
-          : false,
-        totalCutsInPlasmid: 0,
-      });
-    };
-
-    for (const position of positionsFor(recognition)) {
-      addPosition(position, 1);
-    }
-
-    if (!isPalindromic(recognition)) {
-      const reverseRecognition = reverseComplement(recognition);
-      for (const position of positionsFor(reverseRecognition)) {
-        addPosition(position, -1);
-      }
-    }
-
-    const enzymeCutCount = allSites.length - firstSiteIndex;
-    for (let index = firstSiteIndex; index < allSites.length; index += 1) {
-      allSites[index].totalCutsInPlasmid = enzymeCutCount;
-    }
+    allSites.push({
+      id,
+      enzyme,
+      position,
+      strand: hit.strand,
+      cutPositionTop: hit.cutTop,
+      cutPositionBottom: hit.cutBottom,
+      overhangType: difference === 0 ? 'blunt' : difference > 0 ? '5-prime' : '3-prime',
+      overhangSeq: hit.overhang,
+      isMethylationBlocked: hasBlockingMethylation
+        ? isMethylationBlocked(
+            enzyme,
+            enzymeIsDpnI,
+            position,
+            enzyme.recognitionSeq.length,
+            hit.rawTop,
+            hit.rawBottom,
+            masks,
+            length,
+            circular,
+          )
+        : false,
+      totalCutsInPlasmid: 0,
+    });
+    cutsPerEnzyme.set(enzyme.name, (cutsPerEnzyme.get(enzyme.name) ?? 0) + 1);
+  }
+  for (const site of allSites) {
+    site.totalCutsInPlasmid = cutsPerEnzyme.get(site.enzyme.name) ?? 0;
   }
 
   let result = allSites;
@@ -1616,6 +1492,7 @@ class ProteinAnnotationAutomaton {
     const results: Array<{ entryIndex: number; start: number }> = [];
     let state = 0;
     const length = Math.max(0, Math.floor((sequence.length - frame) / 3));
+    const codes = codonCodes();
     for (let index = 0; index < length; index += 1) {
       const offset = frame + index * 3;
       const a = TRANSLATION_BASE[sequence[offset]];
@@ -1624,7 +1501,7 @@ class ProteinAnnotationAutomaton {
       const code =
         a === undefined || c === undefined || g === undefined
           ? -1
-          : CODON_AMINO_ACID_CODE[a * 16 + c * 4 + g];
+          : codes[a * 16 + c * 4 + g];
       if (code < 0) {
         state = 0;
         continue;

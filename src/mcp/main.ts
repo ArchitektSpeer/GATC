@@ -5,6 +5,7 @@
 //
 // Files are read and written only inside the given directories (default: the
 // current directory). Diagnostics go to stderr; stdout carries the protocol.
+import { initPython } from '../lib/python';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createGatcServer } from './server';
 
@@ -27,5 +28,8 @@ function parseArgs(argv: string[]): { roots: string[] } {
 
 const { roots } = parseArgs(process.argv.slice(2));
 const server = createGatcServer({ roots });
+// Bio.Restriction answers the enzyme tools, so the interpreter has to be up
+// before the first request rather than during it.
+await initPython();
 await server.connect(new StdioServerTransport());
 process.stderr.write(`gatc-mcp ready; files limited to: ${roots.join(', ')}\n`);

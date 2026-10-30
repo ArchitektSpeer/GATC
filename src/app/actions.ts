@@ -70,7 +70,14 @@ export async function refreshCutSites(doc: PlasmidDocument): Promise<CutSite[] |
   const token = (cutSiteRequests.get(doc.id) ?? 0) + 1;
   cutSiteRequests.set(doc.id, token);
   const enzymeKey = enzymeSetKey(useWorkbench.getState());
-  const sites = await callBioForDoc(doc, 'findCutSites', doc, activeEnzymes());
+  // A failure here used to leave the enzyme view simply empty, which reads as
+  // "this plasmid has no sites" rather than "the engine did not answer".
+  const sites = await callBioForDoc(doc, 'findCutSites', doc, activeEnzymes()).catch((error: unknown) => {
+    useWorkbench.getState().notify(
+      translate('酶切位点算不出来：{v0}', { v0: error instanceof Error ? error.message : String(error) }),
+    );
+    return null;
+  });
   if (!sites || cutSiteRequests.get(doc.id) !== token || enzymeSetKey(useWorkbench.getState()) !== enzymeKey) return null;
   useWorkbench.getState().setCutSites(doc, enzymeKey, sites);
   return sites;

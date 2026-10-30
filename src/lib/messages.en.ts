@@ -1301,4 +1301,5 @@ export const EN: Record<string, string> = {
   '位于 CDS {v0} 内：{v1}': 'Inside the CDS {v0}: {v1}',
   '没有可归因的来源，而它确实落在编码区：另挑一个克隆送测，两个克隆都有同一处改动才说明是模板带来的。': 'Nothing explains it and it does fall in a coding sequence: send another clone, and only treat it as coming from the template if both carry the same change.',
   '没有可归因的来源：另挑一个克隆送测确认，或从另一方向把这一段再测一遍。': 'Nothing explains it: confirm with another clone, or read the stretch again from the other direction.',
+  '酶切位点算不出来：{v0}': 'The cut sites could not be worked out: {v0}',
 };

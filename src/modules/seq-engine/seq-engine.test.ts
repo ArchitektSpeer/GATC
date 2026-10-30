@@ -922,7 +922,13 @@ describe('expanded restriction enzyme catalogue', () => {
       siteCount = sites.length;
     }
     expect(siteCount).toBeGreaterThan(0);
-    expect(Math.min(...samples)).toBeLessThan(400);
+    // Bio.Restriction searches once per enzyme, where the scanner this replaced made
+    // a single multi-pattern pass, so a full-catalogue scan of 100 kb costs about
+    // three times what it used to: ~1.3 s here against a budget of 400 ms before.
+    // At the sizes a plasmid actually is, that is 46 ms for pUC19 and 60 ms for
+    // pEGFP-N1, and it runs in a worker. The budget is set where it is to catch a
+    // real regression, not to pretend the change was free.
+    expect(Math.min(...samples)).toBeLessThan(4000);
   });
 });
 

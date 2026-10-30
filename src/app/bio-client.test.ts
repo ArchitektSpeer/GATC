@@ -12,8 +12,10 @@ describe('bio worker failure', () => {
       constructor() {
         created.push(this);
       }
-      postMessage() {
-        // The script never loads: report an error instead of answering.
+      postMessage(message: { id?: number }) {
+        // The worker is created, told where the interpreter is, and only falls over
+        // once a task arrives; a task in flight is what has to be failed.
+        if (message?.id === undefined) return;
         setTimeout(() => this.onerror?.({ message: 'failed to load', preventDefault() {} } as ErrorEvent), 0);
       }
       terminate() {}

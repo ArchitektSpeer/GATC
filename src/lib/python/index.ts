@@ -114,11 +114,9 @@ export function pythonReady(): boolean {
 
 function call<T>(name: string, args: unknown[]): Promise<T> {
   return python().then((py) => {
-    const fn = py.globals.get(name) as ((...a: unknown[]) => { toJs: (o: unknown) => unknown }) | undefined;
+    const fn = py.globals.get(name) as ((...a: unknown[]) => unknown) | undefined;
     if (typeof fn !== 'function') throw new Error(`bio.py has no ${name}`);
-    const result = fn(...args);
-    // Python dicts come back as Maps unless asked for objects.
-    return (result as { toJs: (o: unknown) => T }).toJs({ dict_converter: Object.fromEntries }) as T;
+    return fromPython<T>(fn(...args));
   });
 }
 
@@ -132,11 +130,22 @@ function running(): Runtime {
   return ready;
 }
 
+/**
+ * Pyodide hands back a string or a number as itself and anything else as a proxy,
+ * so only a proxy is converted; dicts come over as objects rather than Maps.
+ */
+function fromPython<T>(value: unknown): T {
+  const proxy = value as { toJs?: (options: unknown) => T };
+  return typeof proxy?.toJs === 'function'
+    ? proxy.toJs({ dict_converter: Object.fromEntries })
+    : (value as T);
+}
+
 function callSync<T>(name: string, args: unknown[]): T {
   const py = running();
-  const fn = py.globals.get(name) as ((...a: unknown[]) => { toJs: (o: unknown) => T }) | undefined;
+  const fn = py.globals.get(name) as ((...a: unknown[]) => unknown) | undefined;
   if (typeof fn !== 'function') throw new Error(`bio.py has no ${name}`);
-  return fn(...args).toJs({ dict_converter: Object.fromEntries });
+  return fromPython<T>(fn(...args));
 }
 
 /**
@@ -158,6 +167,29 @@ export function restrictionSites(
   enzymes: EnzymeDefinition[],
 ): Promise<RestrictionResult> {
   return call('restriction_sites', [sequence.toUpperCase(), circular, enzymes]);
+}
+
+export interface ProteinProperties {
+  molecularWeight: number;
+  isoelectricPoint: number;
+  /** Standard residues the figures were computed from. */
+  counted: number;
+  length: number;
+}
+
+/** The protein a stretch of DNA codes for, by Biopython's genetic code tables. */
+export function translateSync(sequence: string, table = 1, toStop = false): string {
+  return callSync('translate', [sequence.toUpperCase(), table, toStop]);
+}
+
+/** The genetic code as a codon-to-residue map, for building a lookup from. */
+export function codonTableSync(table = 1): Record<string, string> {
+  return callSync('codon_table', [table]);
+}
+
+/** Molecular weight and isoelectric point, from Bio.SeqUtils. */
+export function proteinPropertiesSync(sequence: string): ProteinProperties {
+  return callSync('protein_properties', [sequence]);
 }
 
 /** The versions actually loaded, for the about box and for the tests. */
