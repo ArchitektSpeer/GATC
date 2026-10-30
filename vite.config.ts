@@ -21,36 +21,12 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
       },
-      workbox: {
-        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
-        // The Python runtime is tens of megabytes and most sessions never need it,
-        // so it is left out of the precache and kept only once it has been asked
-        // for; after that first use it is available offline like everything else.
-        globIgnores: ['**/pyodide/**'],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }: { url: URL }) => url.pathname.includes('/pyodide/'),
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'gatc-python',
-              expiration: { maxEntries: 32 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
-      },
+      workbox: { maximumFileSizeToCacheInBytes: 10 * 1024 * 1024 },
     }),
   ],
   worker: { format: 'es' },
   test: {
     environment: 'node',
-    // One Python interpreter per worker rather than per file. Starting Bio.Restriction
-    // costs about three and a half seconds, which across thirty-odd files was most of
-    // the run; sharing the workers brings the suite in at a third of what it took
-    // before the interpreter existed at all. The cost is that module state is no
-    // longer thrown away between files, so a test that leaves something behind can
-    // now be seen by the next one.
-    isolate: false,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     setupFiles: ['src/test-setup.ts'],
     testTimeout: 30000,

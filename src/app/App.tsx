@@ -108,15 +108,10 @@ export default function App() {
   );
   // The copilot module cannot reach the alignment module, so the Sanger
   // attribution is computed here and handed to it as context.
-  const [sangerContext, setSangerContext] = useState('');
-  useEffect(() => {
-    if (!doc || !s.copilotOpen) return setSangerContext('');
-    let current = true;
-    void sangerContextForAI(doc, traces).then((text) => current && setSangerContext(text));
-    return () => {
-      current = false;
-    };
-  }, [doc, traces, s.copilotOpen]);
+  const sangerContext = useMemo(
+    () => (doc && s.copilotOpen ? sangerContextForAI(doc, traces) : ''),
+    [doc, traces, s.copilotOpen],
+  );
   const mapRef = useRef<SVGSVGElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [lanes, setLanes] = useState<VirtualGelLane[]>([]);

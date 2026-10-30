@@ -5,10 +5,10 @@
 // alignment module; this layer finds the cloning junctions, which it can only do
 // by looking for the sites the enzymes in the history left behind, and lets the
 // user add any junction the sequence no longer shows (Golden Gate, Gibson).
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertTriangle, Clipboard, HelpCircle, Info } from 'lucide-react';
 import type { PlasmidDocument, SangerTraceData } from '../types/schema';
-import { getEnzymeByName } from '../modules/seq-engine';
+import { findCutSites, getEnzymeByName } from '../modules/seq-engine';
 import {
   attributeSangerFailures,
   CAUSE_LABELS,
@@ -16,7 +16,6 @@ import {
   type SangerDiagnosis,
   type TraceJunction,
 } from '../modules/alignment-gel';
-import { callBio } from './bio-client';
 import { useWorkbench } from './store';
 import { t as translate } from '../lib/i18n';
 import { Badge, Button, Dialog, Field, Input } from './ui';
@@ -28,22 +27,21 @@ import { useT } from '../lib/i18n';
  * junctions. Golden Gate and Gibson leave no site, so those junctions can only
  * be given by hand.
  */
-export async function junctionsFromHistory(doc: PlasmidDocument): Promise<TraceJunction[]> {
+export function junctionsFromHistory(doc: PlasmidDocument): TraceJunction[] {
   const names = new Set<string>();
   for (const node of doc.history) {
     if (node.operation !== 'restriction_ligation') continue;
     for (const name of node.enzymesUsed ?? []) names.add(name);
   }
-  const enzymes = [...names]
-    .map((name) => getEnzymeByName(name))
-    .filter((enzyme): enzyme is NonNullable<typeof enzyme> => !!enzyme);
-  if (!enzymes.length) return [];
-  // The restriction engine runs in the worker, so the sites are asked for rather
-  // than computed here.
-  const sites = await callBio('findCutSites', doc, enzymes);
-  return sites
-    .map((site) => ({ position: site.cutPositionTop, label: site.enzyme.name }))
-    .sort((left, right) => left.position - right.position);
+  const junctions: TraceJunction[] = [];
+  for (const name of names) {
+    const enzyme = getEnzymeByName(name);
+    if (!enzyme) continue;
+    for (const site of findCutSites(doc, [enzyme])) {
+      junctions.push({ position: site.cutPositionTop, label: enzyme.name });
+    }
+  }
+  return junctions.sort((a, b) => a.position - b.position);
 }
 
 /**
@@ -51,13 +49,10 @@ export async function junctionsFromHistory(doc: PlasmidDocument): Promise<TraceJ
  * what the engine actually found instead of re-deriving it from the raw
  * mismatch list. Empty when there is nothing aligned to attribute.
  */
-export async function sangerContextForAI(
-  doc: PlasmidDocument,
-  traces: SangerTraceData[],
-): Promise<string> {
+export function sangerContextForAI(doc: PlasmidDocument, traces: SangerTraceData[]): string {
   const aligned = traces.filter((trace) => trace.alignment);
   if (!aligned.length) return '';
-  const junctions = await junctionsFromHistory(doc);
+  const junctions = junctionsFromHistory(doc);
   const lines: string[] = [translate('### 测序异常归因（GATC 规则引擎已算出，依据可核对）')];
   if (junctions.length) {
     lines.push(
@@ -164,15 +159,7 @@ export function SangerTriageDialog() {
   const traces: SangerTraceData[] = doc ? (allTraces[doc.id] ?? []) : [];
   const [extra, setExtra] = useState('');
 
-  const [auto, setAuto] = useState<TraceJunction[]>([]);
-  useEffect(() => {
-    if (!doc) return setAuto([]);
-    let current = true;
-    void junctionsFromHistory(doc).then((found) => current && setAuto(found));
-    return () => {
-      current = false;
-    };
-  }, [doc]);
+  const auto = useMemo(() => (doc ? junctionsFromHistory(doc) : []), [doc]);
   const junctions = useMemo(() => {
     const manual: TraceJunction[] = [];
     for (const piece of extra.split(/[,，\s]+/)) {

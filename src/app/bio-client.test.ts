@@ -12,18 +12,13 @@ describe('bio worker failure', () => {
       constructor() {
         created.push(this);
       }
-      postMessage(message: { id?: number }) {
-        // The worker is created, told where the interpreter is, and only falls over
-        // once a task arrives; a task in flight is what has to be failed.
-        if (message?.id === undefined) return;
+      postMessage() {
+        // The script never loads: report an error instead of answering.
         setTimeout(() => this.onerror?.({ message: 'failed to load', preventDefault() {} } as ErrorEvent), 0);
       }
       terminate() {}
     }
     vi.stubGlobal('Worker', FakeWorker);
-    // The client keeps its pool in module state, and the suite shares workers
-    // between files, so this has to start from a module that has not been used.
-    vi.resetModules();
     const { callBio } = await import('./bio-client');
     await expect(callBio('calcCrossDimer', 'ACGTACGTAC', 'GTACGTACGT')).rejects.toThrow(/计算线程出错/);
     expect(created.length).toBeGreaterThan(0);

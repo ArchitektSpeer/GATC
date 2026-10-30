@@ -5,10 +5,9 @@
 // fallback for environments without Worker support (Node/vitest, old browsers).
 import type { PlasmidDocument } from '../types/schema';
 import { bioApi, type BioApi, type BioFn, type BioRequest, type BioResponse } from './bio-api';
-import { initPython } from '../lib/python';
 import { docRevision } from './revision';
 import { isDocCurrent } from './store';
-import { getLocale, t as translate } from '../lib/i18n';
+import { t as translate } from '../lib/i18n';
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 
@@ -30,15 +29,6 @@ function getWorkers(): Worker[] | null {
   try {
     workers = Array.from({ length: POOL_SIZE }, () => {
       const w = new Worker(new URL('./bio.worker.ts', import.meta.url), { type: 'module' });
-      // Resolved here because the worker's own location is the bundled script, not
-      // the page, and the app may be served from a sub-path. Where there is no
-      // document at all the worker falls back to its own resolution.
-      const page = typeof location === 'undefined' ? null : location.href;
-      if (page) {
-        w.postMessage({
-          pyodideURL: new URL(`${import.meta.env?.BASE_URL ?? '/'}pyodide/`, page).href,
-        });
-      }
       w.onmessage = (e: MessageEvent<BioResponse>) => {
         const p = pending.get(e.data.id);
         if (!p) return;
@@ -105,17 +95,13 @@ function dispatch<K extends BioFn>(
 ): Promise<Awaited<ReturnType<BioApi[K]>>> {
   const pool = getWorkers();
   if (!pool) {
-    // No worker here, so the interpreter the engine needs has to run in this
-    // thread instead. It is started once and only on this path.
-    return initPython().then(() => callBioSync(fn, ...args) as unknown) as Promise<
-      Awaited<ReturnType<BioApi[K]>>
-    >;
+    return Promise.resolve().then(() => callBioSync(fn, ...args) as unknown) as Promise<Awaited<ReturnType<BioApi[K]>>>;
   }
   const id = nextId++;
   const worker = pool[nextWorker++ % pool.length];
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
-    const msg: BioRequest = { id, fn, args, doc, locale: getLocale() };
+    const msg: BioRequest = { id, fn, args, doc };
     worker.postMessage(msg);
   });
 }

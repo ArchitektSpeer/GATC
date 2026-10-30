@@ -5,8 +5,3 @@ src-tauri/target
 e2e-report
 .crosscheck/
 dist-mcp
-
-# The Python runtime and wheels, fetched by scripts/vendor-pyodide.mjs. Kept out of
-# git because they are tens of megabytes of someone else's build output; `npm run
-# build` puts them in place, and `npm run vendor:pyodide` does it on its own.
-public/pyodide/

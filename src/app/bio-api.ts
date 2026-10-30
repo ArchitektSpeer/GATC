@@ -52,9 +52,7 @@ import {
   alignReadsToReference,
   readsToTraces,
 } from '../modules/alignment-gel';
-import type { Locale } from '../lib/i18n';
 import { parseFastq } from '../modules/io-adapter';
-import { dryRunPipeline } from './pipeline';
 
 /** Parse FASTQ text and convert the first `max` reads to traces; parsing a large file stays off the main thread. */
 function fastqToTraces(text: string, max: number) {
@@ -107,7 +105,6 @@ export const bioApi = {
   readsToTraces,
   recommendDoubleDigestBuffer,
   fastqToTraces,
-  dryRunPipeline,
 };
 
 export type BioApi = typeof bioApi;
@@ -117,8 +114,6 @@ export interface BioRequest {
   id: number;
   fn: BioFn;
   args: unknown[];
-  /** The interface language, so messages the worker builds match the window. */
-  locale?: Locale;
   /** The document revision a task was computed for, when it derives from one. */
   doc?: { docId: string; revision: number };
 }
