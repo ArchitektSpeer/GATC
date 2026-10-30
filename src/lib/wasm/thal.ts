@@ -127,10 +127,11 @@ function dataView(thal: Thal): DataView {
 
 async function start(): Promise<Thal | null> {
   try {
-    // In a browser the bundler gives a URL to fetch. Under the test runner it
-    // gives the path the module has in the project, which is read from disk.
-    const browser = typeof globalThis.location !== 'undefined';
-    const bytes = browser
+    // In a browser the bundler gives a URL to fetch. The MCP build inlines the
+    // module as a data: URL, which fetch takes too. Under the test runner the
+    // URL is the path the module has in the project, which is read from disk.
+    const fetchable = typeof globalThis.location !== 'undefined' || wasmUrl.startsWith('data:');
+    const bytes = fetchable
       ? await (await fetch(wasmUrl)).arrayBuffer()
       : (await import(/* @vite-ignore */ 'node:fs')).readFileSync(
           (await import(/* @vite-ignore */ 'node:path')).join(
