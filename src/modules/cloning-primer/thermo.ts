@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
  * Nearest-neighbour thermodynamics for DNA oligonucleotides. Watson-Crick
- * stacking follows SantaLucia (1998); mismatch, terminal-contact, bulge and
- * loop terms follow SantaLucia & Hicks (2004); salt and magnesium corrections
- * follow Owczarzy et al. (2008). All secondary-structure energies are reported
- * at 37 degrees Celsius.
+ * stacking follows SantaLucia (1998) and the salt and magnesium corrections
+ * follow Owczarzy et al. (2008), which together give the melting temperature.
+ * Secondary structure - the hairpin an oligo folds into and the duplex two
+ * oligos form - comes from primer3's own thal (lib/wasm/thal) rather than a
+ * second implementation of it here, and is reported at 37 degrees Celsius.
  */
 import {
   duplex as duplexStructure,
@@ -16,12 +17,10 @@ import {
 import {
   GAS_CONSTANT,
   clamp,
-  complementBase,
   gcPercentOf,
   has3PrimeGCClamp,
   isSelfComplementary,
   normalizeDNA,
-  reverseComplement,
 } from './utils';
 
 export interface ReactionConditions {
@@ -190,93 +189,6 @@ export function deltaG37(sequence: string, conditions?: ReactionConditions): num
   return (deltaH * 1000 - 310.15 * (deltaS + saltEntropy)) / 1000;
 }
 
-const STRUCTURE_TEMPERATURE = 310.15; // K
-const STRUCTURE_MAX_LOOP = 11;
-const HAIRPIN_MAX_LOOP = 9;
-
-/**
- * Structure parameters use the nearest-neighbour model of SantaLucia (1998)
- * and the loop, bulge, mismatch and terminal-contact values summarised by
- * SantaLucia & Hicks (2004). Values are expressed as local lookup tables so
- * that the stacking and loop terms can be chosen independently for the
- * intramolecular and intermolecular searches.
- */
-const DUPLEX_MISMATCH_PENALTIES: Record<string, number> = {
-  'G/G': -0.5,
-  'A/A': -0.1,
-  'C/C': 0.9,
-  'T/T': 0.3,
-  'G/A': -0.4,
-  'A/G': 0.3,
-  'C/T': 0.3,
-  'T/C': 0.3,
-  'A/C': 0.3,
-  'C/A': 0.3,
-  'G/T': 0.9,
-  'T/G': 0.3,
-};
-
-const DUPLEX_MISMATCH_STEP = 0.45; // kcal/mol
-const DUPLEX_DANGLE = -0.5; // kcal/mol per unpaired terminal base
-const DUPLEX_AT_TERMINAL = 0.6; // kcal/mol for an A/T terminal pair
-const DUPLEX_MISMATCH_TERMINAL = 0.3; // kcal/mol for a terminal mismatch
-
-const DUPLEX_BULGE = {
-  one: 3.5,
-  two: 3.2,
-  base: 3.0,
-  slope: 1.08,
-};
-
-const DUPLEX_INTERNAL_LOOP = {
-  oneByOne: 2.7,
-  oneByTwo: 2.3,
-  twoByTwo: 3.2,
-  base: 2.4,
-  slope: 1.08,
-};
-
-const HAIRPIN_LOOP_PENALTIES: Record<number, number> = {
-  3: 3.2,
-  4: 3.1,
-  5: 3.05,
-  6: 3.0,
-  7: 2.95,
-  8: 2.9,
-  9: 2.85,
-};
-
-const HAIRPIN_LOOP_FAR_BASE = 2.85;
-const HAIRPIN_LOOP_FAR_SLOPE = 1.4;
-
-/**
- * Small terminal-contact correction at the hairpin closing pair. The first
- * unpaired base stacks against the closing base pair; the signs follow the
- * published terminal-mismatch trends and keep the loop table transferable
- * between closing-pair contexts.
- */
-const HAIRPIN_TERMINAL_CONTACT: Record<string, number> = {
-  G: -0.1,
-  C: -0.05,
-  A: 0.05,
-  T: 0.1,
-};
-
-const HAIRPIN_BULGE = {
-  one: 3.3,
-  two: 3.0,
-  base: 3.3,
-  slope: 1.08,
-};
-
-const HAIRPIN_INTERNAL_LOOP = {
-  oneByOne: 2.0,
-  oneByTwo: 2.9,
-  twoByTwo: 2.5,
-  base: 2.5,
-  slope: 1.08,
-};
-
 interface HairpinPrediction {
   deltaG: number;
   ascii: string;
@@ -287,160 +199,6 @@ interface DuplexPrediction {
   ascii: string;
 }
 
-interface StructureContext {
-  saltPerStack: number;
-}
-
-function structureConditions(conditions?: ReactionConditions): StructureContext {
-  const merged = { ...DEFAULT_REACTION_CONDITIONS, ...(conditions ?? {}) };
-  const effectiveNaM = effectiveMonovalentMm(merged) / 1000;
-  const saltEntropy = 0.368 * Math.log(Math.max(1e-6, effectiveNaM));
-  return {
-    saltPerStack: (-STRUCTURE_TEMPERATURE * saltEntropy) / 1000,
-  };
-}
-
-function stackEnergy(step: string, context: StructureContext): number {
-  const parameters = SANTA_LUCIA_1998[step];
-  if (!parameters) return context.saltPerStack;
-  return (
-    (parameters.dH * 1000 - STRUCTURE_TEMPERATURE * parameters.dS) / 1000 +
-    context.saltPerStack
-  );
-}
-
-function initiationEnergy(base: string): number {
-  const parameters =
-    base === 'G' || base === 'C' ? SANTA_LUCIA_INITIATION.GC : SANTA_LUCIA_INITIATION.AT;
-  return (parameters.dH * 1000 - STRUCTURE_TEMPERATURE * parameters.dS) / 1000;
-}
-
-function isCanonicalPair(top: string, bottom: string): boolean {
-  return (
-    (top === 'A' && bottom === 'T') ||
-    (top === 'T' && bottom === 'A') ||
-    (top === 'G' && bottom === 'C') ||
-    (top === 'C' && bottom === 'G')
-  );
-}
-
-function mismatchPenalty(top: string, bottom: string): number {
-  return (
-    DUPLEX_MISMATCH_PENALTIES[`${top}/${bottom}`] ??
-    DUPLEX_MISMATCH_PENALTIES[`${bottom}/${top}`] ??
-    0.3
-  );
-}
-
-function duplexTerminalPenalty(top: string, bottom: string): number {
-  if (isCanonicalPair(top, bottom)) {
-    return top === 'A' || top === 'T' ? DUPLEX_AT_TERMINAL : 0;
-  }
-  return DUPLEX_MISMATCH_TERMINAL;
-}
-
-function duplexDangle(topFlank: boolean, bottomFlank: boolean): number {
-  return DUPLEX_DANGLE * ((topFlank ? 1 : 0) + (bottomFlank ? 1 : 0));
-}
-
-function bulgePenalty(size: number): number {
-  if (size === 1) return DUPLEX_BULGE.one;
-  if (size === 2) return DUPLEX_BULGE.two;
-  return DUPLEX_BULGE.base + DUPLEX_BULGE.slope * Math.log(size);
-}
-
-function internalLoopPenalty(left: number, right: number): number {
-  if (left === 1 && right === 1) return DUPLEX_INTERNAL_LOOP.oneByOne;
-  if ((left === 1 && right === 2) || (left === 2 && right === 1)) {
-    return DUPLEX_INTERNAL_LOOP.oneByTwo;
-  }
-  if (left === 2 && right === 2) return DUPLEX_INTERNAL_LOOP.twoByTwo;
-  return DUPLEX_INTERNAL_LOOP.base + DUPLEX_INTERNAL_LOOP.slope * Math.log(left + right);
-}
-
-function hairpinBulgePenalty(size: number): number {
-  if (size === 1) return HAIRPIN_BULGE.one;
-  if (size === 2) return HAIRPIN_BULGE.two;
-  return HAIRPIN_BULGE.base + HAIRPIN_BULGE.slope * Math.log(size);
-}
-
-function hairpinInternalLoopPenalty(left: number, right: number): number {
-  if (left === 1 && right === 1) return HAIRPIN_INTERNAL_LOOP.oneByOne;
-  if ((left === 1 && right === 2) || (left === 2 && right === 1)) {
-    return HAIRPIN_INTERNAL_LOOP.oneByTwo;
-  }
-  if (left === 2 && right === 2) return HAIRPIN_INTERNAL_LOOP.twoByTwo;
-  return (
-    HAIRPIN_INTERNAL_LOOP.base +
-    HAIRPIN_INTERNAL_LOOP.slope * Math.log(left + right)
-  );
-}
-
-function hairpinLoopPenalty(length: number, firstLoopBase: string): number {
-  const initiation =
-    HAIRPIN_LOOP_PENALTIES[length] ??
-    HAIRPIN_LOOP_FAR_BASE + HAIRPIN_LOOP_FAR_SLOPE * Math.log(length / 9);
-  return initiation + (HAIRPIN_TERMINAL_CONTACT[firstLoopBase] ?? 0);
-}
-
-function hairpinAscii(sequence: string, pairs: Array<[number, number]>): string {
-  const marks = new Array(sequence.length).fill(' ');
-  for (const [i, j] of pairs) {
-    marks[i] = '|';
-    marks[j] = '|';
-  }
-  return `5'-${sequence}-3'\n   ${marks.join('')}`;
-}
-
-function duplexAscii(
-  top: string,
-  bottomOriginal: string,
-  pairs: Array<[number, number]>,
-): string {
-  if (!pairs.length) {
-    return `5'-${top}-3'\n   no stable duplex predicted`;
-  }
-  const bottom = bottomOriginal.split('').reverse().join('');
-  const ordered = [...pairs].sort((a, b) => a[0] - b[0]);
-  const columns: Array<{ top: string; bottom: string; mark: string }> = [];
-  let topCursor = 0;
-  let bottomCursor = 0;
-  const appendUnpaired = (topEnd: number, bottomEnd: number): void => {
-    const topSegment = top.slice(topCursor, topEnd);
-    const bottomSegment = bottom.slice(bottomCursor, bottomEnd);
-    const width = Math.max(topSegment.length, bottomSegment.length);
-    for (let index = 0; index < width; index += 1) {
-      columns.push({
-        top: topSegment[index] ?? ' ',
-        bottom: bottomSegment[index] ?? ' ',
-        mark: ' ',
-      });
-    }
-    topCursor = topEnd;
-    bottomCursor = bottomEnd;
-  };
-  for (const [i, j] of ordered) {
-    appendUnpaired(i, j);
-    columns.push({
-      top: top[i] ?? ' ',
-      bottom: bottom[j] ?? ' ',
-      mark: '|',
-    });
-    topCursor = i + 1;
-    bottomCursor = j + 1;
-  }
-  appendUnpaired(top.length, bottom.length);
-  return `5'-${columns.map((column) => column.top).join('')}-3'\n   ${columns
-    .map((column) => column.mark)
-    .join('')}\n3'-${columns.map((column) => column.bottom).join('')}-5'`;
-}
-
-/**
- * Minimum-free-energy hairpin search. A closing pair (i, j) is extended
- * inwards through stacks, single- or multi-nucleotide bulges and internal
- * loops; the terminal loop is treated with the Jacobson-Stockmayer length
- * extrapolation and a small terminal-contact correction.
- */
 /**
  * The hairpin an oligo folds into and the duplex two oligos form, both from
  * primer3's thermodynamic alignment compiled to WebAssembly (lib/wasm/thal).
@@ -475,13 +233,6 @@ export function predictHairpin(sequence: string, conditions?: ReactionConditions
   return fromThal(hairpinStructure(seq, thalConditions(conditions)));
 }
 
-/**
- * Minimum-free-energy duplex search. The two strands are compared in every
- * antiparallel register; each state stores the best helix ending at a base
- * pair and may be extended by a stack, a bulge, or an internal loop. Terminal
- * base pairs contribute an initiation term plus a sequence-dependent terminal
- * contact, and unpaired overhanging bases contribute a dangling-end term.
- */
 export function predictDuplex(
   topSequence: string,
   bottomSequence: string,
